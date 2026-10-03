@@ -1,6 +1,12 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-<path android:fillColor="#FFFFFF" android:pathData="M30,38 L54,27 L78,38 L78,66 L54,79 L30,66 Z"/>
-<path android:strokeColor="#1565C0" android:strokeWidth="3" android:pathData="M30,38 L54,50 L78,38 M54,50 L54,79"/>
-<path android:fillColor="#FF9800" android:pathData="M76,25 C66,25 62,32 62,38 C62,47 76,58 76,58 C76,58 90,47 90,38 C90,30 85,25 76,25 M76,32 A6,6 0,1 0,76 44 A6,6 0,1 0,76 32"/>
-<path android:strokeColor="#1565C0" android:strokeWidth="2.5" android:fillColor="#00000000" android:pathData="M47,54 L39,54 L39,60 L47,60 L47,67 L39,67 M68,54 L60,54 L60,67 L68,67 L68,61 L64,61"/>
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fractional insets preserve the full IZZYAN wordmark within adaptive mask bounds. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="19%"
+    android:insetTop="19%"
+    android:insetRight="19%"
+    android:insetBottom="19%">
+    <bitmap
+        android:src="@drawable/izzyan_icon"
+        android:gravity="fill"
+        android:filter="true" />
+</inset>

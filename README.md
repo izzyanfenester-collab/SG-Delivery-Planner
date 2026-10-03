@@ -1,6 +1,8 @@
-# SG Delivery Planner
+# IZZ Delivery
 
 Native Kotlin / Jetpack Compose / Material 3 application for Singapore parcel delivery, package `com.izzyan.sgdeliveryplanner`. Android 8.0 (API 26) or newer; compile and target SDK 36. MVVM, coroutines, Retrofit/OkHttp, and Room provide network access, route history, location/road caches, and persistent delivery progress.
+
+The app and launcher label are **IZZ Delivery**, with a premium **IZZYAN** launcher icon. The Android package `com.izzyan.sgdeliveryplanner`, `SG-Delivery-Planner` repository name, and **SG-Delivery-Planner-APK** workflow artifact identifier are retained so existing installations and download instructions remain compatible.
 
 ## Build status
 

@@ -1,4 +1,4 @@
-name: Build SG Delivery Planner APK
+name: Build IZZ Delivery APK
 on:
   push:
   pull_request:

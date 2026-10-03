@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.AndroidViewModel
@@ -91,7 +92,7 @@ fun km(value:Double)="%.1f km".format(java.util.Locale.US,value)
 @Composable fun App(vm:PlannerViewModel) {
  Scaffold(bottomBar={ Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) { listOf("Home","Route","Delivery","Map","History","Settings").forEach { label -> TextButton(onClick={vm.screen=label},enabled=!vm.busy) { Text(label) } } } }) { padding ->
  Column(Modifier.padding(padding).fillMaxSize()) {
-  Text("SG Delivery Planner",style=MaterialTheme.typography.headlineSmall,modifier=Modifier.padding(16.dp))
+  Text(stringResource(R.string.app_name),style=MaterialTheme.typography.headlineSmall,modifier=Modifier.padding(16.dp))
   if(vm.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.message,Modifier.padding(12.dp)) }
   if(vm.message.isNotBlank() && !vm.busy) Card(Modifier.padding(12.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)) { Text(vm.message,Modifier.padding(12.dp)); TextButton(onClick={vm.message=""}) { Text("Dismiss") } }
   when(vm.screen) {
