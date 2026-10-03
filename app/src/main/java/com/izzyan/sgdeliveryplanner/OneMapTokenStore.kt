@@ -72,8 +72,9 @@ class OneMapTokenStore internal constructor(
     private fun normalizeToken(input: String): String {
         // Reject control characters before trimming so a pasted newline cannot become a header.
         if (input.any { it.code < 0x20 || it.code > 0x7e }) invalidToken()
-        var token = input.trim()
-        if (token.startsWith("Bearer ", ignoreCase = true)) token = token.substring(7).trim()
+        // Preserve the scheme's trailing space until it is removed; "Bearer " has no token.
+        var token = input.trimStart()
+        token = if (token.startsWith("Bearer ", ignoreCase = true)) token.substring(7).trim() else token.trimEnd()
         if (!BEARER_TOKEN.matches(token)) invalidToken()
         return token
     }
