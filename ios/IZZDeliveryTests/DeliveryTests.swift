@@ -5,7 +5,13 @@ final class DeliveryTests: XCTestCase {
     private func fixture(count: Int = 4) throws -> Route {
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
         let start = calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 23, minute: 59))!.epoch
-        let places = (0..<count).map { i in Place(postal: i == 0 ? "012345" : String(100000+i), lat: 1.3+Double(i)*0.001, lon: 103.8, block: "=1+1", area: "道路 & Road", address: "1 Road") }
+        var places: [Place] = []
+        for index in 0..<count {
+            let postal = index == 0 ? "012345" : String(100000 + index)
+            let latitude = 1.3 + Double(index) * 0.001
+            let place = Place(postal: postal, lat: latitude, lon: 103.8, block: "=1+1", area: "道路 & Road", address: "1 Road")
+            places.append(place)
+        }
         let tour = Tour(order: Array(1...count), places: places, legs: Array(repeating: Leg(km: 1.25, baseSeconds: 120, bufferSeconds: 50), count: count+1))
         let home = StartLocation(type: "HOME", lat: 1.31, lon: 103.81, label: "My Home", address: "Home & Road", postal: "001234")
         return try SharedBridge.schedule(ScheduleInput(id: "fixture", created: start, start: start, serviceMinutes: 8, mode: "Normal Traffic", tour: tour, geometry: [[103.81,1.31],[103.8,1.3]], startLocation: home))
