@@ -1,9 +1,7 @@
 package com.izzyan.sgdeliveryplanner
 
-import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
@@ -13,7 +11,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -42,10 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -309,7 +303,7 @@ fun Home(vm: PlannerViewModel) {
                 Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-        PrimaryAction("Optimize route", vm::optimize, enabled = !vm.busy && !vm.oneMapTokenBusy)
+        PrimaryAction("Optimize route", vm::optimize, enabled = !vm.busy)
         SecondaryAction("Clear postal codes", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
         AskChatGptButton()
         TaxDeclareButton()
@@ -319,53 +313,12 @@ fun Home(vm: PlannerViewModel) {
 
 @Composable
 fun Settings(vm: PlannerViewModel) {
-    val window = LocalContext.current.findActivity()?.window
-    DisposableEffect(window) {
-        val alreadySecure = ((window?.attributes?.flags ?: 0) and WindowManager.LayoutParams.FLAG_SECURE) != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose {
-            if (!alreadySecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
-    }
-    // Keep the draft only in memory. Saved credentials are never copied back into the field.
-    var tokenDraft by remember { mutableStateOf("") }
     var serviceText by remember(vm.service) { mutableStateOf(vm.service.toString()) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("OneMap postal-code search", style = MaterialTheme.typography.titleLarge)
-                Text("Add or update your OneMap API token to look up Singapore postal codes. The token is stored securely on this device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(vm.oneMapTokenStatus, style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(
-                    tokenDraft, { tokenDraft = it },
-                    label = { Text("OneMap API token") },
-                    placeholder = { Text(if (vm.hasOneMapToken) "Enter a new token to replace it" else "Paste your OneMap token") },
-                    supportingText = { Text("Paste the token, with or without the Bearer prefix. Your saved token stays hidden.") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.Password, imeAction = ImeAction.Done
-                    ),
-                    singleLine = true, enabled = !vm.busy && !vm.oneMapTokenBusy,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (vm.oneMapTokenBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                PrimaryAction(
-                    if (vm.hasOneMapToken) "Update OneMap token" else "Save OneMap token",
-                    { vm.saveOneMapToken(tokenDraft) { tokenDraft = "" } },
-                    enabled = !vm.busy && !vm.oneMapTokenBusy && tokenDraft.isNotBlank()
-                )
-                SecondaryAction(
-                    "Remove saved token", { vm.clearOneMapToken { tokenDraft = "" } },
-                    enabled = !vm.busy && !vm.oneMapTokenBusy
-                )
-                Text("Removing the token keeps your saved routes and cached postal codes. A valid token is needed for postal codes that are not cached.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-        }
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Schedule", style = MaterialTheme.typography.titleLarge)
@@ -421,12 +374,6 @@ fun Settings(vm: PlannerViewModel) {
             }
         }
     }
-}
-
-private fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.takeIf { it !== this }?.findActivity()
-    else -> null
 }
 
 private fun tryOpenMap(context: Context, intent: Intent): Boolean = try {

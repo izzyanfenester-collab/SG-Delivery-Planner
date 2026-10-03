@@ -35,51 +35,40 @@ import org.robolectric.annotation.Config
 import retrofit2.HttpException
 import retrofit2.Response
 
-/** Exercise rate limits and credential boundaries without calling live mapping services. */
+/** Exercise unauthenticated postal lookup, cache reuse and conservative rate-limit handling. */
 class OneMapLookupTest {
     @Test
-    fun missingTokenStopsBeforeSendingAnySearchRequest() = runBlocking {
-        val api = FakeOneMapApi { postal, _ -> searchResult(postal) }
-        val lookup = OneMapLookup(MemoryPlannerDao(), api, tokenProvider = { null })
-
-        val failure = expectFailure<OneMapAuthenticationError> { lookup.resolve("018956") }
-
-        assertEquals(0, api.calls)
-        assertTrue(failure.message.orEmpty().contains("OneMap"))
-        assertTrue(failure.message.orEmpty().contains("Settings"))
-    }
-
-    @Test
-    fun searchReceivesBearerAuthorizationAndKeepsLeadingZeroes() = runBlocking {
-        val api = FakeOneMapApi { postal, authorization ->
+    fun uncachedPostalLookupWorksWithoutTokenConfigurationAndKeepsLeadingZeroes() = runBlocking {
+        val dao = MemoryPlannerDao()
+        val api = FakeOneMapApi { postal ->
             assertEquals("018956", postal)
-            assertEquals("Bearer test-token", authorization)
             searchResult(postal)
         }
-        val lookup = OneMapLookup(MemoryPlannerDao(), api, tokenProvider = { "test-token" })
+        val lookup = OneMapLookup(dao, api)
 
-        assertEquals("018956", lookup.resolve("018956").postal)
+        val place = lookup.resolve("018956")
+
+        assertEquals("018956", place.postal)
         assertEquals(1, api.calls)
+        assertNotNull(dao.place("018956"))
     }
 
     @Test
-    fun deniedAndExpiredTokensGiveSettingsGuidanceWithoutExposingServiceTextOrToken() = runBlocking {
+    fun deniedSearchShowsEnglishServiceErrorWithoutTokenSetupOrServiceText() = runBlocking {
         for (status in listOf(401, 403)) {
-            val api = FakeOneMapApi { _, _ -> throw httpFailure(status, "Token rahsia-token telah tamat") }
+            val api = FakeOneMapApi { _ -> throw httpFailure(status, "Akses perkhidmatan ditolak") }
             val waits = mutableListOf<Long>()
-            val lookup = OneMapLookup(
-                MemoryPlannerDao(), api, tokenProvider = { "rahsia-token" }, wait = { waits += it }
-            )
+            val lookup = OneMapLookup(MemoryPlannerDao(), api, wait = { waits += it })
 
-            val failure = expectFailure<OneMapAuthenticationError> { lookup.resolve("018956") }
+            val failure = expectFailure<HttpException> { lookup.resolve("018956") }
             val message = englishError(failure, "Unable to search.")
 
+            assertEquals(status, failure.code())
             assertEquals(1, api.calls)
             assertTrue(waits.isEmpty())
-            assertTrue(message.contains("OneMap"))
-            assertTrue(message.contains("Settings"))
-            assertFalse(message.contains("rahsia-token"))
-            assertFalse(message.contains("telah tamat"))
+            assertTrue(message.contains("The mapping service denied access."))
+            assertFalse(message.contains("token", ignoreCase = true))
+            assertFalse(message.contains("Akses perkhidmatan ditolak"))
         }
     }
 
@@ -87,13 +76,13 @@ class OneMapLookupTest {
     fun rateLimitedSearchRetriesWithExponentialBackoffThenCachesItsSuccess() = runBlocking {
         val dao = MemoryPlannerDao()
         var attempts = 0
-        val api = FakeOneMapApi { postal, _ ->
+        val api = FakeOneMapApi { postal ->
             attempts++
             if (attempts <= 3) throw httpFailure(429)
             searchResult(postal)
         }
         val waits = mutableListOf<Long>()
-        val lookup = OneMapLookup(dao, api, tokenProvider = { "test-token" }, wait = { waits += it })
+        val lookup = OneMapLookup(dao, api, wait = { waits += it })
 
         val place = lookup.resolve("018956")
 
@@ -107,9 +96,9 @@ class OneMapLookupTest {
     @Test
     fun persistentRateLimitsStopAfterThreeRetriesAndNeverCacheAFailure() = runBlocking {
         val dao = MemoryPlannerDao()
-        val api = FakeOneMapApi { _, _ -> throw httpFailure(429, "Perkhidmatan sibuk") }
+        val api = FakeOneMapApi { _ -> throw httpFailure(429, "Perkhidmatan sibuk") }
         val waits = mutableListOf<Long>()
-        val lookup = OneMapLookup(dao, api, tokenProvider = { "test-token" }, wait = { waits += it })
+        val lookup = OneMapLookup(dao, api, wait = { waits += it })
 
         val failure = expectFailure<OneMapRateLimitError> { lookup.resolve("018956") }
 
@@ -122,9 +111,9 @@ class OneMapLookupTest {
     @Test
     fun cancellationDuringBackoffStopsRequestsAndLeavesNoCacheEntry() = runBlocking {
         val dao = MemoryPlannerDao()
-        val api = FakeOneMapApi { _, _ -> throw httpFailure(429) }
+        val api = FakeOneMapApi { _ -> throw httpFailure(429) }
         val lookup = OneMapLookup(
-            dao, api, tokenProvider = { "test-token" }, wait = { throw CancellationException("Cancelled") }
+            dao, api, wait = { throw CancellationException("Cancelled") }
         )
 
         expectFailure<CancellationException> { lookup.resolve("018956") }
@@ -137,7 +126,7 @@ class OneMapLookupTest {
     fun differentPostalCodesNeverProduceConcurrentSearchRequests() = runBlocking {
         val active = AtomicInteger()
         val maximum = AtomicInteger()
-        val api = FakeOneMapApi { postal, _ ->
+        val api = FakeOneMapApi { postal ->
             val count = active.incrementAndGet()
             maximum.updateAndGet { previous -> maxOf(previous, count) }
             try {
@@ -147,7 +136,7 @@ class OneMapLookupTest {
                 active.decrementAndGet()
             }
         }
-        val lookup = OneMapLookup(MemoryPlannerDao(), api, tokenProvider = { "test-token" })
+        val lookup = OneMapLookup(MemoryPlannerDao(), api)
         val codes = listOf("018956", "238858", "560123", "738099")
 
         val places = codes.map { code -> async { lookup.resolve(code) } }.awaitAll()
@@ -159,8 +148,8 @@ class OneMapLookupTest {
 
     @Test
     fun concurrentRequestsForTheSamePostalCodeShareTheSavedResult() = runBlocking {
-        val api = FakeOneMapApi { postal, _ -> delay(20); searchResult(postal) }
-        val lookup = OneMapLookup(MemoryPlannerDao(), api, tokenProvider = { "test-token" })
+        val api = FakeOneMapApi { postal -> delay(20); searchResult(postal) }
+        val lookup = OneMapLookup(MemoryPlannerDao(), api)
 
         val places = List(4) { async { lookup.resolve("018956") } }.awaitAll()
 
@@ -169,16 +158,31 @@ class OneMapLookupTest {
     }
 
     @Test
-    fun validCacheIsUsedEvenWhenTheTokenHasBeenRemoved() = runBlocking {
+    fun validCacheIsUsedWithoutAnotherSearchRequest() = runBlocking {
         val dao = MemoryPlannerDao()
         val cached = samplePlace("018956")
         val now = 20_000L
         dao.place(CachedPlace(cached.postal, Gson().toJson(cached), now - 1_000))
-        val api = FakeOneMapApi { _, _ -> throw AssertionError("A cache hit must not call OneMap") }
-        val lookup = OneMapLookup(dao, api, tokenProvider = { null }, now = { now })
+        val api = FakeOneMapApi { _ -> throw AssertionError("A cache hit must not call OneMap") }
+        val lookup = OneMapLookup(dao, api, now = { now })
 
         assertEquals(cached, lookup.resolve("018956"))
         assertEquals(0, api.calls)
+    }
+
+    @Test
+    fun malformedCacheFallsBackToTokenFreeSearchAndReplacesTheEntry() = runBlocking {
+        val dao = MemoryPlannerDao()
+        val now = 20_000L
+        dao.place(CachedPlace("018956", "not valid JSON", now - 1_000))
+        val api = FakeOneMapApi { postal -> searchResult(postal) }
+        val lookup = OneMapLookup(dao, api, now = { now })
+
+        val place = lookup.resolve("018956")
+
+        assertEquals("018956", place.postal)
+        assertEquals(1, api.calls)
+        assertEquals(place, Gson().fromJson(dao.place("018956")!!.json, Place::class.java))
     }
 
     @Test
@@ -187,8 +191,8 @@ class OneMapLookupTest {
         val now = 200L * 86_400_000L
         val old = samplePlace("018956").copy(address = "Old address")
         dao.place(CachedPlace(old.postal, Gson().toJson(old), now - 181L * 86_400_000L))
-        val api = FakeOneMapApi { postal, _ -> searchResult(postal) }
-        val lookup = OneMapLookup(dao, api, tokenProvider = { "test-token" }, now = { now })
+        val api = FakeOneMapApi { postal -> searchResult(postal) }
+        val lookup = OneMapLookup(dao, api, now = { now })
 
         val updated = lookup.resolve("018956")
 
@@ -201,8 +205,8 @@ class OneMapLookupTest {
     fun searchesRequireAnExactPostalMatchAndSingaporeCoordinates() = runBlocking {
         for (result in listOf(searchResult("238858"), searchResult("018956", latitude = 3.1))) {
             val dao = MemoryPlannerDao()
-            val api = FakeOneMapApi { _, _ -> result }
-            val lookup = OneMapLookup(dao, api, tokenProvider = { "test-token" })
+            val api = FakeOneMapApi { _ -> result }
+            val lookup = OneMapLookup(dao, api)
 
             expectFailure<PlannerError> { lookup.resolve("018956") }
 
@@ -212,16 +216,42 @@ class OneMapLookupTest {
     }
 
     @Test
+    fun malformedSearchResponsesFailClearlyAndNeverEnterTheCache() = runBlocking {
+        val responses = listOf(
+            JsonObject(),
+            JsonParser.parseString("""{"results":{}}""").asJsonObject,
+            JsonParser.parseString("""{"results":[null]}""").asJsonObject,
+            searchResult("018956").apply {
+                getAsJsonArray("results")[0].asJsonObject.addProperty("LATITUDE", "not a number")
+            }
+        )
+        for (response in responses) {
+            val dao = MemoryPlannerDao()
+            val api = FakeOneMapApi { _ -> response }
+            val lookup = OneMapLookup(dao, api)
+
+            val failure = expectFailure<PlannerError> { lookup.resolve("018956") }
+
+            val message = failure.message.orEmpty()
+            assertTrue(message.contains("OneMap") || message.contains("Postal code 018956"))
+            assertTrue(message.contains("try again", ignoreCase = true))
+            assertFalse(message.contains("token", ignoreCase = true))
+            assertEquals(1, api.calls)
+            assertNull(dao.place("018956"))
+        }
+    }
+
+    @Test
     fun retryAfterCanExtendTheBackoffWithinTheBound() = runBlocking {
         var attempts = 0
-        val api = FakeOneMapApi { postal, _ ->
+        val api = FakeOneMapApi { postal ->
             attempts++
             if (attempts == 1) throw httpFailure(429, retryAfter = "7")
             searchResult(postal)
         }
         val waits = mutableListOf<Long>()
         val lookup = OneMapLookup(
-            MemoryPlannerDao(), api, tokenProvider = { "test-token" }, wait = { waits += it }
+            MemoryPlannerDao(), api, wait = { waits += it }
         )
 
         assertEquals("018956", lookup.resolve("018956").postal)
@@ -231,10 +261,10 @@ class OneMapLookupTest {
 
     @Test
     fun longRetryAfterStopsInsteadOfIgnoringTheServiceLimit() = runBlocking {
-        val api = FakeOneMapApi { _, _ -> throw httpFailure(429, retryAfter = "31") }
+        val api = FakeOneMapApi { _ -> throw httpFailure(429, retryAfter = "31") }
         val waits = mutableListOf<Long>()
         val lookup = OneMapLookup(
-            MemoryPlannerDao(), api, tokenProvider = { "test-token" }, wait = { waits += it }
+            MemoryPlannerDao(), api, wait = { waits += it }
         )
 
         expectFailure<OneMapRateLimitError> { lookup.resolve("018956") }
@@ -244,43 +274,46 @@ class OneMapLookupTest {
     }
 
     @Test
-    fun retrofitSearchUsesTheOneMapPathAndAuthorizationHeader() = runBlocking {
+    fun retrofitSearchRestoresThePreviousPathAndQueryWithoutAuthorization() = runBlocking {
         val server = MockWebServer()
         server.start()
         try {
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(searchResult("018956").toString()))
 
-            createOneMapApi(server.url("/").toString()).search("018956", "Bearer private-token")
+            createOneMapApi(server.url("/").toString()).search("018956")
 
             val request = requireNotNull(server.takeRequest(5, TimeUnit.SECONDS))
             assertEquals("/api/common/elastic/search", request.requestUrl!!.encodedPath)
             assertEquals("018956", request.requestUrl!!.queryParameter("searchVal"))
             assertEquals("Y", request.requestUrl!!.queryParameter("returnGeom"))
             assertEquals("Y", request.requestUrl!!.queryParameter("getAddrDetails"))
-            assertEquals("Bearer private-token", request.getHeader("Authorization"))
-            assertFalse(request.path.orEmpty().contains("private-token"))
+            assertEquals(setOf("searchVal", "returnGeom", "getAddrDetails"), request.requestUrl!!.queryParameterNames)
+            assertNull(request.getHeader("Authorization"))
         } finally {
             server.shutdown()
         }
     }
 
     @Test
-    fun oneMapClientDoesNotForwardTokensToRedirectDestinations() = runBlocking {
+    fun oneMapClientFollowsRedirectsAsBeforeWithoutSendingCredentials() = runBlocking {
         val oneMap = MockWebServer()
         val otherHost = MockWebServer()
         oneMap.start()
         otherHost.start()
         try {
             oneMap.enqueue(MockResponse().setResponseCode(302).setHeader("Location", otherHost.url("/search")))
-            otherHost.enqueue(MockResponse().setBody(searchResult("018956").toString()))
+            otherHost.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(searchResult("018956").toString()))
 
-            val failure = expectFailure<HttpException> {
-                createOneMapApi(oneMap.url("/").toString()).search("018956", "Bearer private-token")
-            }
+            val response = createOneMapApi(oneMap.url("/").toString()).search("018956")
 
-            assertEquals(302, failure.code())
+            assertEquals("018956", response.getAsJsonArray("results")[0].asJsonObject.get("POSTAL").asString)
             assertEquals(1, oneMap.requestCount)
-            assertEquals(0, otherHost.requestCount)
+            assertEquals(1, otherHost.requestCount)
+            val original = requireNotNull(oneMap.takeRequest(5, TimeUnit.SECONDS))
+            val redirected = requireNotNull(otherHost.takeRequest(5, TimeUnit.SECONDS))
+            assertNull(original.getHeader("Authorization"))
+            assertNull(redirected.getHeader("Authorization"))
+            assertEquals("/search", redirected.path)
         } finally {
             oneMap.shutdown()
             otherHost.shutdown()
@@ -288,7 +321,7 @@ class OneMapLookupTest {
     }
 
     @Test
-    fun configurableRoutingRequestsDoNotReceiveTheOneMapCredential() = runBlocking {
+    fun searchAndConfigurableRoutingRequestsDoNotSendAuthorization() = runBlocking {
         val oneMap = MockWebServer()
         val routing = MockWebServer()
         oneMap.start()
@@ -297,14 +330,13 @@ class OneMapLookupTest {
             oneMap.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(searchResult("018956").toString()))
             routing.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("{\"code\":\"Ok\"}"))
 
-            createOneMapApi(oneMap.url("/").toString()).search("018956", "Bearer private-token")
+            createOneMapApi(oneMap.url("/").toString()).search("018956")
             createRoutingApi(routing.url("/").toString()).get(routing.url("/table/v1/driving/103.8,1.3").toString())
 
             val search = requireNotNull(oneMap.takeRequest(5, TimeUnit.SECONDS))
             val road = requireNotNull(routing.takeRequest(5, TimeUnit.SECONDS))
-            assertEquals("Bearer private-token", search.getHeader("Authorization"))
+            assertNull(search.getHeader("Authorization"))
             assertNull(road.getHeader("Authorization"))
-            assertFalse(road.path.orEmpty().contains("private-token"))
         } finally {
             oneMap.shutdown()
             routing.shutdown()
@@ -331,27 +363,27 @@ class OneMapRoomCacheTest {
 
     @Test
     fun restartingTheDatabaseRetainsResolvedPostalCodesWithoutAnotherNetworkRequest() = runBlocking {
-        val api = FakeOneMapApi { postal, _ -> searchResult(postal) }
+        val api = FakeOneMapApi { postal -> searchResult(postal) }
         val first = database()
-        val place = OneMapLookup(first.dao(), api, tokenProvider = { "test-token" }).resolve("018956")
+        val place = OneMapLookup(first.dao(), api).resolve("018956")
         assertNotNull(first.dao().place("018956"))
         first.close()
 
         val reopened = database()
-        val restored = OneMapLookup(reopened.dao(), api, tokenProvider = { null }).resolve("018956")
+        val restored = OneMapLookup(reopened.dao(), api).resolve("018956")
 
         assertEquals(place, restored)
         assertEquals(1, api.calls)
     }
 }
 
-private class FakeOneMapApi(private val handler: suspend (String, String) -> JsonObject) : OneMapApi {
+private class FakeOneMapApi(private val handler: suspend (String) -> JsonObject) : OneMapApi {
     var calls = 0
         private set
 
-    override suspend fun search(postal: String, authorization: String, geom: String, details: String): JsonObject {
+    override suspend fun search(postal: String, geom: String, details: String): JsonObject {
         calls++
-        return handler(postal, authorization)
+        return handler(postal)
     }
 }
 

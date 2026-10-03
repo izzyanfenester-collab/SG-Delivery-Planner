@@ -35,7 +35,8 @@ class SummaryPersistenceAndroidTest {
         Dispatchers.setMain(StandardTestDispatcher(scheduler))
         vm = PlannerViewModel(app)
         store = ViewModelStore().apply { put("planner", vm) }
-        pumpUntil { !vm.oneMapTokenBusy && !vm.busy }
+        scheduler.runCurrent()
+        pumpUntil { !vm.busy }
     }
 
     @After

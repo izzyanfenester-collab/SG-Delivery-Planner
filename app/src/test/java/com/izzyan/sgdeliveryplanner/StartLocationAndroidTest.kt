@@ -329,6 +329,7 @@ class StartLocationAndroidTest {
 
     private fun model(): PlannerViewModel = PlannerViewModel(app).also { model ->
         viewModels += ViewModelStore().apply { put("planner", model) }
+        scheduler.runCurrent()
     }
 
     private fun plan(location: StartLocation): Plan = schedule(

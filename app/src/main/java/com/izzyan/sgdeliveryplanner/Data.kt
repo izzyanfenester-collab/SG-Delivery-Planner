@@ -44,8 +44,7 @@ class Repository(context:Context) {
  private val gson=Gson()
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
  private val api=createRoutingApi()
- private val tokenStore=OneMapTokenStore(context)
- private val oneMap=OneMapLookup(dao,createOneMapApi(),tokenStore::readToken)
+ private val oneMap=OneMapLookup(dao,createOneMapApi())
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place = oneMap.resolve(postal)
@@ -57,8 +56,7 @@ class Repository(context:Context) {
    progress("Checking postal code ${index+1} of ${codes.size}…")
    try { Result.success(resolve(code)) }
    catch(e:CancellationException){throw e}
-   // Stop immediately for a shared token problem or persistent throttling.
-   catch(e:OneMapAuthenticationError){throw e}
+   // Stop persistent throttling without issuing requests for the remaining postal codes.
    catch(e:OneMapRateLimitError){throw e}
    catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) }
   }
