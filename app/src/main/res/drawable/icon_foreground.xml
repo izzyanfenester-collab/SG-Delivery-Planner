@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fractional insets preserve the full IZZYAN wordmark within adaptive mask bounds. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="19%"
+    android:insetTop="19%"
+    android:insetRight="19%"
+    android:insetBottom="19%">
+    <bitmap
+        android:src="@drawable/izzyan_icon"
+        android:gravity="fill"
+        android:filter="true" />
+</inset>

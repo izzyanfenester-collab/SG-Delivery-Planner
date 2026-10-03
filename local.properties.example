@@ -1,0 +1,4 @@
+# Local Android SDK path only; do not commit local.properties.
+sdk.dir=/path/to/Android/Sdk
+# No API key required for OneMap public search or OSRM.
+# Configure your production OSRM HTTPS server in the app Settings.
