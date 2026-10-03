@@ -1,197 +1,767 @@
 package com.izzyan.sgdeliveryplanner
 
 import android.app.TimePickerDialog
-import android.app.Application
+import android.content.Context
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
-import java.time.*
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.util.BoundingBox
-import android.graphics.drawable.GradientDrawable
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 
-class PlannerViewModel(app:Application): AndroidViewModel(app) {
- val repo=Repository(app)
- private val prefs=app.getSharedPreferences("settings",0)
- var input by mutableStateOf(prefs.getString("input","")!!)
- var screen by mutableStateOf("Home")
- var route by mutableStateOf<Plan?>(null)
- var busy by mutableStateOf(false)
- var message by mutableStateOf("")
- var service by mutableStateOf(prefs.getInt("service",8))
- var startMinute by mutableStateOf(prefs.getInt("start",600))
- var traffic by mutableStateOf(prefs.getString("traffic","Normal")!!)
- var theme by mutableStateOf(prefs.getString("theme","System")!!)
- var endpoint by mutableStateOf(prefs.getString("endpoint","https://router.project-osrm.org")!!)
- val history=repo.dao.history()
- init { viewModelScope.launch { prefs.getString("active",null)?.let { id -> repo.dao.route(id)?.let { route=repo.decode(it) } } } }
- fun persist() { prefs.edit().putInt("service",service).putInt("start",startMinute).putString("traffic",traffic).putString("theme",theme).putString("endpoint",endpoint).putString("input",input).apply() }
- fun optimize() {
-  val parsed=parseInput(input)
-  if(parsed.invalid.isNotEmpty() || parsed.valid.isEmpty()) { message="Enter valid six-digit postal codes. Invalid: ${parsed.invalid.joinToString()}"; return }
-  persist(); busy=true
-  viewModelScope.launch {
-   try { route=repo.plan(parsed.valid,LocalDate.now(ZoneId.of("Asia/Singapore")).atStartOfDay().plusMinutes(startMinute.toLong()),service,traffic,endpoint) { message=it }; prefs.edit().putString("active",route!!.id).apply(); screen="Route"; message="" }
-   catch(e:CancellationException){throw e}
-   catch(e:Exception){message=e.message ?: "Planning failed. Check your internet connection and retry."}
-   finally { busy=false }
-  }
- }
- fun open(r:SavedRoute) { route=repo.decode(r); prefs.edit().putString("active",r.id).apply(); screen="Route" }
- fun progress(action:String) {
-  if(busy) return
-  val p=route ?: return
-  if(p.current>=p.stops.size) return
-  busy=true
-  viewModelScope.launch {
-   try {
-    val now=LocalDateTime.now(ZoneId.of("Asia/Singapore")).toString()
-    val stops=p.stops.toMutableList()
-    if(action!="NEXT") stops[p.current]=stops[p.current].copy(status=if(action=="DELIVERED") "COMPLETED" else "SKIPPED",completedAt=if(action=="DELIVERED") now else null)
-    val next=(p.current+1 until stops.size).firstOrNull { stops[it].status=="PENDING" } ?: stops.indexOfFirst { it.status=="PENDING" }.takeIf { it>=0 } ?: stops.size
-    val updated=p.copy(stops=stops,current=next,actualCompletion=if(stops.all { it.status=="COMPLETED" }) now else null)
-    repo.save(updated); route=updated
-   } catch(e:Exception){message="Could not save progress: ${e.message}"} finally { busy=false }
-  }
- }
- fun revisit(index:Int) { val p=route ?: return; viewModelScope.launch { try { val updated=p.copy(current=index); repo.save(updated); route=updated; screen="Delivery" } catch(e:Exception){message="Could not reopen stop: ${e.message}"} } }
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
+        )
+        org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        setContent {
+            val vm: PlannerViewModel = viewModel()
+            val dark = vm.theme == "Dark" || (vm.theme == "System" && isSystemInDarkTheme())
+            IzzDeliveryTheme(dark) { App(vm) }
+        }
+    }
 }
-class MainActivity:ComponentActivity() {
- override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); org.osmdroid.config.Configuration.getInstance().userAgentValue=packageName; setContent { val vm:PlannerViewModel=viewModel(); val dark=vm.theme=="Dark" || (vm.theme=="System" && isSystemInDarkTheme()); MaterialTheme(colorScheme=if(dark) darkColorScheme(primary=Color(0xFF90CAF9)) else lightColorScheme(primary=Color(0xFF1565C0))) { App(vm) } } }
+
+fun time(value: String): String = runCatching {
+    val dateTime = LocalDateTime.parse(value)
+    dateTime.format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) +
+        if (dateTime.toLocalDate() != LocalDate.now(ZoneId.of("Asia/Singapore")))
+            " (${dateTime.toLocalDate()})" else ""
+}.getOrDefault(value)
+
+fun duration(seconds: Double): String {
+    val minutes = kotlin.math.ceil(seconds.coerceAtLeast(0.0) / 60).toInt()
+    return if (minutes >= 60) "${minutes / 60} hr ${minutes % 60} min" else "$minutes min"
 }
-fun time(value:String):String { val dt=LocalDateTime.parse(value); return dt.format(DateTimeFormatter.ofPattern("h:mm a")) + if(dt.toLocalDate()!=LocalDate.now(ZoneId.of("Asia/Singapore"))) " (${dt.toLocalDate()})" else "" }
-fun duration(seconds:Double):String { val minutes=kotlin.math.ceil(seconds/60).toInt(); return if(minutes>=60) "${minutes/60} hr ${minutes%60} min" else "$minutes min" }
-fun km(value:Double)="%.1f km".format(java.util.Locale.US,value)
-@Composable fun App(vm:PlannerViewModel) {
- Scaffold(bottomBar={ Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) { listOf("Home","Route","Delivery","Map","History","Settings").forEach { label -> TextButton(onClick={vm.screen=label},enabled=!vm.busy) { Text(label) } } } }) { padding ->
- Column(Modifier.padding(padding).fillMaxSize()) {
-  Text(stringResource(R.string.app_name),style=MaterialTheme.typography.headlineSmall,modifier=Modifier.padding(16.dp))
-  if(vm.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.message,Modifier.padding(12.dp)) }
-  if(vm.message.isNotBlank() && !vm.busy) Card(Modifier.padding(12.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)) { Text(vm.message,Modifier.padding(12.dp)); TextButton(onClick={vm.message=""}) { Text("Dismiss") } }
-  when(vm.screen) {
-   "Home" -> Home(vm)
-   "Settings" -> Settings(vm)
-   "History" -> { val saved by vm.history.collectAsState(initial=emptyList()); LazyColumn { if(saved.isEmpty()) item { Text("Your saved routes will appear here.",Modifier.padding(16.dp)) }; items(saved,key={it.id}) { record -> val p=vm.repo.decode(record); Card(Modifier.padding(12.dp).fillMaxWidth().clickable { vm.open(record) }) { Text("${p.created.take(10)} • ${time(p.start)}",Modifier.padding(12.dp)); Text("${p.stops.size} deliveries • ${km(p.totalKm)}",Modifier.padding(horizontal=12.dp)); Text("Planned finish ${time(p.stops.last().leave)}\nActual ${p.actualCompletion?.let(::time) ?: "In progress"}",Modifier.padding(12.dp)) } } } }
-   else -> { val p=vm.route; if(p==null) Text("Plan a route or reopen one from History.",Modifier.padding(16.dp)) else when(vm.screen) { "Delivery" -> Delivery(vm,p); "Map" -> RouteMap(p); else -> Results(vm,p) } }
-  }
- }
- }
+fun km(value: Double) = "%.1f km".format(Locale.US, value)
+
+@Composable
+fun App(vm: PlannerViewModel) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Surface(color = PremiumNavy, shadowElevation = 4.dp) {
+                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(stringResource(R.string.app_name), color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        when (vm.screen) {
+                            "Home" -> "Singapore parcel delivery"
+                            "Route" -> "Your optimized route"
+                            "Delivery" -> "Delivery mode"
+                            "Map" -> "Route map"
+                            "History" -> "Saved delivery routes"
+                            "Summary" -> "Route summary"
+                            else -> "Preferences"
+                        },
+                        color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            Surface(color = PremiumNavy, shadowElevation = 6.dp) {
+                Row(
+                    Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("Home", "Route", "Delivery", "Map", "History", "Settings").forEach { label ->
+                        val selected = vm.screen == label
+                        TextButton(
+                            onClick = { vm.screen = label }, enabled = !vm.busy,
+                            modifier = Modifier.heightIn(min = 64.dp).widthIn(min = 80.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.textButtonColors(
+                                containerColor = if (selected) PremiumRoyal else Color.Transparent,
+                                contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
+                                disabledContentColor = Color(0xFF8292AC)
+                            )
+                        ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            if (vm.busy) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (vm.message.isNotBlank()) Text(vm.message, Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+            }
+            if (vm.message.isNotBlank() && !vm.busy) {
+                PremiumCard(
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(vm.message, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { vm.message = "" }) { Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer) }
+                }
+            }
+            if (vm.notice.isNotBlank()) {
+                PremiumCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(vm.notice, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { vm.notice = "" }) { Text("Dismiss") }
+                    }
+                }
+            }
+            when (vm.screen) {
+                "Home" -> Home(vm)
+                "Settings" -> Settings(vm)
+                "History" -> History(vm)
+                else -> {
+                    val p = vm.route
+                    if (p == null) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            PremiumCard(Modifier.fillMaxWidth()) {
+                                Text("Your next delivery starts here", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
+                                Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
+                            }
+                            PrimaryAction("PLAN A ROUTE", { vm.screen = "Home" }, enabled = !vm.busy)
+                            if (vm.screen == "Delivery" || vm.screen == "Route") AskChatGptButton(null, vm.message)
+                        }
+                    } else when (vm.screen) {
+                        "Delivery" -> Delivery(vm, p)
+                        "Map" -> RouteMap(p)
+                        "Summary" -> Summary(vm, p)
+                        else -> Results(vm, p)
+                    }
+                }
+            }
+        }
+    }
 }
-@Composable fun Clock(vm:PlannerViewModel) { val context=LocalContext.current; OutlinedButton(onClick={TimePickerDialog(context,{_,h,m->vm.startMinute=h*60+m;vm.persist()},vm.startMinute/60,vm.startMinute%60,false).show()}) { Text("Start time: ${java.time.LocalTime.of(vm.startMinute/60,vm.startMinute%60).format(DateTimeFormatter.ofPattern("h:mm a"))}") } }
-@Composable fun Home(vm:PlannerViewModel) {
- val parsed=parseInput(vm.input)
- Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-  Card(Modifier.fillMaxWidth()) { Text("START / END\nWoodlands Checkpoint\n21 Woodlands Crossing • 738203",Modifier.padding(16.dp)) }
-  Clock(vm); Text("Delivery time per stop: ${vm.service} minutes")
-  OutlinedTextField(vm.input,{vm.input=it;vm.persist()},label={Text("Singapore postal codes")},placeholder={Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208")},modifier=Modifier.fillMaxWidth().heightIn(min=200.dp),enabled=!vm.busy)
-  Text("Valid Stops: ${parsed.valid.size} • Duplicates removed: ${parsed.duplicates}")
-  if(parsed.invalid.isNotEmpty()) Text("Invalid: ${parsed.invalid.joinToString()}",color=MaterialTheme.colorScheme.error)
-  Button(onClick=vm::optimize,enabled=!vm.busy,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) { Text("OPTIMIZE ROUTE") }
-  OutlinedButton(onClick={vm.input="";vm.persist()},enabled=!vm.busy) { Text("CLEAR") }
-  Text("Road-based planning • Up to 50 unique deliveries\nPLANNING ESTIMATE — no live traffic",style=MaterialTheme.typography.bodySmall)
- }
+
+@Composable
+private fun PageTitle(title: String, subtitle: String? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineMedium)
+        if (subtitle != null) Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
 }
-@Composable fun Settings(vm:PlannerViewModel) {
- var serviceText by remember { mutableStateOf(vm.service.toString()) }
- Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-  Text("Settings",style=MaterialTheme.typography.headlineMedium)
-  OutlinedTextField(serviceText,{serviceText=it;it.toIntOrNull()?.takeIf { n->n in 1..120 }?.let { n->vm.service=n;vm.persist() }},label={Text("Delivery minutes per stop (1–120)")},isError=serviceText.toIntOrNull()?.let { it in 1..120 } != true)
-  Clock(vm); Text("Traffic buffer mode")
-  listOf("Normal","Light Traffic","Heavy Traffic").forEach { Row(Modifier.clickable { vm.traffic=it;vm.persist() }) { RadioButton(vm.traffic==it,{vm.traffic=it;vm.persist()}); Text(it,Modifier.padding(top=12.dp)) } }
-  Text("Distance units: KM\nTheme")
-  Row { listOf("System","Light","Dark").forEach { FilterChip(vm.theme==it,{vm.theme=it;vm.persist()},label={Text(it)}) } }
-  OutlinedTextField(vm.endpoint,{vm.endpoint=it.trim();vm.persist()},label={Text("HTTPS OSRM routing server")},modifier=Modifier.fillMaxWidth())
-  Text("The public OSRM server is for evaluation and has no availability guarantee. Use your own Singapore road-data OSRM server for operational delivery planning. No API keys are stored in source. Existing route schedules retain their original settings.")
- }
+
+@Composable
+private fun PrimaryAction(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    color: Color = PremiumRoyal
+) {
+    Button(
+        onClick = onClick, enabled = enabled,
+        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
+    ) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
 }
-fun navigate(context:android.content.Context,p:Place) {
- val intent=Intent(Intent.ACTION_VIEW,Uri.parse("google.navigation:q=${p.lat},${p.lon}&mode=d"))
- try { context.startActivity(intent) } catch(_:android.content.ActivityNotFoundException) { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving"))) }
+
+@Composable
+private fun SecondaryAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+    OutlinedButton(
+        onClick = onClick, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(18.dp)
+    ) { Text(label, style = MaterialTheme.typography.titleMedium) }
 }
-@Composable fun Delivery(vm:PlannerViewModel,p:Plan) {
- val context=LocalContext.current
- Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-  if(p.current>=p.stops.size) {
-   Text("All stops reviewed",style=MaterialTheme.typography.headlineMedium); Text("Completed: ${p.stops.count { it.status=="COMPLETED" }} / ${p.stops.size}")
-   Button(onClick={navigate(context,depot)},modifier=Modifier.fillMaxWidth().height(64.dp)) { Text("RETURN TO WOODLANDS") }
-   p.stops.forEachIndexed { i,s -> if(s.status!="COMPLETED") OutlinedButton(onClick={vm.revisit(i)}) { Text("Revisit ${s.place.postal} • ${s.status}") } }
-  } else {
-   val s=p.stops[p.current]
-   Text("STOP ${p.current+1} / ${p.stops.size}",style=MaterialTheme.typography.titleLarge)
-   Text(s.place.postal,style=MaterialTheme.typography.displayLarge)
-   Text("Block ${s.place.block}\n${s.place.area}\n${s.place.address}",style=MaterialTheme.typography.titleLarge)
-   Text("Arrival ${time(s.arrival)}\nDelivery ${time(s.arrival)} – ${time(s.leave)}\nPLANNING ESTIMATE")
-   listOf("NAVIGATE","DELIVERED","SKIP","NEXT STOP").forEach { label -> Button(onClick={if(label=="NAVIGATE") navigate(context,s.place) else vm.progress(if(label=="NEXT STOP") "NEXT" else label)},enabled=!vm.busy,modifier=Modifier.fillMaxWidth().height(64.dp),colors=ButtonDefaults.buttonColors(containerColor=if(label=="DELIVERED") Color(0xFF237A43) else MaterialTheme.colorScheme.primary)) { Text(label,style=MaterialTheme.typography.titleLarge) } }
-   Text("NEXT STOP leaves this delivery pending. SKIP records a skipped stop. Both remain available for revisiting.",style=MaterialTheme.typography.bodySmall)
-  }
- }
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(label, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+        Text(value, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+    }
 }
-@Composable fun Results(vm:PlannerViewModel,p:Plan) {
- val context=LocalContext.current
- Column(Modifier.padding(horizontal=16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-  Card(Modifier.fillMaxWidth()) { Text("Woodlands Checkpoint\nStart ${time(p.start)}\n${p.stops.size} deliveries • ${km(p.totalKm)}\nEstimated finish ${time(p.stops.last().leave)}\nReturn Woodlands ${time(p.returned)}",Modifier.padding(16.dp),style=MaterialTheme.typography.titleMedium) }
-  Text("PLANNING ESTIMATE • ${p.mode}")
-  Text("Base driving: ${duration(p.baseSeconds)}\nTraffic/junction allowance: ${duration(p.bufferSeconds)}\nDelivery time: ${duration(p.serviceMinutes*p.stops.size*60.0)}\nTotal route time: ${duration(p.baseSeconds+p.bufferSeconds+p.serviceMinutes*p.stops.size*60.0)}\nFinal delivery: ${p.stops.last().place.postal}")
-  Button(onClick={vm.screen="Delivery"},modifier=Modifier.fillMaxWidth()) { Text("START / RESUME DELIVERY") }
-  // Three waypoints is the conservative supported limit on mobile browsers.
-  if(p.stops.size<=3) OutlinedButton(onClick={
-   val waypoints=p.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
-   context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/maps/dir/?api=1&origin=${depot.lat},${depot.lon}&destination=${depot.lat},${depot.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}")))
-  }) { Text("OPEN IN GOOGLE MAPS") } else Text("Google Maps URLs support limited waypoints (3 on mobile browsers). Your complete ${p.stops.size}-stop route stays here in its optimized order. Use NAVIGATE in Delivery Mode for each stop.")
-  Text("Woodlands Checkpoint\n↓\n${p.stops.joinToString("\n↓\n") { it.place.postal }}\n↓\nWoodlands Checkpoint")
-  ScheduleTable(p)
-  p.stops.forEachIndexed { i,s -> Card(Modifier.fillMaxWidth().clickable { vm.revisit(i) },colors=CardDefaults.cardColors(containerColor=if(s.status=="COMPLETED") Color(0xFF237A43) else MaterialTheme.colorScheme.surfaceVariant)) { Text("${i+1}. ${s.place.postal} • ${s.status}\n${s.place.address}${s.completedAt?.let { "\nCompleted ${time(it)}" }.orEmpty()}",Modifier.padding(12.dp),color=if(s.status=="COMPLETED") Color.White else MaterialTheme.colorScheme.onSurfaceVariant) } }
- }
+
+@Composable
+private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, color: Color? = null) {
+    Surface(
+        modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(count.toString(), style = MaterialTheme.typography.headlineMedium, color = color ?: MaterialTheme.colorScheme.onSurface)
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
-@Composable fun ScheduleTable(p:Plan) {
- val headings=listOf("Stop","Postal Code","Block","Area","Arrival","Distance From Previous","Base Drive","Traffic Buffer","Planned Travel","Delivery","Leave","Cumulative KM")
- val start=listOf("START",depot.postal,"Woodlands Checkpoint",depot.area,time(p.start),"—","—","—","—","—",time(p.start),"0.0 km")
- val rows=p.stops.mapIndexed { i,s -> listOf("${i+1}",s.place.postal,s.place.block,s.place.area,time(s.arrival),km(s.leg.km),duration(s.leg.baseSeconds),duration(s.leg.bufferSeconds),duration(s.leg.plannedSeconds),"${time(s.arrival)} – ${time(s.leave)}",time(s.leave),km(s.cumulativeKm)) }
- val end=listOf("END",depot.postal,"Woodlands Checkpoint",depot.area,time(p.returned),km(p.returnLeg.km),duration(p.returnLeg.baseSeconds),duration(p.returnLeg.bufferSeconds),duration(p.returnLeg.plannedSeconds),"—",time(p.returned),km(p.totalKm))
- Column(Modifier.horizontalScroll(rememberScrollState()).border(1.dp,MaterialTheme.colorScheme.outline)) { (listOf(headings,start)+rows+listOf(end)).forEachIndexed { index,row -> Row(Modifier.background(if(index==0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) { row.forEach { Text(it,Modifier.width(160.dp).padding(10.dp),style=if(index==0) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium) } } } }
+
+@Composable
+fun Clock(vm: PlannerViewModel) {
+    val context = LocalContext.current
+    SecondaryAction(
+        "Start time: ${LocalTime.of(vm.startMinute / 60, vm.startMinute % 60).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))}",
+        {
+            TimePickerDialog(context, { _, hour, minute ->
+                vm.startMinute = hour * 60 + minute
+                vm.persist()
+            }, vm.startMinute / 60, vm.startMinute % 60, false).show()
+        }, enabled = !vm.busy
+    )
 }
-@Composable fun RouteMap(p:Plan) {
- val context=LocalContext.current
- val map=remember { MapView(context).apply { setMultiTouchControls(true); setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK) } }
- DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
- Column { Text("Blue: checkpoint • Orange: current • Green: completed\n© OpenStreetMap contributors",Modifier.padding(12.dp)); AndroidView(factory={map},modifier=Modifier.fillMaxSize(),update={ view ->
-  view.overlays.clear()
-  val line=Polyline().apply { setPoints(p.geometry.map { GeoPoint(it[1],it[0]) }); outlinePaint.color=android.graphics.Color.rgb(21,101,192); outlinePaint.strokeWidth=7f }; view.overlays.add(line)
-  fun marker(place:Place,label:String,color:Int,title:String) {
-   val bitmap=Bitmap.createBitmap(84,84,Bitmap.Config.ARGB_8888); val canvas=Canvas(bitmap); val paint=Paint(Paint.ANTI_ALIAS_FLAG)
-   paint.color=color; canvas.drawCircle(42f,42f,37f,paint); paint.color=android.graphics.Color.WHITE; paint.textSize=30f; paint.textAlign=Paint.Align.CENTER; canvas.drawText(label,42f,52f,paint)
-   view.overlays.add(Marker(view).apply { position=GeoPoint(place.lat,place.lon); this.title=title; icon=BitmapDrawable(context.resources,bitmap); setAnchor(Marker.ANCHOR_CENTER,Marker.ANCHOR_CENTER) })
-  }
-  marker(depot,"SG",android.graphics.Color.rgb(21,101,192),"Woodlands Checkpoint")
-  p.stops.forEachIndexed { i,s -> marker(s.place,"${i+1}",if(s.status=="COMPLETED") android.graphics.Color.rgb(35,122,67) else if(i==p.current) android.graphics.Color.rgb(230,120,0) else android.graphics.Color.rgb(70,90,110),"${i+1}: ${s.place.postal} ${s.place.address}") }
-  val points=(p.stops.map { GeoPoint(it.place.lat,it.place.lon) }+GeoPoint(depot.lat,depot.lon))
-  view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points),false,80) }; view.invalidate()
- }) }
+
+@Composable
+fun Home(vm: PlannerViewModel) {
+    val parsed = parseInput(vm.input)
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageTitle("Plan your delivery", "One optimized journey, starting and ending in Woodlands.")
+        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("START / END", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
+                Text("Woodlands Checkpoint", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Text("21 Woodlands Crossing • Singapore 738203", color = Color(0xFFB7C7E1))
+            }
+        }
+        Clock(vm)
+        Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            value = vm.input, onValueChange = { vm.input = it; vm.persist() },
+            label = { Text("Singapore postal codes") },
+            placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),
+            shape = RoundedCornerShape(20.dp), enabled = !vm.busy
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CountTile("Valid stops", parsed.valid.size, Modifier.weight(1f))
+            CountTile("Duplicates removed", parsed.duplicates, Modifier.weight(1f))
+        }
+        if (parsed.invalid.isNotEmpty()) {
+            PremiumCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.errorContainer) {
+                Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+        PrimaryAction("OPTIMIZE ROUTE", vm::optimize, enabled = !vm.busy)
+        SecondaryAction("CLEAR", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
+        AskChatGptButton(vm.route, vm.message)
+        Text("Road-based planning • Up to 50 unique deliveries\nPLANNING ESTIMATE — no live traffic", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+fun Settings(vm: PlannerViewModel) {
+    var serviceText by remember(vm.service) { mutableStateOf(vm.service.toString()) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageTitle("Settings", "Set the defaults for your next route.")
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Schedule", style = MaterialTheme.typography.titleLarge)
+                OutlinedTextField(
+                    serviceText,
+                    { text ->
+                        if (text.length <= 3 && text.all(Char::isDigit)) {
+                            serviceText = text
+                            text.toIntOrNull()?.takeIf { it in 1..120 }?.let { vm.service = it; vm.persist() }
+                        }
+                    },
+                    label = { Text("Delivery minutes per stop (1–120)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = serviceText.toIntOrNull()?.let { it in 1..120 } != true,
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                Clock(vm)
+                Text("Traffic buffer mode", style = MaterialTheme.typography.titleMedium)
+                listOf("Normal", "Light Traffic", "Heavy Traffic").forEach { mode ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { vm.traffic = mode; vm.persist() },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(vm.traffic == mode, { vm.traffic = mode; vm.persist() })
+                        Text(mode)
+                    }
+                }
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Appearance", style = MaterialTheme.typography.titleLarge)
+                Text("Distance units: KM", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("System", "Light", "Dark").forEach { theme ->
+                        FilterChip(
+                            selected = vm.theme == theme, onClick = { vm.theme = theme; vm.persist() },
+                            label = { Text(theme) }, modifier = Modifier.weight(1f).heightIn(min = 64.dp)
+                        )
+                    }
+                }
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Road routing", style = MaterialTheme.typography.titleLarge)
+                OutlinedTextField(
+                    vm.endpoint, { vm.endpoint = it.trim(); vm.persist() }, label = { Text("HTTPS OSRM routing server") },
+                    modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                )
+                Text("The public OSRM server is for evaluation and has no availability guarantee. Use your own Singapore road-data OSRM server for operational delivery planning. No API keys are stored in source. Saved routes retain their original settings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+private fun tryOpenMap(context: Context, intent: Intent): Boolean = try {
+    context.startActivity(intent)
+    true
+} catch (_: ActivityNotFoundException) {
+    false
+} catch (_: SecurityException) {
+    false
+}
+
+private fun mapUnavailable(context: Context) {
+    Toast.makeText(context, "No app can open Google Maps. Install Maps or a browser and try again.", Toast.LENGTH_LONG).show()
+}
+
+fun navigate(context: Context, place: Place) {
+    val navigation = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${place.lat},${place.lon}&mode=d"))
+    if (!tryOpenMap(context, navigation)) {
+        val browser = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lon}&travelmode=driving"))
+        if (!tryOpenMap(context, browser)) mapUnavailable(context)
+    }
+}
+
+private fun statusLabel(status: String): String = normalizedStatus(status).replace('_', ' ')
+private fun statusColor(status: String): Color = when (normalizedStatus(status)) {
+    "DELIVERED" -> PremiumEmerald
+    "ON_HOLD" -> PremiumAmber
+    "SKIPPED" -> Color(0xFF4F5E73)
+    else -> PremiumRoyal
+}
+
+@Composable
+private fun statusCountColor(status: String): Color {
+    val light = MaterialTheme.colorScheme.onSurface == PremiumNavy
+    return when (normalizedStatus(status)) {
+        "DELIVERED" -> if (light) PremiumEmerald else Color(0xFF80E7BE)
+        "ON_HOLD" -> if (light) PremiumAmber else Color(0xFFFFD492)
+        "SKIPPED" -> if (light) Color(0xFF4F5E73) else Color(0xFFC3CBDA)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+}
+
+@Composable
+private fun StatusBadge(status: String) {
+    Surface(color = statusColor(status), contentColor = Color.White, shape = RoundedCornerShape(50)) {
+        Text(statusLabel(status), Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+private fun holdDetails(stop: Stop): String? {
+    if (normalizedStatus(stop.status) != "ON_HOLD") return null
+    return listOfNotNull(stop.holdReason?.takeIf { it.isNotBlank() }, stop.holdNote?.takeIf { it.isNotBlank() }).joinToString(" • ").takeIf { it.isNotBlank() }
+}
+
+@Composable
+fun Delivery(vm: PlannerViewModel, p: Plan) {
+    val context = LocalContext.current
+    var holdStop by remember(p.id, p.current) { mutableStateOf<Int?>(null) }
+    if (holdStop != null) {
+        HoldDialog(
+            onDismiss = { holdStop = null },
+            onConfirm = { reason, note ->
+                vm.progress("ON_HOLD", reason, note)
+                holdStop = null
+            }, enabled = !vm.busy
+        )
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        if (p.current !in p.stops.indices) {
+            PageTitle("All stops reviewed", "Your delivery summary is ready, including any stops to revisit.")
+            val summary = deliverySummary(p)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
+                CountTile("To revisit", summary.onHold + summary.skipped + summary.pending, Modifier.weight(1f))
+            }
+            PrimaryAction("VIEW DELIVERY SUMMARY", { vm.screen = "Summary" }, enabled = !vm.busy)
+            SecondaryAction("RETURN TO WOODLANDS", { navigate(context, depot) }, enabled = !vm.busy)
+            p.stops.forEachIndexed { index, stop ->
+                if (normalizedStatus(stop.status) != "DELIVERED") StopCard(stop, index, false) { vm.revisit(index) }
+            }
+        } else {
+            val stop = p.stops[p.current]
+            PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("STOP ${p.current + 1} / ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
+                    Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
+                    Text("Block ${stop.place.block}", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    Text(stop.place.area, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge)
+                    StatusBadge(stop.status)
+                    holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
+                    HorizontalDivider(color = Color(0xFF31486B))
+                    Text("Planned arrival  ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Text("Delivery  ${time(stop.arrival)} – ${time(stop.leave)}", color = Color(0xFFB7C7E1))
+                    Text("PLANNING ESTIMATE", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            PrimaryAction("NAVIGATE", { navigate(context, stop.place) }, enabled = !vm.busy)
+            PrimaryAction("DELIVERED", { vm.progress("DELIVERED") }, enabled = !vm.busy, color = PremiumEmerald)
+            PrimaryAction("ON HOLD", { holdStop = p.current }, enabled = !vm.busy, color = PremiumAmber)
+            PrimaryAction("SKIP", { vm.progress("SKIP") }, enabled = !vm.busy, color = Color(0xFF4F5E73))
+            SecondaryAction("NEXT STOP", { vm.progress("NEXT") }, enabled = !vm.busy)
+            Text("NEXT STOP reviews this stop without changing its status. On Hold, Skipped and Pending stops remain available to revisit from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        AskChatGptButton(p, vm.message)
+    }
+}
+
+@Composable
+private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> Unit, enabled: Boolean) {
+    var reason by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Place delivery on hold") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("A reason is optional. You can revisit this stop later.")
+                listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other").forEach { option ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { reason = if (reason == option) null else option },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(reason == option, { reason = if (reason == option) null else option })
+                        Text(option)
+                    }
+                }
+                if (reason == "Other") {
+                    OutlinedTextField(
+                        note, { note = it.take(160) }, label = { Text("Optional note") },
+                        supportingText = { Text("${note.length}/160") }, modifier = Modifier.fillMaxWidth(),
+                        minLines = 2, maxLines = 3
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(reason, if (reason == "Other") note.trim().takeIf { it.isNotEmpty() } else null) },
+                enabled = enabled, modifier = Modifier.heightIn(min = 64.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PremiumAmber, contentColor = Color.White)
+            ) { Text("SAVE ON HOLD") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 64.dp)) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun StopCard(stop: Stop, index: Int, current: Boolean, onClick: () -> Unit) {
+    PremiumCard(
+        Modifier.fillMaxWidth().clickable(onClick = onClick),
+        borderColor = if (current) PremiumGold else null
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                StatusBadge(stop.status)
+            }
+            if (current) Text("CURRENT DELIVERY", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+            Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
+            Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Arrival ${time(stop.arrival)} • Leave ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            stop.completedAt?.let { Text("Delivered ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
+            holdDetails(stop)?.let { Text("On hold: $it", style = MaterialTheme.typography.bodyMedium) }
+            Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+@Composable
+fun Results(vm: PlannerViewModel, p: Plan) {
+    val context = LocalContext.current
+    val summary = deliverySummary(p)
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageTitle("Your optimized route", "Woodlands Checkpoint → deliveries → Woodlands Checkpoint")
+        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Woodlands Checkpoint", style = MaterialTheme.typography.titleLarge)
+                DetailRow("Start", time(p.start))
+                DetailRow("Total parcel", p.stops.size.toString())
+                DetailRow("Distance", km(p.totalKm))
+                DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
+                DetailRow("Return Woodlands", time(p.returned))
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
+            CountTile("On Hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
+            CountTile("Pending", summary.pending, Modifier.weight(1f))
+        }
+        PrimaryAction("START / RESUME DELIVERY", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
+        SecondaryAction("VIEW DELIVERY SUMMARY", { vm.screen = "Summary" }, enabled = !vm.busy)
+        AskChatGptButton(p, vm.message)
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("PLANNING ESTIMATE • ${p.mode}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+                DetailRow("Base driving", duration(p.baseSeconds))
+                DetailRow("Traffic / junction allowance", duration(p.bufferSeconds))
+                DetailRow("Delivery time", duration(p.serviceMinutes * p.stops.size * 60.0))
+                DetailRow("Estimated route time", duration(p.baseSeconds + p.bufferSeconds + p.serviceMinutes * p.stops.size * 60.0))
+                DetailRow("Final delivery", p.stops.lastOrNull()?.place?.postal ?: "—")
+            }
+        }
+        // Three waypoints is the conservative supported limit on mobile browsers.
+        if (p.stops.size <= 3) {
+            SecondaryAction("OPEN IN GOOGLE MAPS", {
+                val waypoints = p.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
+                if (!tryOpenMap(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&origin=${depot.lat},${depot.lon}&destination=${depot.lat},${depot.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}")))) mapUnavailable(context)
+            })
+        } else {
+            Text("Google Maps URLs support limited waypoints (3 on mobile browsers). Your complete ${p.stops.size}-stop route stays here in optimized order. Use NAVIGATE in Delivery Mode for each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
+        Text("Swipe the table horizontally for driving, delivery and leave times.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ScheduleTable(p)
+        Text("Optimized sequence", style = MaterialTheme.typography.titleLarge)
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Text("START • Woodlands Checkpoint\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        p.stops.forEachIndexed { index, stop -> StopCard(stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Text("END • Woodlands Checkpoint\nReturn ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
+fun ScheduleTable(p: Plan) {
+    val headings = listOf("Stop", "Postal Code", "Block", "Area", "Arrival", "Distance From Previous", "Base Drive", "Traffic Buffer", "Planned Travel", "Delivery", "Leave", "Cumulative KM")
+    val start = listOf("START", depot.postal, "Woodlands Checkpoint", depot.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
+    val rows = p.stops.mapIndexed { index, stop ->
+        listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm))
+    }
+    val end = listOf("END", depot.postal, "Woodlands Checkpoint", depot.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
+    Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.horizontalScroll(rememberScrollState())) {
+            (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
+                val background = if (index == 0) PremiumNavy else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+                Row(Modifier.background(background)) {
+                    row.forEach {
+                        Text(it, Modifier.width(160.dp).padding(14.dp), color = if (index == 0) Color.White else MaterialTheme.colorScheme.onSurface, style = if (index == 0) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Summary(vm: PlannerViewModel, p: Plan) {
+    val context = LocalContext.current
+    val summary = deliverySummary(p)
+    var cash by remember(p.id, p.cashOnHand) { mutableStateOf(p.cashOnHand) }
+    var tax by remember(p.id, p.tax) { mutableStateOf(p.tax) }
+    val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
+    Column(
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PageTitle("IZZ Delivery Summary", if (estimated) "Route progress and estimated completion." else "Your reviewed delivery route, saved on this device.")
+        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("SUCCESS RATE", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
+                Text("%.1f%%".format(Locale.US, summary.successRate), color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+                Text("${summary.delivered} delivered of ${summary.totalParcel} parcels", color = Color(0xFFB7C7E1), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CountTile("Total Parcel", summary.totalParcel, Modifier.weight(1f))
+            CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CountTile("On Hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
+            CountTile("Skipped", summary.skipped, Modifier.weight(1f), statusCountColor("SKIPPED"))
+            CountTile("Pending", summary.pending, Modifier.weight(1f))
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Route details", style = MaterialTheme.typography.titleLarge)
+                DetailRow("Start", time(summary.start))
+                DetailRow(if (estimated) "Finish (estimated)" else "Finish", time(summary.finish))
+                DetailRow(if (estimated) "Total Route Time (estimated)" else "Total Route Time", duration(summary.totalRouteSeconds))
+                DetailRow("Total KM", km(summary.totalKm))
+                DetailRow("Return to Woodlands (planned)", time(summary.returned))
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Cash on Hand & Tax", style = MaterialTheme.typography.titleLarge)
+                Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CurrencyField("Cash on Hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
+                CurrencyField("Tax", tax, { if (validCurrencyInput(it)) tax = it }, !vm.busy)
+                PrimaryAction("SAVE SUMMARY", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
+                p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        SecondaryAction("RETURN TO WOODLANDS", { navigate(context, depot) }, enabled = !vm.busy)
+        SecondaryAction("VIEW FULL ROUTE & SCHEDULE", { vm.screen = "Route" }, enabled = !vm.busy)
+        val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
+        if (remaining.isNotEmpty()) {
+            Text("Revisit a delivery", style = MaterialTheme.typography.titleLarge)
+            Text("On Hold, Skipped and Pending parcels can still be delivered.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            remaining.forEach { (index, stop) -> StopCard(stop, index, false) { if (!vm.busy) vm.revisit(index) } }
+        }
+    }
+}
+
+@Composable
+private fun CurrencyField(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean) {
+    OutlinedTextField(
+        value, onChange, label = { Text(label) }, prefix = { Text("SGD ") }, placeholder = { Text("0.00") },
+        supportingText = { Text(if (value.isNotBlank() && normalizedCurrency(value) == null) "Enter an amount such as 12.50." else formatCurrency(value)) },
+        isError = value.isNotBlank() && normalizedCurrency(value) == null,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(16.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true, enabled = enabled
+    )
+}
+
+@Composable
+fun History(vm: PlannerViewModel) {
+    val saved by vm.history.collectAsState(initial = emptyList())
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item { PageTitle("Route history", "Reopen saved delivery summaries and resume outstanding parcels.") }
+        if (saved.isEmpty()) item {
+            PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(20.dp)) }
+        }
+        items(saved, key = { it.id }) { record ->
+            val p = vm.repo.decode(record)
+            val summary = deliverySummary(p)
+            val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
+            PremiumCard(Modifier.fillMaxWidth().clickable { if (!vm.busy) vm.open(record) }) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(p.created.take(10), style = MaterialTheme.typography.titleLarge)
+                    DetailRow("Start Time", time(summary.start))
+                    DetailRow("Total Parcel", summary.totalParcel.toString())
+                    Text("Delivered ${summary.delivered} • On Hold ${summary.onHold} • Skipped ${summary.skipped} • Pending ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
+                    DetailRow("Total KM", km(summary.totalKm))
+                    DetailRow(if (estimated) "Finish Time (estimated)" else "Finish Time", time(summary.finish))
+                    Text("Cash on Hand ${formatCurrency(p.cashOnHand)} • Tax ${formatCurrency(p.tax)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text("OPEN DELIVERY SUMMARY", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RouteMap(p: Plan) {
+    val context = LocalContext.current
+    val map = remember { MapView(context).apply {
+        setMultiTouchControls(true)
+        setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+    } }
+    DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Checkpoint" to PremiumRoyal, "Delivered" to PremiumEmerald, "On Hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
+                Surface(color = color, contentColor = Color.White, shape = RoundedCornerShape(50)) {
+                    Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+        Text("Gold ring: current stop • © OpenStreetMap contributors", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().weight(1f), update = { view ->
+            view.overlays.clear()
+            val line = Polyline().apply {
+                setPoints(p.geometry.map { GeoPoint(it[1], it[0]) })
+                outlinePaint.color = android.graphics.Color.rgb(24, 60, 120)
+                outlinePaint.strokeWidth = 7f
+            }
+            view.overlays.add(line)
+            fun marker(place: Place, label: String, color: Int, title: String, current: Boolean = false) {
+                val bitmap = Bitmap.createBitmap(92, 92, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                paint.color = if (current) android.graphics.Color.rgb(228, 188, 105) else android.graphics.Color.WHITE
+                canvas.drawCircle(46f, 46f, 44f, paint)
+                paint.color = color
+                canvas.drawCircle(46f, 46f, 37f, paint)
+                paint.color = android.graphics.Color.WHITE
+                paint.textSize = 30f
+                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                paint.textAlign = Paint.Align.CENTER
+                canvas.drawText(label, 46f, 56f, paint)
+                view.overlays.add(Marker(view).apply {
+                    position = GeoPoint(place.lat, place.lon)
+                    this.title = title
+                    icon = BitmapDrawable(context.resources, bitmap)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                })
+            }
+            marker(depot, "SG", android.graphics.Color.rgb(24, 60, 120), "Woodlands Checkpoint")
+            p.stops.forEachIndexed { index, stop ->
+                val color = when (normalizedStatus(stop.status)) {
+                    "DELIVERED" -> android.graphics.Color.rgb(18, 107, 80)
+                    "ON_HOLD" -> android.graphics.Color.rgb(155, 88, 7)
+                    "SKIPPED" -> android.graphics.Color.rgb(79, 94, 115)
+                    else -> if (index == p.current) android.graphics.Color.rgb(155, 88, 7) else android.graphics.Color.rgb(83, 113, 153)
+                }
+                marker(stop.place, "${index + 1}", color, "${index + 1}: ${stop.place.postal} • ${statusLabel(stop.status)}\n${stop.place.address}${holdDetails(stop)?.let { "\n$it" }.orEmpty()}", index == p.current)
+            }
+            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(depot.lat, depot.lon)
+            view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 80) }
+            view.invalidate()
+        })
+    }
 }

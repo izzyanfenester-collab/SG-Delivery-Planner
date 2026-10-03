@@ -12,8 +12,8 @@ fun parseInput(raw: String): Input {
  return Input(valid.distinct(),tokens.filterNot { it.matches(Regex("[0-9]{6}")) }.distinct(),valid.size-valid.distinct().size)
 }
 data class Leg(val km: Double, val baseSeconds: Double, val bufferSeconds: Double) { val plannedSeconds get() = baseSeconds + bufferSeconds }
-data class Stop(val place: Place, val leg: Leg, val arrival: String, val leave: String, val cumulativeKm: Double, val status: String = "PENDING", val completedAt: String? = null)
-data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null) {
+data class Stop(val place: Place, val leg: Leg, val arrival: String, val leave: String, val cumulativeKm: Double, val status: String = "PENDING", val completedAt: String? = null, val holdReason: String? = null, val holdNote: String? = null, val reviewedAt: String? = null)
+data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null, val reviewedFinishedAt: String? = null, val cashOnHand: String = "0.00", val tax: String = "0.00", val summarySavedAt: String? = null) {
  val totalKm get() = stops.sumOf { it.leg.km } + returnLeg.km
  val baseSeconds get() = stops.sumOf { it.leg.baseSeconds } + returnLeg.baseSeconds
  val bufferSeconds get() = stops.sumOf { it.leg.bufferSeconds } + returnLeg.bufferSeconds

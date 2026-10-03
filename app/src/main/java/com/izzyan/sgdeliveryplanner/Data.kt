@@ -40,8 +40,8 @@ class Repository(context:Context) {
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
  private val client=OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS).build()
  private val api=Retrofit.Builder().baseUrl("https://www.onemap.gov.sg/").client(client).addConverterFactory(GsonConverterFactory.create()).build().create(Api::class.java)
- suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,gson.toJson(plan),plan.created))
- fun decode(r:SavedRoute): Plan = gson.fromJson(r.json,Plan::class.java)
+ suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
+ fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place {
   dao.place(postal)?.takeIf { System.currentTimeMillis()-it.saved < 180L*86400000 }?.let { return gson.fromJson(it.json,Place::class.java) }
   val matches=api.search(postal).getAsJsonArray("results")
