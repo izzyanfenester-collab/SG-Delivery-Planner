@@ -6,7 +6,7 @@ The app and launcher label are **IZZ Delivery**, with the existing premium **IZZ
 
 ## Build status
 
-The preceding app version passed unit tests, debug APK assembly and Android lint in [GitHub Actions](https://github.com/izzyanfenester-collab/SG-Delivery-Planner/actions/runs/37118623985), which uploaded the **SG-Delivery-Planner-APK** artifact. That run predates the delivery summary and hold-status changes; check the current branch's Actions run for their verification. Driver device testing and validation against real Singapore road journeys remain required before operational use.
+The premium UI, delivery statuses, saved summaries and ChatGPT handoff passed unit tests, debug APK assembly and Android lint in [GitHub Actions run 10](https://github.com/izzyanfenester-collab/SG-Delivery-Planner/actions/runs/37120580896), which uploaded the **SG-Delivery-Planner-APK** artifact. Tests include real Room database close/reopen persistence and legacy payload compatibility. Driver device testing and validation against real Singapore road journeys remain required before operational use.
 
 ## Use
 
