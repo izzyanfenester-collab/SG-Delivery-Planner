@@ -7,9 +7,11 @@ actor RouteService {
     private var cache = Cache()
     private var storage: ProtectedStorage?
     private let session: URLSession
-    init() {
+    private let cacheStorage: ProtectedStorage?
+    init(session: URLSession? = nil, cacheStorage: ProtectedStorage? = nil) {
         let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 45; config.timeoutIntervalForResource = 120
-        session = URLSession(configuration: config)
+        self.session = session ?? URLSession(configuration: config)
+        self.cacheStorage = cacheStorage
     }
     static func validEndpoint(_ raw: String) -> Bool {
         guard let c = URLComponents(string: raw), c.scheme == "https", let host = c.host, !host.isEmpty,
@@ -18,7 +20,7 @@ actor RouteService {
     }
     private func prepareCache() throws {
         if storage == nil {
-            let store = try ProtectedStorage(); cache = try store.load("network-cache.json", as: Cache.self) ?? Cache(); storage = store
+            let store = try cacheStorage ?? ProtectedStorage(); cache = try store.load("network-cache.json", as: Cache.self) ?? Cache(); storage = store
         }
     }
     private func saveCache() throws { try storage?.save(cache, name: "network-cache.json") }

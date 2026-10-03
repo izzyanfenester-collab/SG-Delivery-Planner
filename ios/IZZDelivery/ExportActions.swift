@@ -40,7 +40,9 @@ struct ExportActions: View {
             } label: { Label("Share Excel", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered)
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: ExcelDocument.readableContentTypes[0], defaultFilename: ExcelWorkbook.filename(route)) { result in
-            switch result { case .success: store.notice = "Excel file saved successfully"; case .failure(let error): store.error = "Excel could not be saved: \(error.localizedDescription)" }
+            switch result { case .success: store.notice = "Excel file saved successfully"; case .failure(let error):
+                let cocoa = error as NSError
+                if cocoa.domain != NSCocoaErrorDomain || cocoa.code != NSUserCancelledError { store.error = "Excel could not be saved. Check the selected document provider and try again." } }
         }
         .sheet(item: $sharing, onDismiss: cleanup) { ShareSheet(items: $0.items) }
     }

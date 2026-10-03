@@ -26,7 +26,7 @@ import MapKit
         guard storageReady, let storage else { error = "Saved data is unavailable. Reopen IZZ Delivery after unlocking your device."; return false }
         var next = state; change(&next)
         do { try storage.save(next, name: "state.json"); state = next; return true }
-        catch { error = "Changes could not be saved securely. Unlock your device and check available storage, then try again."; return false }
+        catch { self.error = "Changes could not be saved securely. Unlock your device and check available storage, then try again."; return false }
     }
     @discardableResult func save(_ route: Route) -> Bool {
         update { state in

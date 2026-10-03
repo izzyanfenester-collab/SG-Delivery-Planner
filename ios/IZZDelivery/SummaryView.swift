@@ -5,7 +5,6 @@ struct SummaryView: View {
     @State private var cash = "0.00"
     @State private var tax = "0.00"
     @State private var saved = false
-    @State private var sharing: SharePayload?
     var body: some View {
         ScrollView {
             if let route = store.route {
@@ -78,10 +77,12 @@ struct ReportActions: View {
     @EnvironmentObject var store: AppStore
     let route: Route
     @State private var sharing: SharePayload?
+    @State private var copied = false
     var body: some View {
         HStack {
             Button { do { sharing = SharePayload(items: [try Report.text(route)]) } catch { store.error = store.userMessage(error) } } label: { Label("Share Report", systemImage: "square.and.arrow.up") }
-            Button { do { UIPasteboard.general.string = try Report.text(route); store.notice = "Report copied to clipboard" } catch { store.error = store.userMessage(error) } } label: { Label("Copy Text", systemImage: "doc.on.doc") }
+            Button { do { UIPasteboard.general.string = try Report.text(route); copied = true } catch { store.error = store.userMessage(error) } } label: { Label("Copy Text", systemImage: "doc.on.doc") }
         }.buttonStyle(.bordered).sheet(item: $sharing) { ShareSheet(items: $0.items) }
+            .alert("Report copied to clipboard", isPresented: $copied) { Button("OK", role: .cancel) {} }
     }
 }
