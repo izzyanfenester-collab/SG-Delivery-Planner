@@ -17,6 +17,10 @@ import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
 import java.time.LocalDateTime
 
+private inline fun checkPlanning(condition: Boolean, message: () -> String) {
+ if (!condition) throw PlannerError(message())
+}
+
 @Entity(tableName="places") data class CachedPlace(@PrimaryKey val postal: String, val json: String, val saved: Long)
 @Entity(tableName="routes") data class SavedRoute(@PrimaryKey val id: String, val json: String, val created: String)
 @Entity(tableName="legs") data class CachedLeg(@PrimaryKey val key: String, val json: String, val saved: Long)
@@ -45,20 +49,20 @@ class Repository(context:Context) {
  suspend fun resolve(postal:String):Place {
   dao.place(postal)?.takeIf { System.currentTimeMillis()-it.saved < 180L*86400000 }?.let { return gson.fromJson(it.json,Place::class.java) }
   val matches=api.search(postal).getAsJsonArray("results")
-  val row=matches?.firstOrNull { it.asJsonObject.get("POSTAL")?.asString == postal }?.asJsonObject ?: error("Postal code $postal not found")
+  val row=matches?.firstOrNull { it.asJsonObject.get("POSTAL")?.asString == postal }?.asJsonObject ?: throw PlannerError("Postal code $postal was not found. Check the code and try again.")
   fun field(name:String)=row.get(name)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
   val p=Place(postal,field("LATITUDE").toDouble(),field("LONGITUDE").toDouble(),field("BLK_NO"),field("ROAD_NAME"),field("ADDRESS"))
-  require(p.lat in 1.1..1.6 && p.lon in 103.5..104.1) { "$postal resolved outside Singapore" }
+  checkPlanning(p.lat in 1.1..1.6 && p.lon in 103.5..104.1) { "Postal code $postal returned a location outside Singapore. Check the code and try again." }
   dao.place(CachedPlace(postal,gson.toJson(p),System.currentTimeMillis())); return p
  }
  suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,progress:(String)->Unit):Plan = coroutineScope {
-  require(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
-  require(endpoint.startsWith("https://")) { "Routing server must use HTTPS" }
+  checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
+  checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
   val gate=Semaphore(4)
-  val resolved=codes.map { code -> async { gate.withPermit { try { Result.success(resolve(code)) } catch(e:CancellationException){throw e} catch(e:Exception){ Result.failure<Place>(IllegalStateException("$code: ${e.message}")) } } } }.awaitAll()
-  val failures=resolved.filter { it.isFailure }.map { it.exceptionOrNull()!!.message }
-  require(failures.isEmpty()) { "No route created. Unresolved postal codes:\n${failures.joinToString("\n")}\nCheck internet access and postal codes; all input is retained." }
-  progress("Getting road distances and driving times…")
+  val resolved=codes.map { code -> async { gate.withPermit { try { Result.success(resolve(code)) } catch(e:CancellationException){throw e} catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) } } } }.awaitAll()
+  val failures=resolved.filter { it.isFailure }.map { englishError(it.exceptionOrNull()!!, "Could not check this postal code. Please try again.") }
+  checkPlanning(failures.isEmpty()) { "Could not create a route because these postal codes could not be checked:\n${failures.joinToString("\n")}\nCheck your internet connection and postal codes, then try again. Your entries have been kept." }
+  progress("Finding road distances and driving times…")
   val places=listOf(depot)+resolved.map { it.getOrThrow() }
   val coordinates=places.joinToString(";") { "${it.lon},${it.lat}" }
   val root=endpoint.trimEnd('/')
@@ -77,17 +81,17 @@ class Repository(context:Context) {
    seconds=Array(n) { i -> DoubleArray(n) { j -> cached[i][j]!!.baseSeconds } }
   } else {
    val table=api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
-   require(table.get("code")?.asString == "Ok") { "Routing server could not calculate the road matrix. Try another server." }
+   checkPlanning(table.get("code")?.asString == "Ok") { "The routing service could not calculate driving times. Try again or change the routing server in Settings." }
    fun matrix(name:String):Array<DoubleArray> = Array(n) { i -> DoubleArray(n) { j ->
     val cell=table.getAsJsonArray(name)[i].asJsonArray[j]
-    require(!cell.isJsonNull) { "No drivable road between ${places[i].postal} and ${places[j].postal}" }
-    cell.asDouble.also { require(it.isFinite() && it>=0) { "Invalid routing data" } }
+    checkPlanning(!cell.isJsonNull) { "No driving route was found between postal codes ${places[i].postal} and ${places[j].postal}. Check the codes or change the routing server in Settings." }
+    cell.asDouble.also { checkPlanning(it.isFinite() && it>=0) { "The routing service returned invalid travel information. Please try again." } }
    } }
    meters=matrix("distances"); seconds=matrix("durations")
    for(i in 0 until n) for(j in 0 until n) if(i!=j) dao.leg(CachedLeg("$root|${places[i].postal}|${places[j].postal}",gson.toJson(Leg(meters[i][j]/1000,seconds[i][j],0.0)),System.currentTimeMillis()))
   }
   val costs=Array(n) { i -> DoubleArray(n) { j -> seconds[i][j]+trafficBuffer(meters[i][j]/1000,seconds[i][j],mode)+meters[i][j]/1000*15 } }
-  progress("Improving route and checking stop swaps…")
+  progress("Improving the delivery order…")
   val order=withContext(Dispatchers.Default) { Optimizer.optimize(costs) }
   val path=listOf(0)+order+0
   val legs=path.zipWithNext().map { (a,b) ->
@@ -95,9 +99,9 @@ class Repository(context:Context) {
    val leg=Leg(meters[a][b]/1000,seconds[a][b],trafficBuffer(meters[a][b]/1000,seconds[a][b],mode))
    dao.leg(CachedLeg(key,gson.toJson(leg),System.currentTimeMillis())); leg
   }
-  progress("Loading road geometry…")
+  progress("Loading the route map…")
   val route=api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
-  require(route.get("code")?.asString == "Ok") { "Route geometry unavailable. Retry planning." }
+  checkPlanning(route.get("code")?.asString == "Ok") { "The route map is unavailable. Please try planning the route again." }
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
   schedule(order.map { places[it] },legs,start,service,mode,geometry).also { save(it) }
  }

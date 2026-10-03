@@ -51,14 +51,14 @@ import java.util.Locale
 
 /** A snapshot prepared only when the driver asks for help. No chat API or credentials are used. */
 fun buildHelpContext(plan: Plan?, message: String): String = buildString {
-    appendLine("Please help me with this IZZ Delivery route in Singapore.")
-    appendLine("All ETAs below are planning estimates, not live traffic or current GPS information.")
+    appendLine("Please help me with this IZZ Delivery route in Singapore. Reply in clear English only.")
+    appendLine("The arrival times below are planning estimates. They do not use live traffic or current GPS information.")
     if (plan == null) {
         appendLine("Current stop: No route planned yet.")
         appendLine("Next stop: Not available.")
         appendLine("ETA: Not available until a route is planned.")
         appendLine("Total route progress: 0 / 0 deliveries; 0 / 0 reviewed.")
-        appendLine("Delivered: 0; On Hold: 0; Skipped: 0; Pending: 0.")
+        appendLine("Delivered: 0; On hold: 0; Skipped: 0; Pending: 0.")
     } else {
         val currentIndex = plan.current.coerceIn(0, plan.stops.size)
         val current = plan.stops.getOrNull(currentIndex)
@@ -72,7 +72,7 @@ fun buildHelpContext(plan: Plan?, message: String): String = buildString {
         val reviewed = plan.stops.count { it.reviewedAt != null }
         val percent = if (plan.stops.isEmpty()) 0 else delivered * 100 / plan.stops.size
         appendLine("Route: Woodlands Checkpoint (${depot.postal}) to ${plan.stops.size} delivery stops, then return to Woodlands Checkpoint.")
-        appendLine("Planned start: ${helpTime(plan.start)}; traffic buffer mode: ${plan.mode}.")
+        appendLine("Planned start: ${helpTime(plan.start)}; traffic estimate: ${helpTrafficMode(plan.mode)}.")
         if (current != null) {
             appendLine("Current stop: ${currentIndex + 1} / ${plan.stops.size}, postal code ${current.place.postal}, ${current.place.address}.")
             appendLine("Current status: ${helpStatus(current.status)}.")
@@ -80,7 +80,7 @@ fun buildHelpContext(plan: Plan?, message: String): String = buildString {
             current.holdNote?.trim()?.takeIf { it.isNotEmpty() }?.let { appendLine("Hold note: $it") }
             appendLine("ETA: ${helpTime(current.arrival)}; planned departure: ${helpTime(current.leave)}.")
         } else {
-            appendLine("Current stop: None; the route cursor is at the end of the delivery stops.")
+            appendLine("Current stop: None; you are at the end of the delivery stops.")
             appendLine("ETA: Planned return to Woodlands Checkpoint at ${helpTime(plan.returned)}.")
         }
         if (next != null) {
@@ -90,10 +90,10 @@ fun buildHelpContext(plan: Plan?, message: String): String = buildString {
             appendLine("Next stop: Return to Woodlands Checkpoint, postal code ${depot.postal}.")
         }
         appendLine("Total route progress: $delivered / ${plan.stops.size} delivered ($percent%); $reviewed / ${plan.stops.size} reviewed.")
-        appendLine("Delivered: $delivered; On Hold: $onHold; Skipped: $skipped; Pending: $pending.")
+        appendLine("Delivered: $delivered; On hold: $onHold; Skipped: $skipped; Pending: $pending.")
         appendLine("Planned distance: ${String.format(Locale.US, "%.1f", plan.totalKm)} km; planned return ETA: ${helpTime(plan.returned)}.")
     }
-    appendLine("Current app message or route error: ${message.trim().ifEmpty { "None." }}")
+    appendLine("App message or route error: ${message.trim().ifEmpty { "None." }}")
     append("Please explain useful next steps. Ask me for any information this context does not contain.")
 }
 
@@ -101,9 +101,15 @@ private fun helpTime(value: String): String = runCatching {
     LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH)) + " SGT"
 }.getOrDefault(value.ifBlank { "Not available" })
 
+private fun helpTrafficMode(mode: String): String = when (mode) {
+    "Light Traffic" -> "Light traffic"
+    "Heavy Traffic" -> "Heavy traffic"
+    else -> "Normal traffic"
+}
+
 private fun helpStatus(status: String): String = when (status) {
     "DELIVERED", "COMPLETED" -> "Delivered"
-    "ON_HOLD" -> "On Hold"
+    "ON_HOLD" -> "On hold"
     "SKIPPED" -> "Skipped"
     else -> "Pending"
 }
@@ -132,7 +138,7 @@ fun AskChatGptButton(plan: Plan?, message: String, modifier: Modifier = Modifier
                 copyContext = snapshot
                 Toast.makeText(
                     context,
-                    if (opened) "Opening ChatGPT. You can also copy the delivery context." else "No app could open ChatGPT. Copy your delivery context to use later.",
+                    if (opened) "Opening ChatGPT. You can also copy your route details." else "ChatGPT could not be opened. Copy your route details and paste them into ChatGPT later.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -166,19 +172,19 @@ fun AskChatGptButton(plan: Plan?, message: String, modifier: Modifier = Modifier
     copyContext?.let { snapshot ->
         AlertDialog(
             onDismissRequest = { copyContext = null },
-            title = { Text("Delivery context ready") },
+            title = { Text("Your route details are ready") },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("If ChatGPT did not fill in your route details, copy this context and paste it into your chat.")
+                    Text("If your route details do not appear in ChatGPT, copy them below and paste them into your chat.")
                     SelectionContainer { Text(snapshot, style = MaterialTheme.typography.bodySmall) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("IZZ Delivery context", snapshot))
+                    clipboard.setPrimaryClip(ClipData.newPlainText("IZZ Delivery route details", snapshot))
                     copyContext = null
-                }) { Text("Copy context") }
+                }) { Text("Copy route details") }
             },
             dismissButton = { TextButton(onClick = { copyContext = null }) { Text("Close") } }
         )

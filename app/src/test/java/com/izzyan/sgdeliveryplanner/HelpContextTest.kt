@@ -28,18 +28,18 @@ class HelpContextTest {
         val context = buildHelpContext(route, "")
         assertTrue(context.contains("Current stop: 2 / 5, postal code 730121"))
         assertTrue(context.contains("Next stop: 4 / 5, postal code 730123"))
-        assertTrue(context.contains("Current status: On Hold."))
-        assertTrue(context.contains("Delivered: 2; On Hold: 1; Skipped: 1; Pending: 1."))
+        assertTrue(context.contains("Current status: On hold."))
+        assertTrue(context.contains("Delivered: 2; On hold: 1; Skipped: 1; Pending: 1."))
         assertTrue(context.contains("2 / 5 delivered (40%)"))
         assertTrue(context.contains("4 / 5 reviewed."))
         assertTrue(context.contains("SGT"))
-        assertTrue(context.contains("Current app message or route error: None."))
+        assertTrue(context.contains("App message or route error: None."))
     }
 
     @Test fun endOfRouteDoesNotClaimPendingStopsWereDelivered() {
         val route = plan(listOf("DELIVERED", "PENDING"), setOf(0, 1)).copy(current = 2)
         val context = buildHelpContext(route, "Check the unresolved delivery")
-        assertTrue(context.contains("Current stop: None; the route cursor is at the end"))
+        assertTrue(context.contains("Current stop: None; you are at the end"))
         assertTrue(context.contains("Next stop: Return to Woodlands Checkpoint, postal code 738203."))
         assertTrue(context.contains("1 / 2 delivered (50%)"))
         assertTrue(context.contains("Pending: 1."))

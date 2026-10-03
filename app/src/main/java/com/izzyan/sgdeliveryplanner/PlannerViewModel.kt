@@ -44,7 +44,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = "Could not restore your saved route: ${e.message}" }
+            catch (e: Exception) { message = englishError(e, "Could not restore your saved route. Try opening it from History.") }
             finally { busy = false }
         }
     }
@@ -59,7 +59,8 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
         if (busy) return
         val parsed = parseInput(input)
         if (parsed.invalid.isNotEmpty() || parsed.valid.isEmpty()) {
-            message = "Enter valid six-digit postal codes. Invalid: ${parsed.invalid.joinToString()}"
+            message = if (parsed.invalid.isEmpty()) "Enter at least one six-digit Singapore postal code."
+                else "Use six digits for each Singapore postal code. Check these entries: ${parsed.invalid.joinToString()}"
             return
         }
         persist()
@@ -76,7 +77,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 screen = "Route"
                 message = ""
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = e.message ?: "Planning failed. Check your internet connection and retry." }
+            catch (e: Exception) { message = englishError(e, "Could not plan your route. Check your internet connection and postal codes, then try again.") }
             finally { busy = false }
         }
     }
@@ -89,7 +90,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
             message = ""
             notice = ""
             screen = "Summary"
-        } catch (e: Exception) { message = "Could not reopen your route: ${e.message}" }
+        } catch (e: Exception) { message = englishError(e, "Could not open this saved route. Please try another route from History.") }
     }
 
     fun progress(action: String, holdReason: String? = null, holdNote: String? = null) {
@@ -107,7 +108,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 route = updated
                 if (updated.reviewedFinishedAt != null) screen = "Summary"
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = "Could not save delivery progress: ${e.message}" }
+            catch (e: Exception) { message = englishError(e, "Could not save your delivery progress. Please try again.") }
             finally { busy = false }
         }
     }
@@ -133,7 +134,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 message = ""
                 notice = ""
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = "Could not reopen stop: ${e.message}" }
+            catch (e: Exception) { message = englishError(e, "Could not reopen this delivery stop. Please try again.") }
             finally { busy = false }
         }
     }
@@ -144,7 +145,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
         val normalizedCash = normalizedCurrency(cash)
         val normalizedTax = normalizedCurrency(tax)
         if (normalizedCash == null || normalizedTax == null) {
-            message = "Enter cash and tax as nonnegative SGD amounts with up to two decimal places."
+            message = "Enter cash and tax amounts of zero or more in SGD, with up to two decimal places."
             return
         }
         busy = true
@@ -155,9 +156,9 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 repo.save(updated)
                 route = updated
                 message = ""
-                notice = "Summary saved"
+                notice = "Summary saved."
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = "Could not save summary: ${e.message}" }
+            catch (e: Exception) { message = englishError(e, "Could not save your summary. Please try again.") }
             finally { busy = false }
         }
     }

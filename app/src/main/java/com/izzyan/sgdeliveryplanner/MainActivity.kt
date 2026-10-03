@@ -53,6 +53,10 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(englishAppContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -161,7 +165,7 @@ fun App(vm: PlannerViewModel) {
                                 Text("Your next delivery starts here", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
                                 Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
                             }
-                            PrimaryAction("PLAN A ROUTE", { vm.screen = "Home" }, enabled = !vm.busy)
+                            PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
                             if (vm.screen == "Delivery" || vm.screen == "Route") AskChatGptButton(null, vm.message)
                         }
                     } else when (vm.screen) {
@@ -251,10 +255,10 @@ fun Home(vm: PlannerViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("Plan your delivery", "One optimized journey, starting and ending in Woodlands.")
+        PageTitle("Plan your delivery", "Plan a route that starts and ends at Woodlands Checkpoint.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("START / END", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
+                Text("Start and end", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
                 Text("Woodlands Checkpoint", color = Color.White, style = MaterialTheme.typography.titleLarge)
                 Text("21 Woodlands Crossing • Singapore 738203", color = Color(0xFFB7C7E1))
             }
@@ -277,10 +281,10 @@ fun Home(vm: PlannerViewModel) {
                 Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-        PrimaryAction("OPTIMIZE ROUTE", vm::optimize, enabled = !vm.busy)
-        SecondaryAction("CLEAR", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
+        PrimaryAction("Optimize route", vm::optimize, enabled = !vm.busy)
+        SecondaryAction("Clear postal codes", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
         AskChatGptButton(vm.route, vm.message)
-        Text("Road-based planning • Up to 50 unique deliveries\nPLANNING ESTIMATE — no live traffic", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -303,20 +307,21 @@ fun Settings(vm: PlannerViewModel) {
                             text.toIntOrNull()?.takeIf { it in 1..120 }?.let { vm.service = it; vm.persist() }
                         }
                     },
-                    label = { Text("Delivery minutes per stop (1–120)") },
+                    label = { Text("Delivery time per stop (minutes)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = serviceText.toIntOrNull()?.let { it in 1..120 } != true,
+                    supportingText = { Text("Enter a whole number from 1 to 120 minutes.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
                 Clock(vm)
-                Text("Traffic buffer mode", style = MaterialTheme.typography.titleMedium)
+                Text("Traffic estimate", style = MaterialTheme.typography.titleMedium)
                 listOf("Normal", "Light Traffic", "Heavy Traffic").forEach { mode ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { vm.traffic = mode; vm.persist() },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(vm.traffic == mode, { vm.traffic = mode; vm.persist() })
-                        Text(mode)
+                        Text(trafficLabel(mode))
                     }
                 }
             }
@@ -324,12 +329,12 @@ fun Settings(vm: PlannerViewModel) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Appearance", style = MaterialTheme.typography.titleLarge)
-                Text("Distance units: KM", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Distance unit: kilometres (km)", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("System", "Light", "Dark").forEach { theme ->
                         FilterChip(
                             selected = vm.theme == theme, onClick = { vm.theme = theme; vm.persist() },
-                            label = { Text(theme) }, modifier = Modifier.weight(1f).heightIn(min = 64.dp)
+                            label = { Text(if (theme == "System") "Use device setting" else theme) }, modifier = Modifier.weight(1f).heightIn(min = 64.dp)
                         )
                     }
                 }
@@ -339,10 +344,10 @@ fun Settings(vm: PlannerViewModel) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Road routing", style = MaterialTheme.typography.titleLarge)
                 OutlinedTextField(
-                    vm.endpoint, { vm.endpoint = it.trim(); vm.persist() }, label = { Text("HTTPS OSRM routing server") },
+                    vm.endpoint, { vm.endpoint = it.trim(); vm.persist() }, label = { Text("Routing server address (HTTPS)") },
                     modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
                 )
-                Text("The public OSRM server is for evaluation and has no availability guarantee. Use your own Singapore road-data OSRM server for operational delivery planning. No API keys are stored in source. Saved routes retain their original settings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                Text("The default routing server is for evaluation and may be unavailable. For regular deliveries, use a reliable OSRM-compatible server with Singapore road data. Saved routes keep the settings used when they were planned.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -358,7 +363,7 @@ private fun tryOpenMap(context: Context, intent: Intent): Boolean = try {
 }
 
 private fun mapUnavailable(context: Context) {
-    Toast.makeText(context, "No app can open Google Maps. Install Maps or a browser and try again.", Toast.LENGTH_LONG).show()
+    Toast.makeText(context, "Google Maps could not be opened. Install Google Maps or a web browser, then try again.", Toast.LENGTH_LONG).show()
 }
 
 fun navigate(context: Context, place: Place) {
@@ -369,7 +374,18 @@ fun navigate(context: Context, place: Place) {
     }
 }
 
-private fun statusLabel(status: String): String = normalizedStatus(status).replace('_', ' ')
+private fun statusLabel(status: String): String = when (normalizedStatus(status)) {
+    "DELIVERED" -> "Delivered"
+    "ON_HOLD" -> "On hold"
+    "SKIPPED" -> "Skipped"
+    else -> "Pending"
+}
+
+private fun trafficLabel(mode: String): String = when (mode) {
+    "Light Traffic" -> "Light traffic"
+    "Heavy Traffic" -> "Heavy traffic"
+    else -> "Normal traffic"
+}
 private fun statusColor(status: String): Color = when (normalizedStatus(status)) {
     "DELIVERED" -> PremiumEmerald
     "ON_HOLD" -> PremiumAmber
@@ -424,8 +440,8 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
                 CountTile("To revisit", summary.onHold + summary.skipped + summary.pending, Modifier.weight(1f))
             }
-            PrimaryAction("VIEW DELIVERY SUMMARY", { vm.screen = "Summary" }, enabled = !vm.busy)
-            SecondaryAction("RETURN TO WOODLANDS", { navigate(context, depot) }, enabled = !vm.busy)
+            PrimaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
+            SecondaryAction("Return to Woodlands", { navigate(context, depot) }, enabled = !vm.busy)
             p.stops.forEachIndexed { index, stop ->
                 if (normalizedStatus(stop.status) != "DELIVERED") StopCard(stop, index, false) { vm.revisit(index) }
             }
@@ -433,7 +449,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             val stop = p.stops[p.current]
             PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("STOP ${p.current + 1} / ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
+                    Text("Stop ${p.current + 1} of ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block}", color = Color.White, style = MaterialTheme.typography.titleLarge)
                     Text(stop.place.area, color = Color.White, style = MaterialTheme.typography.titleLarge)
@@ -441,17 +457,17 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     StatusBadge(stop.status)
                     holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
                     HorizontalDivider(color = Color(0xFF31486B))
-                    Text("Planned arrival  ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Text("Delivery  ${time(stop.arrival)} – ${time(stop.leave)}", color = Color(0xFFB7C7E1))
-                    Text("PLANNING ESTIMATE", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                    Text("Planned arrival: ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = Color(0xFFB7C7E1))
+                    Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                 }
             }
-            PrimaryAction("NAVIGATE", { navigate(context, stop.place) }, enabled = !vm.busy)
-            PrimaryAction("DELIVERED", { vm.progress("DELIVERED") }, enabled = !vm.busy, color = PremiumEmerald)
-            PrimaryAction("ON HOLD", { holdStop = p.current }, enabled = !vm.busy, color = PremiumAmber)
-            PrimaryAction("SKIP", { vm.progress("SKIP") }, enabled = !vm.busy, color = Color(0xFF4F5E73))
-            SecondaryAction("NEXT STOP", { vm.progress("NEXT") }, enabled = !vm.busy)
-            Text("NEXT STOP reviews this stop without changing its status. On Hold, Skipped and Pending stops remain available to revisit from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            PrimaryAction("Navigate", { navigate(context, stop.place) }, enabled = !vm.busy)
+            PrimaryAction("Mark as delivered", { vm.progress("DELIVERED") }, enabled = !vm.busy, color = PremiumEmerald)
+            PrimaryAction("Put on hold", { holdStop = p.current }, enabled = !vm.busy, color = PremiumAmber)
+            PrimaryAction("Skip delivery", { vm.progress("SKIP") }, enabled = !vm.busy, color = Color(0xFF4F5E73))
+            SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
+            Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         AskChatGptButton(p, vm.message)
     }
@@ -490,7 +506,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
                 onClick = { onConfirm(reason, if (reason == "Other") note.trim().takeIf { it.isNotEmpty() } else null) },
                 enabled = enabled, modifier = Modifier.heightIn(min = 64.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PremiumAmber, contentColor = Color.White)
-            ) { Text("SAVE ON HOLD") }
+            ) { Text("Confirm hold") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 64.dp)) { Text("Cancel") }
@@ -509,10 +525,10 @@ private fun StopCard(stop: Stop, index: Int, current: Boolean, onClick: () -> Un
                 Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 StatusBadge(stop.status)
             }
-            if (current) Text("CURRENT DELIVERY", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+            if (current) Text("Current delivery", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
             Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
             Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Arrival ${time(stop.arrival)} • Leave ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text("Planned arrival: ${time(stop.arrival)} • Departure: ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             stop.completedAt?.let { Text("Delivered ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
             holdDetails(stop)?.let { Text("On hold: $it", style = MaterialTheme.typography.bodyMedium) }
             Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -533,25 +549,25 @@ fun Results(vm: PlannerViewModel, p: Plan) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Woodlands Checkpoint", style = MaterialTheme.typography.titleLarge)
                 DetailRow("Start", time(p.start))
-                DetailRow("Total parcel", p.stops.size.toString())
+                DetailRow("Total parcels", p.stops.size.toString())
                 DetailRow("Distance", km(p.totalKm))
                 DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
-                DetailRow("Return Woodlands", time(p.returned))
+                DetailRow("Return to Woodlands", time(p.returned))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
-            CountTile("On Hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
+            CountTile("On hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
             CountTile("Pending", summary.pending, Modifier.weight(1f))
         }
-        PrimaryAction("START / RESUME DELIVERY", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
-        SecondaryAction("VIEW DELIVERY SUMMARY", { vm.screen = "Summary" }, enabled = !vm.busy)
+        PrimaryAction("Start or resume deliveries", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
+        SecondaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
         AskChatGptButton(p, vm.message)
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("PLANNING ESTIMATE • ${p.mode}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
-                DetailRow("Base driving", duration(p.baseSeconds))
-                DetailRow("Traffic / junction allowance", duration(p.bufferSeconds))
+                Text("Planning estimate • ${trafficLabel(p.mode)}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+                DetailRow("Driving time without allowance", duration(p.baseSeconds))
+                DetailRow("Traffic allowance", duration(p.bufferSeconds))
                 DetailRow("Delivery time", duration(p.serviceMinutes * p.stops.size * 60.0))
                 DetailRow("Estimated route time", duration(p.baseSeconds + p.bufferSeconds + p.serviceMinutes * p.stops.size * 60.0))
                 DetailRow("Final delivery", p.stops.lastOrNull()?.place?.postal ?: "—")
@@ -559,35 +575,35 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         // Three waypoints is the conservative supported limit on mobile browsers.
         if (p.stops.size <= 3) {
-            SecondaryAction("OPEN IN GOOGLE MAPS", {
+            SecondaryAction("Open in Google Maps", {
                 val waypoints = p.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
                 if (!tryOpenMap(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&origin=${depot.lat},${depot.lon}&destination=${depot.lat},${depot.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}")))) mapUnavailable(context)
             })
         } else {
-            Text("Google Maps URLs support limited waypoints (3 on mobile browsers). Your complete ${p.stops.size}-stop route stays here in optimized order. Use NAVIGATE in Delivery Mode for each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Google Maps can open up to 3 delivery stops together in a mobile browser. Your full ${p.stops.size}-stop route is shown here in optimized order. Tap Navigate on the Delivery screen for directions to each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
-        Text("Swipe the table horizontally for driving, delivery and leave times.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ScheduleTable(p)
-        Text("Optimized sequence", style = MaterialTheme.typography.titleLarge)
+        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("START • Woodlands Checkpoint\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+            Text("Start • Woodlands Checkpoint\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
         p.stops.forEachIndexed { index, stop -> StopCard(stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("END • Woodlands Checkpoint\nReturn ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+            Text("End • Woodlands Checkpoint\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
 @Composable
 fun ScheduleTable(p: Plan) {
-    val headings = listOf("Stop", "Postal Code", "Block", "Area", "Arrival", "Distance From Previous", "Base Drive", "Traffic Buffer", "Planned Travel", "Delivery", "Leave", "Cumulative KM")
-    val start = listOf("START", depot.postal, "Woodlands Checkpoint", depot.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
+    val headings = listOf("Stop", "Postal code", "Block", "Area", "Arrival", "Distance from previous stop", "Driving time", "Traffic allowance", "Planned travel time", "Delivery period", "Departure", "Distance so far")
+    val start = listOf("Start", depot.postal, "Woodlands Checkpoint", depot.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
     val rows = p.stops.mapIndexed { index, stop ->
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm))
     }
-    val end = listOf("END", depot.postal, "Woodlands Checkpoint", depot.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
+    val end = listOf("End", depot.postal, "Woodlands Checkpoint", depot.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
     Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
@@ -613,20 +629,20 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("IZZ Delivery Summary", if (estimated) "Route progress and estimated completion." else "Your reviewed delivery route, saved on this device.")
+        PageTitle("IZZ Delivery Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("SUCCESS RATE", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
+                Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
                 Text("%.1f%%".format(Locale.US, summary.successRate), color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
-                Text("${summary.delivered} delivered of ${summary.totalParcel} parcels", color = Color(0xFFB7C7E1), style = MaterialTheme.typography.titleMedium)
+                Text("${summary.delivered} of ${summary.totalParcel} parcels delivered", color = Color(0xFFB7C7E1), style = MaterialTheme.typography.titleMedium)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CountTile("Total Parcel", summary.totalParcel, Modifier.weight(1f))
+            CountTile("Total parcels", summary.totalParcel, Modifier.weight(1f))
             CountTile("Delivered", summary.delivered, Modifier.weight(1f), statusCountColor("DELIVERED"))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CountTile("On Hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
+            CountTile("On hold", summary.onHold, Modifier.weight(1f), statusCountColor("ON_HOLD"))
             CountTile("Skipped", summary.skipped, Modifier.weight(1f), statusCountColor("SKIPPED"))
             CountTile("Pending", summary.pending, Modifier.weight(1f))
         }
@@ -634,28 +650,28 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
                 DetailRow("Start", time(summary.start))
-                DetailRow(if (estimated) "Finish (estimated)" else "Finish", time(summary.finish))
-                DetailRow(if (estimated) "Total Route Time (estimated)" else "Total Route Time", duration(summary.totalRouteSeconds))
-                DetailRow("Total KM", km(summary.totalKm))
+                DetailRow(if (estimated) "Estimated finish" else "Finish", time(summary.finish))
+                DetailRow(if (estimated) "Estimated route time" else "Total route time", duration(summary.totalRouteSeconds))
+                DetailRow("Total distance", km(summary.totalKm))
                 DetailRow("Return to Woodlands (planned)", time(summary.returned))
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Cash on Hand & Tax", style = MaterialTheme.typography.titleLarge)
+                Text("Cash on hand and tax", style = MaterialTheme.typography.titleLarge)
                 Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                CurrencyField("Cash on Hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
+                CurrencyField("Cash on hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
                 CurrencyField("Tax", tax, { if (validCurrencyInput(it)) tax = it }, !vm.busy)
-                PrimaryAction("SAVE SUMMARY", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
+                PrimaryAction("Save summary", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
                 p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        SecondaryAction("RETURN TO WOODLANDS", { navigate(context, depot) }, enabled = !vm.busy)
-        SecondaryAction("VIEW FULL ROUTE & SCHEDULE", { vm.screen = "Route" }, enabled = !vm.busy)
+        SecondaryAction("Return to Woodlands", { navigate(context, depot) }, enabled = !vm.busy)
+        SecondaryAction("View full route and schedule", { vm.screen = "Route" }, enabled = !vm.busy)
         val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
         if (remaining.isNotEmpty()) {
             Text("Revisit a delivery", style = MaterialTheme.typography.titleLarge)
-            Text("On Hold, Skipped and Pending parcels can still be delivered.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Parcels that are on hold, skipped or pending can still be delivered.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             remaining.forEach { (index, stop) -> StopCard(stop, index, false) { if (!vm.busy) vm.revisit(index) } }
         }
     }
@@ -665,7 +681,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
 private fun CurrencyField(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean) {
     OutlinedTextField(
         value, onChange, label = { Text(label) }, prefix = { Text("SGD ") }, placeholder = { Text("0.00") },
-        supportingText = { Text(if (value.isNotBlank() && normalizedCurrency(value) == null) "Enter an amount such as 12.50." else formatCurrency(value)) },
+        supportingText = { Text(if (value.isNotBlank() && normalizedCurrency(value) == null) "Enter a non-negative amount with up to 2 decimal places, such as 12.50." else formatCurrency(value)) },
         isError = value.isNotBlank() && normalizedCurrency(value) == null,
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(16.dp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -680,7 +696,7 @@ fun History(vm: PlannerViewModel) {
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { PageTitle("Route history", "Reopen saved delivery summaries and resume outstanding parcels.") }
+        item { PageTitle("Route history", "Open a saved delivery summary and continue any unfinished deliveries.") }
         if (saved.isEmpty()) item {
             PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(20.dp)) }
         }
@@ -691,13 +707,13 @@ fun History(vm: PlannerViewModel) {
             PremiumCard(Modifier.fillMaxWidth().clickable { if (!vm.busy) vm.open(record) }) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(p.created.take(10), style = MaterialTheme.typography.titleLarge)
-                    DetailRow("Start Time", time(summary.start))
-                    DetailRow("Total Parcel", summary.totalParcel.toString())
-                    Text("Delivered ${summary.delivered} • On Hold ${summary.onHold} • Skipped ${summary.skipped} • Pending ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
-                    DetailRow("Total KM", km(summary.totalKm))
-                    DetailRow(if (estimated) "Finish Time (estimated)" else "Finish Time", time(summary.finish))
-                    Text("Cash on Hand ${formatCurrency(p.cashOnHand)} • Tax ${formatCurrency(p.tax)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    Text("OPEN DELIVERY SUMMARY", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    DetailRow("Start time", time(summary.start))
+                    DetailRow("Total parcels", summary.totalParcel.toString())
+                    Text("Delivered: ${summary.delivered} • On hold: ${summary.onHold} • Skipped: ${summary.skipped} • Pending: ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
+                    DetailRow("Total distance", km(summary.totalKm))
+                    DetailRow(if (estimated) "Estimated finish time" else "Finish time", time(summary.finish))
+                    Text("Cash on hand: ${formatCurrency(p.cashOnHand)} • Tax: ${formatCurrency(p.tax)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text("Open delivery summary", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -714,7 +730,7 @@ fun RouteMap(p: Plan) {
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Checkpoint" to PremiumRoyal, "Delivered" to PremiumEmerald, "On Hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
+            listOf("Checkpoint" to PremiumRoyal, "Delivered" to PremiumEmerald, "On hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
                 Surface(color = color, contentColor = Color.White, shape = RoundedCornerShape(50)) {
                     Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
                 }
