@@ -4,3 +4,16 @@ local.properties
 *.jks
 *.keystore
 .idea/
+
+# Independent KMP/iOS build outputs and local Apple signing configuration
+shared/.gradle/
+shared/.kotlin/
+shared/build/
+ios/IZZDelivery.xcodeproj/
+ios/IZZDelivery/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+ios/DerivedData/
+*.xcresult
+*.xcuserstate
+xcuserdata/
+*.mobileprovision
+*.p12

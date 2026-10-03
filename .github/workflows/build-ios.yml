@@ -1,0 +1,47 @@
+name: Build IZZ Delivery iOS
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Verify shared business logic
+        run: ./gradlew -p shared jvmTest
+      - name: Generate native project and branding icon
+        run: |
+          brew install xcodegen
+          ./ios/scripts/generate-project.sh
+      - name: Build and test native simulator app
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if "iPhone" in x["name"]))')
+          xcodebuild -project ios/IZZDelivery.xcodeproj -scheme IZZDelivery -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath ios/DerivedData -resultBundlePath ios/build-tests.xcresult CODE_SIGNING_ALLOWED=NO test
+      - name: Verify Excel with independent reader
+        run: |
+          python3 -m venv /tmp/izz-excel-check
+          /tmp/izz-excel-check/bin/pip install openpyxl==3.1.5
+          /tmp/izz-excel-check/bin/python ios/scripts/verify_excel.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: IZZ-Delivery-iOS-verification
+          path: |
+            shared/build/reports/tests/
+            ios/build-tests.xcresult
+            ios/DerivedData/Build/Products/Debug-iphonesimulator/IZZDelivery.app
+          if-no-files-found: warn
