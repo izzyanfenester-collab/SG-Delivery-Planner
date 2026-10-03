@@ -19,7 +19,7 @@ The [GitHub Actions APK workflow](https://github.com/izzyanfenester-collab/SG-De
 5. Open Delivery Mode for large controls and a prominent stop number, postal code, building, area, planned arrival, delivery period and status. **Navigate** opens coordinate navigation. **Mark as delivered** saves the actual Singapore completion timestamp before advancing. **Put on hold** offers an optional reason; Other accepts a short note. **Skip delivery** records a skipped stop. **Next stop** reviews the stop and advances without changing its status; a pending stop stays pending. Every change is saved with the route.
 6. After every delivery has been reviewed, the app opens **IZZ Delivery Summary** automatically. It shows parcel/status counts, one-decimal success rate, start/finish, route time, distance and the planned return to its saved Start & End location. Cash on hand and Tax are manual SGD amounts that default to SGD 0.00 and are never calculated from deliveries or each other. Edit them and tap **Save Summary** to persist them. Once saved, a confirmation popup offers **Share Report**, **Copy Text** and **Close**.
 7. History shows the route date, start/finish, parcel/status counts and distance. Opening a route shows its saved summary, including Cash on hand and Tax; use the route and delivery controls to resume or revisit stops. App restart restores saved progress and summary amounts.
-8. Map shows numbered markers and road geometry, with delivery-status colors and a current-stop highlight. Ask ChatGPT is available on Home, Route Results and Delivery Mode. Saved times are planning times, not recalculated live arrival predictions.
+8. Map shows numbered markers and road geometry, with delivery-status colors and a current-stop highlight. Ask ChatGPT is available on Home, Route Results and Delivery Mode and opens ChatGPT for a question you enter manually. Home also includes **Tax Declare**, which opens the official Singapore Customs Traveller Portal in your external browser. Saved times are planning times, not recalculated live arrival predictions.
 
 Routes support 1–50 unique deliveries. Larger input receives an explicit error; split it into separate routes. The limit keeps all-pairs road matrix requests and route improvement bounded. A complete route remains saved and readable offline after it has been planned; new planning and navigation require appropriate connectivity. Basemap tiles already cached by osmdroid may work offline, but full offline map coverage is not promised.
 
@@ -69,9 +69,13 @@ The schedule preserves every delivery in the app's existing order, including STA
 
 ## Ask ChatGPT
 
-The capsule help button prepares a delivery-help prompt using available route context: current/next stop, postal code, planned ETA, reviewed progress, Delivered / On hold / Pending counts, any hold reason/note and the current route/error message. It shares that prompt to the ChatGPT Android app through an intent where supported and otherwise opens ChatGPT in the browser. A **Copy route details** option is available if browser prefill is not honored. The prompt requests an English reply. The driver reviews and sends the prompt in ChatGPT; answers are not fetched inside this APK. Home can open general delivery help without a route.
+Every capsule **Ask ChatGPT** button opens the plain `https://chatgpt.com/` homepage in the ChatGPT Android app when supported, with a browser fallback. No question is prefilled: enter a fresh question yourself after ChatGPT opens. The existing button design and placements are retained. No postal code, ETA, current/next stop, delivery progress, route data or error message is passed, shared or copied by this action.
 
-No OpenAI API key, token or secret is embedded in the app, and no OpenAI API account is needed by the APK. Using ChatGPT follows the account and sign-in requirements of the ChatGPT app or browser. Route details are included only when the driver taps the help button.
+No OpenAI API key, token or secret is embedded in the app, and no OpenAI API account is needed by the APK. Using ChatGPT follows the account and sign-in requirements of the ChatGPT app or browser. If neither the app nor a browser can open ChatGPT, IZZ Delivery shows a clear English error and leaves the clipboard unchanged.
+
+## Tax Declare
+
+Home includes a large premium navy-and-gold **Tax Declare** button with a document icon. It opens the official [Singapore Customs Traveller Portal](https://m.customs.gov.sg/CustomsTravellerPortal/) using an external Android browser intent and the user's default browser. The portal is not embedded in a WebView. If a browser is unavailable or cannot open the portal, the app shows a clear English error. This action does not change the route, delivery progress, or manually entered Cash on Hand and Tax values.
 
 ## Mapping services and credentials
 
