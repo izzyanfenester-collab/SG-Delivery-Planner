@@ -7,7 +7,7 @@ import javax.net.ssl.SSLException
 import retrofit2.HttpException
 
 /** Only app-authored English messages are safe to display directly. */
-class PlannerError(val englishMessage: String, cause: Throwable? = null) :
+open class PlannerError(val englishMessage: String, cause: Throwable? = null) :
     IllegalStateException(englishMessage, cause)
 
 fun englishError(error: Throwable, fallback: String): String = when (error) {

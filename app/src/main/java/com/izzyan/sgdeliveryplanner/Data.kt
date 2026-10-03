@@ -5,14 +5,11 @@ import androidx.room.*
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
-import retrofit2.http.Query as HttpQuery
 import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
 import java.time.LocalDateTime
@@ -36,30 +33,34 @@ private inline fun checkPlanning(condition: Boolean, message: () -> String) {
 @Database(entities=[CachedPlace::class,SavedRoute::class,CachedLeg::class],version=1,exportSchema=false)
 abstract class PlannerDb: RoomDatabase() { abstract fun dao(): PlannerDao }
 interface Api {
- @GET("api/common/elastic/search") suspend fun search(@HttpQuery("searchVal") postal:String,@HttpQuery("returnGeom") geom:String="Y",@HttpQuery("getAddrDetails") details:String="Y"): JsonObject
  @GET suspend fun get(@Url url:String): JsonObject
 }
+fun createRoutingApi(baseUrl:String="https://router.project-osrm.org/"): Api =
+ Retrofit.Builder().baseUrl(baseUrl).client(
+  OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS).build()
+ ).addConverterFactory(GsonConverterFactory.create()).build().create(Api::class.java)
+
 class Repository(context:Context) {
  private val gson=Gson()
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
- private val client=OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS).build()
- private val api=Retrofit.Builder().baseUrl("https://www.onemap.gov.sg/").client(client).addConverterFactory(GsonConverterFactory.create()).build().create(Api::class.java)
+ private val api=createRoutingApi()
+ private val tokenStore=OneMapTokenStore(context)
+ private val oneMap=OneMapLookup(dao,createOneMapApi(),tokenStore::readToken)
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
- suspend fun resolve(postal:String):Place {
-  dao.place(postal)?.takeIf { System.currentTimeMillis()-it.saved < 180L*86400000 }?.let { return gson.fromJson(it.json,Place::class.java) }
-  val matches=api.search(postal).getAsJsonArray("results")
-  val row=matches?.firstOrNull { it.asJsonObject.get("POSTAL")?.asString == postal }?.asJsonObject ?: throw PlannerError("Postal code $postal was not found. Check the code and try again.")
-  fun field(name:String)=row.get(name)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-  val p=Place(postal,field("LATITUDE").toDouble(),field("LONGITUDE").toDouble(),field("BLK_NO"),field("ROAD_NAME"),field("ADDRESS"))
-  checkPlanning(p.lat in 1.1..1.6 && p.lon in 103.5..104.1) { "Postal code $postal returned a location outside Singapore. Check the code and try again." }
-  dao.place(CachedPlace(postal,gson.toJson(p),System.currentTimeMillis())); return p
- }
+ suspend fun resolve(postal:String):Place = oneMap.resolve(postal)
  suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,progress:(String)->Unit):Plan = coroutineScope {
   checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
-  val gate=Semaphore(4)
-  val resolved=codes.map { code -> async { gate.withPermit { try { Result.success(resolve(code)) } catch(e:CancellationException){throw e} catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) } } } }.awaitAll()
+  val resolved=codes.mapIndexed { index, code ->
+   progress("Checking postal code ${index+1} of ${codes.size}…")
+   try { Result.success(resolve(code)) }
+   catch(e:CancellationException){throw e}
+   // Stop immediately for a shared token problem or persistent throttling.
+   catch(e:OneMapAuthenticationError){throw e}
+   catch(e:OneMapRateLimitError){throw e}
+   catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) }
+  }
   val failures=resolved.filter { it.isFailure }.map { englishError(it.exceptionOrNull()!!, "Could not check this postal code. Please try again.") }
   checkPlanning(failures.isEmpty()) { "Could not create a route because these postal codes could not be checked:\n${failures.joinToString("\n")}\nCheck your internet connection and postal codes, then try again. Your entries have been kept." }
   progress("Finding road distances and driving times…")

@@ -5,7 +5,9 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -26,8 +28,26 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
     var theme by mutableStateOf(prefs.getString("theme", "System")!!)
     var endpoint by mutableStateOf(prefs.getString("endpoint", "https://router.project-osrm.org")!!)
     val history = repo.dao.history()
+    var hasOneMapToken by mutableStateOf(false)
+        private set
+    var oneMapTokenStatus by mutableStateOf("Checking for a saved OneMap token…")
+        private set
+    var oneMapTokenBusy by mutableStateOf(true)
+        private set
 
     init {
+        viewModelScope.launch {
+            try {
+                hasOneMapToken = withContext(Dispatchers.IO) {
+                    OneMapTokenStore(getApplication()).readToken() != null
+                }
+                oneMapTokenStatus = if (hasOneMapToken) "A OneMap token is saved on this device."
+                    else "No OneMap token is saved. Add a token to look up new postal codes."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                oneMapTokenStatus = "Could not access the saved OneMap token. Save a new token to try again."
+            } finally { oneMapTokenBusy = false }
+        }
         viewModelScope.launch {
             val active = prefs.getString("active", null)
             if (active != null) busy = true
@@ -55,8 +75,52 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
             .putString("endpoint", endpoint).putString("input", input).apply()
     }
 
+    fun saveOneMapToken(token: String, onSaved: () -> Unit) {
+        if (busy || oneMapTokenBusy) return
+        if (token.isBlank()) {
+            message = "Enter your OneMap API token before saving."
+            return
+        }
+        oneMapTokenBusy = true
+        message = ""
+        notice = ""
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    OneMapTokenStore(getApplication()).saveToken(token)
+                }
+                hasOneMapToken = true
+                oneMapTokenStatus = "A OneMap token is saved on this device."
+                notice = "OneMap token saved. It will be used for new postal-code lookups."
+                onSaved()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                message = englishError(e, "Could not securely save the OneMap token. Please try again in Settings.")
+            } finally { oneMapTokenBusy = false }
+        }
+    }
+
+    fun clearOneMapToken(onCleared: () -> Unit) {
+        if (busy || oneMapTokenBusy) return
+        oneMapTokenBusy = true
+        message = ""
+        notice = ""
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { OneMapTokenStore(getApplication()).clearToken() }
+                hasOneMapToken = false
+                oneMapTokenStatus = "No OneMap token is saved. Add a token to look up new postal codes."
+                notice = "OneMap token removed. Saved routes and cached postal codes are still available."
+                onCleared()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                message = englishError(e, "Could not remove the OneMap token. Please try again in Settings.")
+            } finally { oneMapTokenBusy = false }
+        }
+    }
+
     fun optimize() {
-        if (busy) return
+        if (busy || oneMapTokenBusy) return
         val parsed = parseInput(input)
         if (parsed.invalid.isNotEmpty() || parsed.valid.isEmpty()) {
             message = if (parsed.invalid.isEmpty()) "Enter at least one six-digit Singapore postal code."
