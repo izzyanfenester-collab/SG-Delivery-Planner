@@ -1,0 +1,61 @@
+name: IZZDelivery
+options:
+  bundleIdPrefix: com.izzyan.sgdeliveryplanner
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    GENERATE_INFOPLIST_FILE: YES
+    DEVELOPMENT_TEAM: ''
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  IZZDelivery:
+    type: application
+    platform: iOS
+    sources:
+      - path: IZZDelivery
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.izzyan.sgdeliveryplanner.ios
+        PRODUCT_NAME: IZZDelivery
+        INFOPLIST_KEY_CFBundleDisplayName: IZZ Delivery
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: '1,2'
+        FRAMEWORK_SEARCH_PATHS: '$(inherited) $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)'
+        OTHER_LDFLAGS: '$(inherited) -framework IZZShared'
+    preBuildScripts:
+      - name: Build Kotlin Multiplatform Framework
+        script: |
+          set -eu
+          cd "$SRCROOT/.."
+          ./gradlew -p shared embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+  IZZDeliveryTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: IZZDeliveryTests
+    dependencies:
+      - target: IZZDelivery
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.izzyan.sgdeliveryplanner.ios.tests
+        FRAMEWORK_SEARCH_PATHS: '$(inherited) $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)'
+schemes:
+  IZZDelivery:
+    build:
+      targets:
+        IZZDelivery: all
+        IZZDeliveryTests: [test]
+    test:
+      targets:
+        - IZZDeliveryTests
+      gatherCoverageData: true
