@@ -12,7 +12,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
-import retrofit2.http.Query
+import retrofit2.http.Query as HttpQuery
 import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
 import java.time.LocalDateTime
@@ -32,7 +32,7 @@ import java.time.LocalDateTime
 @Database(entities=[CachedPlace::class,SavedRoute::class,CachedLeg::class],version=1,exportSchema=false)
 abstract class PlannerDb: RoomDatabase() { abstract fun dao(): PlannerDao }
 interface Api {
- @GET("api/common/elastic/search") suspend fun search(@Query("searchVal") postal:String,@Query("returnGeom") geom:String="Y",@Query("getAddrDetails") details:String="Y"): JsonObject
+ @GET("api/common/elastic/search") suspend fun search(@HttpQuery("searchVal") postal:String,@HttpQuery("returnGeom") geom:String="Y",@HttpQuery("getAddrDetails") details:String="Y"): JsonObject
  @GET suspend fun get(@Url url:String): JsonObject
 }
 class Repository(context:Context) {
