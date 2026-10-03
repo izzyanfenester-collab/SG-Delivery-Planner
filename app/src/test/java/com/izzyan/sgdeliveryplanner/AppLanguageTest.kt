@@ -45,8 +45,11 @@ class AppLanguageTest {
 
         val english = englishAppContext(base)
 
-        assertEquals("Cancel", english.getString(android.R.string.cancel))
-        assertEquals("OK", english.getString(android.R.string.ok))
+        // Robolectric's framework adds invisible direction markers to some native captions.
+        // Ignore only those markers so the visible text must still match English exactly.
+        fun caption(id: Int) = english.getString(id).filterNot { it == '\u200e' || it == '\u200f' }
+        assertEquals("Cancel", caption(android.R.string.cancel))
+        assertEquals("OK", caption(android.R.string.ok))
         assertEquals("ms-MY", base.resources.configuration.locales[0].toLanguageTag())
     }
 }
