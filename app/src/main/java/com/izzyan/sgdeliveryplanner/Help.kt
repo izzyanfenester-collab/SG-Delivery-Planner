@@ -71,7 +71,12 @@ fun buildHelpContext(plan: Plan?, message: String): String = buildString {
         val pending = plan.stops.size - delivered - onHold - skipped
         val reviewed = plan.stops.count { it.reviewedAt != null }
         val percent = if (plan.stops.isEmpty()) 0 else delivered * 100 / plan.stops.size
-        appendLine("Route: Woodlands Checkpoint (${depot.postal}) to ${plan.stops.size} delivery stops, then return to Woodlands Checkpoint.")
+        val startLocation = plan.startLocation
+        val startPlace = startLocation.asPlace()
+        val postalLabel = startPlace.postal.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+        appendLine("Route: ${startLocation.displayName}$postalLabel to ${plan.stops.size} delivery stops, then return to ${startLocation.displayName}.")
+        appendLine("Start location: ${startLocation.reportLabel}; coordinates: ${startPlace.lat}, ${startPlace.lon}.")
+        appendLine("End location: ${startLocation.reportLabel}; coordinates: ${startPlace.lat}, ${startPlace.lon}.")
         appendLine("Planned start: ${helpTime(plan.start)}; traffic estimate: ${helpTrafficMode(plan.mode)}.")
         if (current != null) {
             appendLine("Current stop: ${currentIndex + 1} / ${plan.stops.size}, postal code ${current.place.postal}, ${current.place.address}.")
@@ -81,13 +86,14 @@ fun buildHelpContext(plan: Plan?, message: String): String = buildString {
             appendLine("ETA: ${helpTime(current.arrival)}; planned departure: ${helpTime(current.leave)}.")
         } else {
             appendLine("Current stop: None; you are at the end of the delivery stops.")
-            appendLine("ETA: Planned return to Woodlands Checkpoint at ${helpTime(plan.returned)}.")
+            appendLine("ETA: Planned return to ${startLocation.displayName} at ${helpTime(plan.returned)}.")
         }
         if (next != null) {
             appendLine("Next stop: ${nextIndex!! + 1} / ${plan.stops.size}, postal code ${next.place.postal}, ${next.place.address}.")
             appendLine("Next stop ETA: ${helpTime(next.arrival)}.")
         } else {
-            appendLine("Next stop: Return to Woodlands Checkpoint, postal code ${depot.postal}.")
+            val postal = startPlace.postal.takeIf { it.isNotBlank() }?.let { ", postal code $it" }.orEmpty()
+            appendLine("Next stop: Return to ${startLocation.displayName}$postal.")
         }
         appendLine("Total route progress: $delivered / ${plan.stops.size} delivered ($percent%); $reviewed / ${plan.stops.size} reviewed.")
         appendLine("Delivered: $delivered; On hold: $onHold; Skipped: $skipped; Pending: $pending.")

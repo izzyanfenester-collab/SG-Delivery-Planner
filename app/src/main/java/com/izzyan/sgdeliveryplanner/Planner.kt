@@ -13,7 +13,7 @@ fun parseInput(raw: String): Input {
 }
 data class Leg(val km: Double, val baseSeconds: Double, val bufferSeconds: Double) { val plannedSeconds get() = baseSeconds + bufferSeconds }
 data class Stop(val place: Place, val leg: Leg, val arrival: String, val leave: String, val cumulativeKm: Double, val status: String = "PENDING", val completedAt: String? = null, val holdReason: String? = null, val holdNote: String? = null, val reviewedAt: String? = null)
-data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null, val reviewedFinishedAt: String? = null, val cashOnHand: String = "0.00", val tax: String = "0.00", val summarySavedAt: String? = null) {
+data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null, val reviewedFinishedAt: String? = null, val cashOnHand: String = "0.00", val tax: String = "0.00", val summarySavedAt: String? = null, val startLocation: StartLocation = woodlandsStartLocation) {
  val totalKm get() = stops.sumOf { it.leg.km } + returnLeg.km
  val baseSeconds get() = stops.sumOf { it.leg.baseSeconds } + returnLeg.baseSeconds
  val bufferSeconds get() = stops.sumOf { it.leg.bufferSeconds } + returnLeg.bufferSeconds
@@ -45,7 +45,7 @@ object Optimizer {
   return order
  }
 }
-fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service: Int, mode: String, geometry: List<List<Double>>): Plan {
+fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service: Int, mode: String, geometry: List<List<Double>>, location: StartLocation = woodlandsStartLocation): Plan {
  require(legs.size == places.size+1 && places.isNotEmpty())
  var clock=start; var distance=0.0
  val stops=places.mapIndexed { i,p ->
@@ -53,5 +53,5 @@ fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service
   clock=clock.plusMinutes(service.toLong()); distance+=leg.km
   Stop(p,leg,arrival.toString(),clock.toString(),distance)
  }
- return Plan(java.util.UUID.randomUUID().toString(),LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")).toString(),start.toString(),service,mode,stops,legs.last(),clock.plusSeconds(ceil(legs.last().plannedSeconds).toLong()).toString(),geometry)
+ return Plan(java.util.UUID.randomUUID().toString(),LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")).toString(),start.toString(),service,mode,stops,legs.last(),clock.plusSeconds(ceil(legs.last().plannedSeconds).toLong()).toString(),geometry, startLocation = location)
 }

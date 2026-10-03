@@ -17,6 +17,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -33,6 +34,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,11 +96,24 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 
 @Composable
 fun App(vm: PlannerViewModel) {
+    ScheduleExportHost()
+    val screenStates = rememberSaveableStateHolder()
+    BackHandler(enabled = vm.canGoBack) { vm.goBack() }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(color = PremiumNavy, shadowElevation = 4.dp) {
                 Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    if (vm.canGoBack) {
+                        TextButton(
+                            onClick = vm::goBack, enabled = !vm.busy,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = PremiumGold,
+                                disabledContentColor = Color(0xFF8292AC)
+                            ),
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
+                    }
                     Text(stringResource(R.string.app_name), color = Color.White, style = MaterialTheme.typography.headlineSmall)
                     Text(
                         when (vm.screen) {
@@ -107,6 +123,7 @@ fun App(vm: PlannerViewModel) {
                             "Map" -> "Route map"
                             "History" -> "Saved delivery routes"
                             "Summary" -> "Route summary"
+                            "LocationPicker" -> "Choose your Start & End location"
                             else -> "Preferences"
                         },
                         color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyMedium
@@ -115,23 +132,25 @@ fun App(vm: PlannerViewModel) {
             }
         },
         bottomBar = {
-            Surface(color = PremiumNavy, shadowElevation = 6.dp) {
-                Row(
-                    Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("Home", "Route", "Delivery", "Map", "History", "Settings").forEach { label ->
-                        val selected = vm.screen == label
-                        TextButton(
-                            onClick = { vm.screen = label }, enabled = !vm.busy,
-                            modifier = Modifier.heightIn(min = 64.dp).widthIn(min = 80.dp),
-                            shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.textButtonColors(
-                                containerColor = if (selected) PremiumRoyal else Color.Transparent,
-                                contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
-                                disabledContentColor = Color(0xFF8292AC)
-                            )
-                        ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+            if (vm.screen != "LocationPicker") {
+                Surface(color = PremiumNavy, shadowElevation = 6.dp) {
+                    Row(
+                        Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("Home", "Route", "Delivery", "Map", "History", "Settings").forEach { label ->
+                            val selected = vm.screen == label
+                            TextButton(
+                                onClick = { vm.screen = label }, enabled = !vm.busy,
+                                modifier = Modifier.heightIn(min = 64.dp).widthIn(min = 80.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.textButtonColors(
+                                    containerColor = if (selected) PremiumRoyal else Color.Transparent,
+                                    contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
+                                    disabledContentColor = Color(0xFF8292AC)
+                                )
+                            ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+                        }
                     }
                 }
             }
@@ -159,30 +178,39 @@ fun App(vm: PlannerViewModel) {
                     }
                 }
             }
-            when (vm.screen) {
-                "Home" -> Home(vm)
-                "Settings" -> Settings(vm)
-                "History" -> History(vm)
-                else -> {
-                    val p = vm.route
-                    if (p == null) {
-                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            PremiumCard(Modifier.fillMaxWidth()) {
-                                Text("Your next delivery starts here", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
-                                Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
+            // Keep route form drafts and scroll positions when the driver opens another screen.
+            val screenStateKey = if (vm.screen in setOf("Route", "Delivery", "Map", "Summary"))
+                "${vm.screen}:${vm.route?.id.orEmpty()}" else vm.screen
+            screenStates.SaveableStateProvider(screenStateKey) {
+                when (vm.screen) {
+                    "Home" -> Home(vm)
+                    "Settings" -> Settings(vm)
+                    "History" -> History(vm)
+                    "LocationPicker" -> StartLocationPicker(vm)
+                    else -> {
+                        val p = vm.route
+                        if (p == null) {
+                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                PremiumCard(Modifier.fillMaxWidth()) {
+                                    Text("Your next delivery starts here", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
+                                    Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
+                                }
+                                PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
+                                if (vm.screen == "Delivery" || vm.screen == "Route") AskChatGptButton(null, vm.message)
                             }
-                            PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
-                            if (vm.screen == "Delivery" || vm.screen == "Route") AskChatGptButton(null, vm.message)
+                        } else when (vm.screen) {
+                            "Delivery" -> Delivery(vm, p)
+                            "Map" -> RouteMap(p)
+                            "Summary" -> Summary(vm, p)
+                            else -> Results(vm, p)
                         }
-                    } else when (vm.screen) {
-                        "Delivery" -> Delivery(vm, p)
-                        "Map" -> RouteMap(p)
-                        "Summary" -> Summary(vm, p)
-                        else -> Results(vm, p)
                     }
                 }
             }
         }
+    }
+    vm.reportPreview?.let { plan ->
+        DeliverySummaryReportPreview(plan, onClose = vm::closeReportPreview)
     }
 }
 
@@ -261,14 +289,8 @@ fun Home(vm: PlannerViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("Plan your delivery", "Plan a route that starts and ends at Woodlands Checkpoint.")
-        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Start and end", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
-                Text("Woodlands Checkpoint", color = Color.White, style = MaterialTheme.typography.titleLarge)
-                Text("21 Woodlands Crossing • Singapore 738203", color = Color(0xFFB7C7E1))
-            }
-        }
+        PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
+        StartLocationControls(vm)
         Clock(vm)
         Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
@@ -427,6 +449,16 @@ fun navigate(context: Context, place: Place) {
     }
 }
 
+/** The saved route's depot remains the origin and destination even after Home is changed. */
+internal fun routeGoogleMapsIntent(plan: Plan): Intent {
+    val start = plan.startLocation.asPlace()
+    val waypoints = plan.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
+    return Intent(Intent.ACTION_VIEW, Uri.parse(
+        "https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}" +
+            "&destination=${start.lat},${start.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}"
+    ))
+}
+
 private fun statusLabel(status: String): String = when (normalizedStatus(status)) {
     "DELIVERED" -> "Delivered"
     "ON_HOLD" -> "On hold"
@@ -494,7 +526,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 CountTile("To revisit", summary.onHold + summary.skipped + summary.pending, Modifier.weight(1f))
             }
             PrimaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
-            SecondaryAction("Return to Woodlands", { navigate(context, depot) }, enabled = !vm.busy)
+            SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
             p.stops.forEachIndexed { index, stop ->
                 if (normalizedStatus(stop.status) != "DELIVERED") StopCard(stop, index, false) { vm.revisit(index) }
             }
@@ -597,15 +629,17 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("Your optimized route", "Woodlands Checkpoint → deliveries → Woodlands Checkpoint")
+        PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.startLocation.displayName}")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Woodlands Checkpoint", style = MaterialTheme.typography.titleLarge)
+                Text(p.startLocation.reportLabel, style = MaterialTheme.typography.titleLarge)
+                DetailRow("Start location", p.startLocation.displayName)
+                DetailRow("End location", p.startLocation.displayName)
                 DetailRow("Start", time(p.start))
                 DetailRow("Total parcels", p.stops.size.toString())
                 DetailRow("Distance", km(p.totalKm))
                 DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
-                DetailRow("Return to Woodlands", time(p.returned))
+                DetailRow("Return to ${p.startLocation.displayName}", time(p.returned))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -629,34 +663,35 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         // Three waypoints is the conservative supported limit on mobile browsers.
         if (p.stops.size <= 3) {
             SecondaryAction("Open in Google Maps", {
-                val waypoints = p.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
-                if (!tryOpenMap(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&origin=${depot.lat},${depot.lon}&destination=${depot.lat},${depot.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}")))) mapUnavailable(context)
-            })
+                if (!tryOpenMap(context, routeGoogleMapsIntent(p))) mapUnavailable(context)
+            }, enabled = !vm.busy)
         } else {
             Text("Google Maps can open up to 3 delivery stops together in a mobile browser. Your full ${p.stops.size}-stop route is shown here in optimized order. Tap Navigate on the Delivery screen for directions to each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
         Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ScheduleExportActions(p, enabled = !vm.busy)
         ScheduleTable(p)
         Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("Start • Woodlands Checkpoint\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+            Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
         p.stops.forEachIndexed { index, stop -> StopCard(stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("End • Woodlands Checkpoint\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+            Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
 @Composable
 fun ScheduleTable(p: Plan) {
+    val startPlace = p.startLocation.asPlace()
     val headings = listOf("Stop", "Postal code", "Block", "Area", "Arrival", "Distance from previous stop", "Driving time", "Traffic allowance", "Planned travel time", "Delivery period", "Departure", "Distance so far")
-    val start = listOf("Start", depot.postal, "Woodlands Checkpoint", depot.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
+    val start = listOf("START", startPlace.postal, startPlace.block, startPlace.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
     val rows = p.stops.mapIndexed { index, stop ->
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm))
     }
-    val end = listOf("End", depot.postal, "Woodlands Checkpoint", depot.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
+    val end = listOf("END", startPlace.postal, startPlace.block, startPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
     Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
@@ -675,8 +710,8 @@ fun ScheduleTable(p: Plan) {
 fun Summary(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
     val summary = deliverySummary(p)
-    var cash by remember(p.id, p.cashOnHand) { mutableStateOf(p.cashOnHand) }
-    var tax by remember(p.id, p.tax) { mutableStateOf(p.tax) }
+    var cash by rememberSaveable(p.id, p.cashOnHand) { mutableStateOf(p.cashOnHand) }
+    var tax by rememberSaveable(p.id, p.tax) { mutableStateOf(p.tax) }
     val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -702,11 +737,13 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
+                DetailRow("Start location", p.startLocation.reportLabel)
+                DetailRow("End location", p.startLocation.reportLabel)
                 DetailRow("Start", time(summary.start))
                 DetailRow(if (estimated) "Estimated finish" else "Finish", time(summary.finish))
                 DetailRow(if (estimated) "Estimated route time" else "Total route time", duration(summary.totalRouteSeconds))
                 DetailRow("Total distance", km(summary.totalKm))
-                DetailRow("Return to Woodlands (planned)", time(summary.returned))
+                DetailRow("Planned return", time(summary.returned))
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
@@ -715,11 +752,11 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CurrencyField("Cash on hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
                 CurrencyField("Tax", tax, { if (validCurrencyInput(it)) tax = it }, !vm.busy)
-                PrimaryAction("Save summary", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
+                PrimaryAction("Save Summary", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
                 p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        SecondaryAction("Return to Woodlands", { navigate(context, depot) }, enabled = !vm.busy)
+        SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
         SecondaryAction("View full route and schedule", { vm.screen = "Route" }, enabled = !vm.busy)
         val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
         if (remaining.isNotEmpty()) {
@@ -760,6 +797,8 @@ fun History(vm: PlannerViewModel) {
             PremiumCard(Modifier.fillMaxWidth().clickable { if (!vm.busy) vm.open(record) }) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(p.created.take(10), style = MaterialTheme.typography.titleLarge)
+                    DetailRow("Start location", p.startLocation.reportLabel)
+                    DetailRow("End location", p.startLocation.reportLabel)
                     DetailRow("Start time", time(summary.start))
                     DetailRow("Total parcels", summary.totalParcel.toString())
                     Text("Delivered: ${summary.delivered} • On hold: ${summary.onHold} • Skipped: ${summary.skipped} • Pending: ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
@@ -783,7 +822,7 @@ fun RouteMap(p: Plan) {
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Checkpoint" to PremiumRoyal, "Delivered" to PremiumEmerald, "On hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
+            listOf("Start & End" to PremiumRoyal, "Delivered" to PremiumEmerald, "On hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
                 Surface(color = color, contentColor = Color.White, shape = RoundedCornerShape(50)) {
                     Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
                 }
@@ -818,7 +857,8 @@ fun RouteMap(p: Plan) {
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 })
             }
-            marker(depot, "SG", android.graphics.Color.rgb(24, 60, 120), "Woodlands Checkpoint")
+            val startPlace = p.startLocation.asPlace()
+            marker(startPlace, "S/E", android.graphics.Color.rgb(24, 60, 120), "Start & End: ${p.startLocation.reportLabel}")
             p.stops.forEachIndexed { index, stop ->
                 val color = when (normalizedStatus(stop.status)) {
                     "DELIVERED" -> android.graphics.Color.rgb(18, 107, 80)
@@ -828,7 +868,7 @@ fun RouteMap(p: Plan) {
                 }
                 marker(stop.place, "${index + 1}", color, "${index + 1}: ${stop.place.postal} • ${statusLabel(stop.status)}\n${stop.place.address}${holdDetails(stop)?.let { "\n$it" }.orEmpty()}", index == p.current)
             }
-            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(depot.lat, depot.lon)
+            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(startPlace.lat, startPlace.lon)
             view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 80) }
             view.invalidate()
         })

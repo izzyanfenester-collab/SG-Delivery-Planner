@@ -15,10 +15,22 @@ import java.time.ZoneId
 class PlannerViewModel(app: Application) : AndroidViewModel(app) {
     val repo = Repository(app)
     private val prefs = app.getSharedPreferences("settings", 0)
+    private val locationSettings = StartLocationSettings(app)
+    private val navigation = ScreenHistory()
+    private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
     var input by mutableStateOf(prefs.getString("input", "")!!)
-    var screen by mutableStateOf("Home")
+    var screen: String
+        get() = currentScreen
+        set(value) { navigation.navigate(value); currentScreen = navigation.current }
+    val canGoBack: Boolean get() { currentScreen; return navigation.canGoBack }
+    var selectedStartLocation by mutableStateOf(locationSettings.selected())
+        private set
+    var savedHome by mutableStateOf(locationSettings.home())
+        private set
     var route by mutableStateOf<Plan?>(null)
+    var reportPreview by mutableStateOf<Plan?>(null)
+        private set
     var busy by mutableStateOf(false)
     var message by mutableStateOf("")
     var notice by mutableStateOf("")
@@ -74,6 +86,43 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
             .putString("traffic", traffic).putString("theme", theme)
             .putString("endpoint", endpoint).putString("input", input).apply()
     }
+
+    fun goBack() {
+        if (!busy) currentScreen = navigation.back()
+    }
+
+    fun goLocationPicker() {
+        if (!busy) screen = "LocationPicker"
+    }
+
+    fun selectStartLocation(location: StartLocation) {
+        if (busy) return
+        try {
+            locationSettings.select(location)
+            selectedStartLocation = location
+            message = ""
+        } catch (e: Exception) { message = englishError(e, "Could not save the Start & End location. Please try again.") }
+    }
+
+    fun saveHome(location: StartLocation) {
+        if (busy) return
+        try {
+            val home = locationSettings.saveHome(location)
+            savedHome = home
+            selectedStartLocation = home
+            message = ""
+            notice = "Home location saved. Your next route will start and end at Home."
+        } catch (e: Exception) { message = englishError(e, "Could not save your Home location. Please try again.") }
+    }
+
+    fun useHome() {
+        if (busy) return
+        val home = savedHome
+        if (home == null) message = "No Home location saved. Choose a location on the map, then tap Set Home."
+        else selectStartLocation(home)
+    }
+
+    fun closeReportPreview() { reportPreview = null }
 
     fun saveOneMapToken(token: String, onSaved: () -> Unit) {
         if (busy || oneMapTokenBusy) return
@@ -134,7 +183,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val planned = repo.plan(
                     parsed.valid, LocalDate.now(singapore).atStartOfDay().plusMinutes(startMinute.toLong()),
-                    service, traffic, endpoint
+                    service, traffic, endpoint, selectedStartLocation
                 ) { message = it }
                 route = planned
                 prefs.edit().putString("active", planned.id).apply()
@@ -213,6 +262,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         busy = true
+        reportPreview = null
         viewModelScope.launch {
             try {
                 val updated = planned.copy(cashOnHand = normalizedCash, tax = normalizedTax,
@@ -221,6 +271,7 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 route = updated
                 message = ""
                 notice = "Summary saved."
+                reportPreview = updated
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not save your summary. Please try again.") }
             finally { busy = false }

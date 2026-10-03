@@ -119,6 +119,9 @@ object PlanJson {
         root.addProperty("cashOnHand", normalizedCurrency(root.optionalString("cashOnHand").orEmpty()) ?: "0.00")
         root.addProperty("tax", normalizedCurrency(root.optionalString("tax").orEmpty()) ?: "0.00")
         val fallbackReviewedAt = root.optionalString("created") ?: root.optionalString("start")
+        if (!root.has("startLocation") || root.get("startLocation").isJsonNull) {
+            root.add("startLocation", gson.toJsonTree(woodlandsStartLocation))
+        }
         root.getAsJsonArray("stops").forEach { element ->
             val stop = element.asJsonObject
             val status = normalizedStatus(stop.optionalString("status") ?: "PENDING")
@@ -128,6 +131,7 @@ object PlanJson {
             }
         }
         val decoded = gson.fromJson(root, Plan::class.java)
+        if (!decoded.startLocation.isValid()) throw PlannerError("This saved route has an invalid Start & End location.")
         val current = decoded.current.coerceIn(0, decoded.stops.size)
         val allReviewed = decoded.stops.isNotEmpty() && decoded.stops.all { it.reviewedAt != null }
         return decoded.copy(
