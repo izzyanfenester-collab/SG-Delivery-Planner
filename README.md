@@ -4,7 +4,7 @@ Native Kotlin / Jetpack Compose / Material 3 application for Singapore parcel de
 
 ## Build status
 
-Source implementation and unit tests are provided. **An Android build has not been verified in this workspace:** Gradle and the Android SDK were unavailable, and the environment proxy refused connections to the official download servers. No APK was generated locally. The included workflow runs the tests, Android lint and APK build; check its successful result before installing or distributing. Driver device testing and validation against real Singapore road journeys are still required before operational use.
+**Verified in GitHub Actions:** unit tests, debug APK assembly and Android lint all passed in [build run 4](https://github.com/izzyanfenester-collab/SG-Delivery-Planner/actions/runs/37117255783), which uploaded the **SG-Delivery-Planner-APK** artifact. Local execution remains unavailable because this workspace lacks Gradle/Android SDK and its download proxy refused connections. Driver device testing and validation against real Singapore road journeys are still required before operational use.
 
 ## Use
 
