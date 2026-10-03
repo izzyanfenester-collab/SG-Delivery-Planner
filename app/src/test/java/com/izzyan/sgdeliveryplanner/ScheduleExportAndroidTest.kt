@@ -41,6 +41,12 @@ class ScheduleExportAndroidTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
+        // Robolectric gives each method a new cache directory, while AndroidX retains its
+        // authority-to-root cache in a static field. Reset that test-only process state so
+        // FileProvider resolves the current application's real manifest paths each time.
+        val field = FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+        val cache = field.get(null) as MutableMap<*, *>
+        synchronized(cache) { cache.clear() }
         File(app.cacheDir, "exports").deleteRecursively()
         scheduler = TestCoroutineScheduler()
         Dispatchers.setMain(StandardTestDispatcher(scheduler))

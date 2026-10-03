@@ -791,17 +791,24 @@ fun History(vm: PlannerViewModel) {
             PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(20.dp)) }
         }
         items(saved, key = { it.id }) { record ->
-            val p = vm.repo.decode(record)
+            val p = runCatching { vm.repo.decode(record) }.getOrNull()
+            if (p == null) {
+                PremiumCard(Modifier.fillMaxWidth()) {
+                    Text("This saved route could not be read. Its stored data has been kept.", Modifier.padding(20.dp))
+                }
+                return@items
+            }
             val summary = deliverySummary(p)
             val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
             PremiumCard(Modifier.fillMaxWidth().clickable { if (!vm.busy) vm.open(record) }) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(p.created.take(10), style = MaterialTheme.typography.titleLarge)
+                    Text(p.start.take(10), style = MaterialTheme.typography.titleLarge)
                     DetailRow("Start location", p.startLocation.reportLabel)
                     DetailRow("End location", p.startLocation.reportLabel)
                     DetailRow("Start time", time(summary.start))
                     DetailRow("Total parcels", summary.totalParcel.toString())
                     Text("Delivered: ${summary.delivered} • On hold: ${summary.onHold} • Skipped: ${summary.skipped} • Pending: ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
+                    DetailRow("Success rate", "%.1f%%".format(Locale.ENGLISH, summary.successRate))
                     DetailRow("Total distance", km(summary.totalKm))
                     DetailRow(if (estimated) "Estimated finish time" else "Finish time", time(summary.finish))
                     Text("Cash on hand: ${formatCurrency(p.cashOnHand)} • Tax: ${formatCurrency(p.tax)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)

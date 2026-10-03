@@ -86,7 +86,7 @@ class Repository(context:Context) {
    checkPlanning(table.get("code")?.asString == "Ok") { "The routing service could not calculate driving times. Try again or change the routing server in Settings." }
    fun matrix(name:String):Array<DoubleArray> = Array(n) { i -> DoubleArray(n) { j ->
     val cell=table.getAsJsonArray(name)[i].asJsonArray[j]
-    checkPlanning(!cell.isJsonNull) { "No driving route was found between postal codes ${places[i].postal} and ${places[j].postal}. Check the codes or change the routing server in Settings." }
+    checkPlanning(!cell.isJsonNull) { "No driving route was found between ${places[i].address} and ${places[j].address}. Check the locations or change the routing server in Settings." }
     cell.asDouble.also { checkPlanning(it.isFinite() && it>=0) { "The routing service returned invalid travel information. Please try again." } }
    } }
    meters=matrix("distances"); seconds=matrix("durations")
