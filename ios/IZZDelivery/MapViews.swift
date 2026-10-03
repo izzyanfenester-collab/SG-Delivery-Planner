@@ -66,6 +66,6 @@ struct RouteMapView: View {
                         .overlay(Circle().stroke(index == route.current ? Brand.gold : .clear, lineWidth: 4)).accessibilityLabel("Stop \(index+1), \(route.stops[index].statusLabel)")
                 }
             }
-        }.mapControls { MapCompass(); MapScale() }.navigationTitle("Route Map").navigationBarTitleDisplayMode(.inline)
+        }.mapControls { MapCompass(); MapScaleView() }.navigationTitle("Route Map").navigationBarTitleDisplayMode(.inline)
     }
 }
