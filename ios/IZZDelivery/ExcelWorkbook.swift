@@ -47,7 +47,7 @@ enum ExcelWorkbook {
         let cols = widths.enumerated().map { "<col min=\"\($0.offset+1)\" max=\"\($0.offset+1)\" width=\"\($0.element)\" customWidth=\"1\"/>" }.joined()
         let worksheet = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="\(headerRow)" topLeftCell="A\(headerRow+1)" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>\(cols)</cols><sheetData>\(rows.joined())</sheetData><mergeCells count="2"><mergeCell ref="A1:L1"/><mergeCell ref="A3:L3"/></mergeCells><autoFilter ref="A\(headerRow):L\(rows.count)"/></worksheet>
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="\(headerRow)" topLeftCell="A\(headerRow+1)" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>\(cols)</cols><sheetData>\(rows.joined())</sheetData><autoFilter ref="A\(headerRow):L\(rows.count)"/><mergeCells count="2"><mergeCell ref="A1:L1"/><mergeCell ref="A3:L3"/></mergeCells></worksheet>
         """
         let files: [(String,String)] = [
             ("[Content_Types].xml", """
