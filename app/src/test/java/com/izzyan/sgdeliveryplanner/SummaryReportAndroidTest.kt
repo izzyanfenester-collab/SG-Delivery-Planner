@@ -23,12 +23,10 @@ class SummaryReportAndroidTest {
         val original = Locale.getDefault()
         try {
             Locale.setDefault(Locale.forLanguageTag("ms-MY"))
-            val plan = route().copy(cashOnHand = "320", tax = "12.5")
+            val plan = route().copy(cashOnHand = "320", tax = "12.5", remark = "Fuel receipt retained")
             assertEquals(
                 """Runner Route Planning Summary
 Date: 3 Oct 2026
-Start Location: Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203
-End Location: Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203
 Start: 10:00 AM
 Finish: 11:00 AM
 Total Parcel: 4
@@ -41,7 +39,7 @@ Total KM: 20.0 KM
 Cash on Hand: SGD 320.00
 Tax: SGD 12.50 (RM 45.00)
 Rate: 3.60
-Remark: """,
+Remark: Fuel receipt retained""",
                 buildSummaryReport(plan)
             )
             assertFalse(buildSummaryReport(plan).contains("Net Cash", ignoreCase = true))
@@ -61,12 +59,12 @@ Remark: """,
     }
 
     @Test
-    fun reportUsesTheSavedHomeSnapshotAndHandlesNoDeliveries() {
+    fun reportOmitsLocationsWithoutChangingSavedHomeAndHandlesNoDeliveries() {
         val home = StartLocation("HOME", 1.35, 103.8, "Home", "8 Example Road, Singapore 005003", "005003")
         val plan = route().copy(startLocation = home, stops = emptyList(), reviewedFinishedAt = null)
         val text = buildSummaryReport(plan)
-        assertTrue(text.contains("Start Location: Home — 8 Example Road, Singapore 005003\n"))
-        assertTrue(text.contains("End Location: Home — 8 Example Road, Singapore 005003\n"))
+        assertFalse(text.contains("Start Location"))
+        assertFalse(text.contains("End Location"))
         assertTrue(text.contains("Total Parcel: 0\nDelivered: 0\nOn Hold: 0\nSkipped: 0\nPending: 0\nSuccess Rate: 0.0%"))
         assertEquals("Home — 8 Example Road, Singapore 005003", plan.startLocation.reportLabel)
     }

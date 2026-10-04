@@ -51,8 +51,6 @@ private fun summaryReportFields(plan: Plan): List<Pair<String, String>> {
     }
     return listOf(
         "Date" to start.format(reportDateFormat),
-        "Start Location" to plan.startLocation.reportLabel,
-        "End Location" to plan.startLocation.reportLabel,
         "Start" to reportTime(summary.start),
         "Finish" to reportTime(summary.finish),
         "Total Parcel" to summary.totalParcel.toString(),
@@ -111,7 +109,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
         ) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "Runner Route Planning Report Preview",
+                    "Runner Route Planning Summary",
                     color = PremiumGold,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
@@ -121,19 +119,15 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     fields.forEach { (label, value) ->
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(label, color = Color(0xFFC0CADB), style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                value,
-                                color = when (label) {
-                                    "Delivered" -> Color(0xFF64D2A2)
-                                    "On Hold" -> Color(0xFFFFC570)
-                                    else -> Color.White
-                                },
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        Text(
+                            "$label: $value",
+                            color = when (label) {
+                                "Delivered" -> Color(0xFF64D2A2)
+                                "On Hold" -> Color(0xFFFFC570)
+                                else -> Color.White
+                            },
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
