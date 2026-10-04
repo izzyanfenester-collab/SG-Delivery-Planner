@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -16,6 +17,7 @@ import java.io.OutputStream
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.resetMain
@@ -37,6 +39,7 @@ class ScheduleExportAndroidTest {
     private lateinit var app: Application
     private lateinit var scheduler: TestCoroutineScheduler
     private val viewModels = mutableListOf<ViewModelStore>()
+    private val exportJobs = mutableListOf<Job>()
 
     @Before
     fun setUp() {
@@ -55,8 +58,16 @@ class ScheduleExportAndroidTest {
     @After
     fun cleanUp() {
         viewModels.forEach(ViewModelStore::clear)
-        Dispatchers.resetMain()
-        File(app.cacheDir, "exports").deleteRecursively()
+        try {
+            // Clearing cancels the scopes, but real IO may still be deleting a snapshot.
+            // Wait for every child to finish before walking the same cache directories.
+            await("Finish cancelled export IO before deleting the test cache") {
+                exportJobs.all { it.isCompleted }
+            }
+            File(app.cacheDir, "exports").deleteRecursively()
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
@@ -333,6 +344,7 @@ class ScheduleExportAndroidTest {
 
     private fun model(state: SavedStateHandle): ScheduleExportViewModel =
         ScheduleExportViewModel(app, state).also { model ->
+            exportJobs += requireNotNull(model.viewModelScope.coroutineContext[Job])
             viewModels += ViewModelStore().apply { put("export", model) }
         }
 
