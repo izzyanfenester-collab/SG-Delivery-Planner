@@ -34,6 +34,18 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     var notice by mutableStateOf("")
     var service by mutableStateOf(prefs.getInt("service", 8))
     var startMinute by mutableStateOf(prefs.getInt("start", 600))
+    var deliveryDate by mutableStateOf(
+        runCatching { LocalDate.parse(prefs.getString("deliveryDate", null)) }.getOrNull() ?: LocalDate.now(singapore)
+    )
+        private set
+
+    fun selectDeliveryDate(date: LocalDate) {
+        if (busy) return
+        deliveryDate = date
+        persist()
+    }
+
+    fun scheduledStart(): LocalDateTime = deliveryDate.atStartOfDay().plusMinutes(startMinute.toLong())
     var traffic by mutableStateOf(prefs.getString("traffic", "Normal")!!)
     var theme by mutableStateOf(prefs.getString("theme", "System")!!)
     var endpoint by mutableStateOf(prefs.getString("endpoint", "https://router.project-osrm.org")!!)
@@ -101,7 +113,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     fun persist() {
         prefs.edit().putInt("service", service).putInt("start", startMinute)
             .putString("traffic", traffic).putString("theme", theme)
-            .putString("endpoint", endpoint).putString("input", input).apply()
+            .putString("endpoint", endpoint).putString("input", input)
+            .putString("deliveryDate", deliveryDate.toString()).apply()
     }
 
     fun goBack() {
@@ -149,6 +162,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 else "Use six digits for each Singapore postal code. Check these entries: ${parsed.invalid.joinToString()}"
             return
         }
+        val routeStart = scheduledStart()
         persist()
         refreshExchangeRate()
         busy = true
@@ -156,7 +170,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         viewModelScope.launch {
             try {
                 val planned = repo.plan(
-                    parsed.valid, LocalDate.now(singapore).atStartOfDay().plusMinutes(startMinute.toLong()),
+                    parsed.valid, routeStart,
                     service, traffic, endpoint, selectedStartLocation
                 ) { message = it }
                 val withRate = planned.copy(exchangeRate = latestExchangeRate)

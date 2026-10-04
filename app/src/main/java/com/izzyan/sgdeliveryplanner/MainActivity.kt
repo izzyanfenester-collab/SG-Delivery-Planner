@@ -275,6 +275,16 @@ private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, 
 }
 
 @Composable
+fun DeliveryDateControl(vm: PlannerViewModel) {
+    val context = LocalContext.current
+    SecondaryAction(
+        "Delivery Date: ${vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}",
+        { deliveryDatePicker(context, vm.deliveryDate, vm::selectDeliveryDate).show() },
+        enabled = !vm.busy
+    )
+}
+
+@Composable
 fun Clock(vm: PlannerViewModel) {
     val context = LocalContext.current
     SecondaryAction(
@@ -297,6 +307,7 @@ fun Home(vm: PlannerViewModel) {
     ) {
         PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
         StartLocationControls(vm)
+        DeliveryDateControl(vm)
         Clock(vm)
         Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
@@ -334,6 +345,7 @@ fun Settings(vm: PlannerViewModel) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Schedule", style = MaterialTheme.typography.titleLarge)
+                DeliveryDateControl(vm)
                 OutlinedTextField(
                     serviceText,
                     { text ->
@@ -703,6 +715,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
+                DetailRow("Date", p.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 DetailRow("Start location", p.startLocation.reportLabel)
                 DetailRow("End location", p.startLocation.reportLabel)
                 DetailRow("Start", time(summary.start))
@@ -805,7 +818,7 @@ fun History(vm: PlannerViewModel) {
                     } else {
                         val summary = deliverySummary(p)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.start.take(10), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                            Text(p.deliveryDate.toString(), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                             if (isRouteCompleted(p)) Surface(color = PremiumNavy, contentColor = PremiumGold,
                                 shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, PremiumGold)) {
                                 Text("COMPLETED", Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)

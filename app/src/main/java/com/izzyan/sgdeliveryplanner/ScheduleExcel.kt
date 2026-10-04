@@ -14,7 +14,7 @@ const val EXCEL_MIME_TYPE = "application/vnd.openxmlformats-officedocument.sprea
 
 /** The scheduled route date is stable even when an old route is exported from History. */
 fun deliveryExcelFileName(plan: Plan): String =
-    "Runner_Route_Planning_${LocalDateTime.parse(plan.start).toLocalDate()}.xlsx"
+    "Runner_Route_Planning_${plan.deliveryDate}.xlsx"
 
 /**
  * Writes a complete SpreadsheetML workbook without requiring a desktop Excel library on Android.
@@ -23,7 +23,6 @@ fun deliveryExcelFileName(plan: Plan): String =
  */
 fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
     val summary = deliverySummary(plan)
-    val start = LocalDateTime.parse(plan.start)
     val origin = plan.startLocation.asPlace()
     val endpointLabel = if (plan.startLocation.type == "WOODLANDS") plan.startLocation.displayName
         else plan.startLocation.reportLabel
@@ -58,7 +57,7 @@ fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
         kmCell(plan.totalKm), plan.etaReturned?.let(::dateTimeCell) ?: textCell("—"), textCell("—"), textCell("—")
     )
     val summaryRows = listOf(
-        "Date" to numericCell(excelDate(start.toLocalDate()), DATE_STYLE, start.toLocalDate().toString()),
+        "Date" to numericCell(excelDate(plan.deliveryDate), DATE_STYLE, plan.deliveryDate.toString()),
         "Start Location" to textCell(plan.startLocation.reportLabel),
         "End Location" to textCell(plan.startLocation.reportLabel),
         "Start Time" to dateTimeCell(summary.start),

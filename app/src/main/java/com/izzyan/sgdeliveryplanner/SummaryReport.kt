@@ -50,7 +50,7 @@ private fun summaryReportFields(plan: Plan): List<Pair<String, String>> {
         else "$time (${dateTime.format(reportDateFormat)})"
     }
     return listOf(
-        "Date" to start.format(reportDateFormat),
+        "Date" to plan.deliveryDate.format(reportDateFormat),
         "Start" to reportTime(summary.start),
         "Finish" to reportTime(summary.finish),
         "Total Parcel" to summary.totalParcel.toString(),
