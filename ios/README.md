@@ -51,3 +51,19 @@ Simulator CI is unsigned. For a physical device or TestFlight:
 5. Verify on a physical iPhone/iPad: MapKit picker, route map, dynamic type/VoiceOver, light/locked-device conditions, delivery persistence after relaunch, real road journeys, mapping throttling/network failure, Apple Maps/browser handoffs, document cancellation and Excel sharing into installed apps.
 
 This is a native implementation, not a claim of physical-device or TestFlight validation. Inspect CI results for actual compiler/test status.
+
+## Unsigned iOS device IPA for personal testing
+
+The separate **Build IZZ Delivery unsigned device IPA** workflow (`.github/workflows/build-ios-ipa.yml`) builds Release with `-sdk iphoneos` and `-destination generic/platform=iOS`. It disables signing and does not use an Apple Developer Program account, signing certificate, provisioning profile or repository signing secrets. The existing simulator build/test workflow is unchanged.
+
+After a successful run, download the **IZZ-Delivery-iOS-IPA** artifact and unzip the artifact ZIP to obtain `IZZ_Delivery_unsigned.ipa`. This is a device app in a genuine `Payload/IZZDelivery.app` IPA archive. CI verifies the arm64 Mach-O device platform, bundle metadata, lack of a provisioning profile/bundle signature, ZIP integrity and preserved executable permissions. It is not a simulator app or a TestFlight/App Store submission.
+
+An unsigned IPA cannot be installed directly by iOS. Import it into your personal sideloading tool (for example, a compatible AltStore or Sideloadly setup), which must sign/provision it for your device. Tools may support a free Apple ID without paid Developer Program membership; account login, provisioning restrictions and periodic re-signing are handled by that tool. This workflow does not request or store Apple account credentials. Physical-device installation/runtime testing remains separate from CI's device build verification.
+
+For local packaging on a Mac after the same unsigned device build, run:
+
+```sh
+python3 ios/scripts/package-device-ipa.py \
+  ios/DeviceDerivedData/Build/Products/Release-iphoneos/IZZDelivery.app \
+  ios/ipa-dist/IZZ_Delivery_unsigned.ipa
+```

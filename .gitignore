@@ -17,3 +17,5 @@ ios/DerivedData/
 xcuserdata/
 *.mobileprovision
 *.p12
+ios/DeviceDerivedData/
+ios/ipa-dist/
