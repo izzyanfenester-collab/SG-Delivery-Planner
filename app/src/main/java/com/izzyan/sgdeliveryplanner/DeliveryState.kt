@@ -20,6 +20,8 @@ fun normalizedStatus(status: String): String = when (status) {
 /** A reviewed pending stop still contributes to Pending in the summary. */
 fun reviewStop(plan: Plan, action: String, now: String, holdReason: String? = null, holdNote: String? = null): Plan {
     if (plan.current !in plan.stops.indices) return plan
+    // A recorded delivery time is immutable, including when its card is reopened.
+    if (action != "NEXT" && normalizedStatus(plan.stops[plan.current].status) == "DELIVERED") return plan
     val status = when (action) {
         "DELIVERED" -> "DELIVERED"
         "ON_HOLD" -> "ON_HOLD"
@@ -41,7 +43,7 @@ fun reviewStop(plan: Plan, action: String, now: String, holdReason: String? = nu
     val next = (plan.current + 1 until stops.size).firstOrNull { stops[it].reviewedAt == null }
         ?: stops.indexOfFirst { it.reviewedAt == null }.takeIf { it >= 0 }
         ?: stops.size
-    return plan.copy(
+    val updated = plan.copy(
         stops = stops,
         current = next,
         actualCompletion = if (alreadyReviewed) plan.actualCompletion else if (stops.all { normalizedStatus(it.status) == "DELIVERED" }) stops.mapNotNull { it.completedAt }.maxOrNull() ?: now else null,
@@ -50,7 +52,26 @@ fun reviewStop(plan: Plan, action: String, now: String, holdReason: String? = nu
         } else now.takeIf { next == stops.size },
         summarySavedAt = if (alreadyReviewed) plan.summarySavedAt else null
     )
+    return if (action == "DELIVERED") recalculateRemainingEtas(updated) else updated
 }
+
+/** Preserve original schedule and stop order; use the latest actual delivery as the clock. */
+fun recalculateRemainingEtas(plan: Plan): Plan {
+    val anchor = plan.stops.mapNotNull { it.completedAt?.let(LocalDateTime::parse) }.maxOrNull() ?: return plan
+    var clock = anchor
+    val stops = plan.stops.map { stop ->
+        if (normalizedStatus(stop.status) != "PENDING") stop
+        else {
+            clock = clock.plusSeconds(kotlin.math.ceil(stop.leg.plannedSeconds).toLong())
+            val arrival = clock.toString()
+            clock = clock.plusMinutes(8)
+            stop.copy(etaArrival = arrival, etaLeave = clock.toString())
+        }
+    }
+    return plan.copy(stops = stops, etaReturned = clock.plusSeconds(kotlin.math.ceil(plan.returnLeg.plannedSeconds).toLong()).toString())
+}
+
+fun isRouteCompleted(plan: Plan): Boolean = plan.stops.isNotEmpty() && plan.stops.all { normalizedStatus(it.status) == "DELIVERED" }
 
 data class DeliverySummary(
     val totalParcel: Int,
@@ -71,7 +92,7 @@ fun deliverySummary(plan: Plan): DeliverySummary {
     val onHold = plan.stops.count { it.status == "ON_HOLD" }
     val skipped = plan.stops.count { it.status == "SKIPPED" }
     val total = plan.stops.size
-    val finish = plan.reviewedFinishedAt ?: plan.actualCompletion ?: plan.stops.lastOrNull()?.leave ?: plan.start
+    val finish = plan.reviewedFinishedAt ?: plan.actualCompletion ?: plan.stops.lastOrNull()?.let { it.etaLeave ?: it.leave } ?: plan.start
     val seconds = runCatching {
         Duration.between(LocalDateTime.parse(plan.start), LocalDateTime.parse(finish)).seconds.toDouble().coerceAtLeast(0.0)
     }.getOrDefault(0.0)
@@ -118,6 +139,8 @@ object PlanJson {
         // both absent legacy fields and explicit JSON nulls.
         root.addProperty("cashOnHand", normalizedCurrency(root.optionalString("cashOnHand").orEmpty()) ?: "0.00")
         root.addProperty("tax", normalizedCurrency(root.optionalString("tax").orEmpty()) ?: "0.00")
+        root.addProperty("exchangeRate", normalizedExchangeRate(root.optionalString("exchangeRate") ?: "3.60") ?: "3.60")
+        root.addProperty("remark", root.optionalString("remark") ?: "")
         val fallbackReviewedAt = root.optionalString("created") ?: root.optionalString("start")
         if (!root.has("startLocation") || root.get("startLocation").isJsonNull) {
             root.add("startLocation", gson.toJsonTree(woodlandsStartLocation))

@@ -369,7 +369,7 @@ internal fun excelShareIntent(context: Context, file: File): Intent {
     return Intent(Intent.ACTION_SEND).apply {
         type = EXCEL_MIME_TYPE
         putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, "IZZ Delivery - Complete Delivery Schedule")
+        putExtra(Intent.EXTRA_SUBJECT, "Runner Route Planning - Complete Delivery Schedule")
         clipData = ClipData.newUri(context.contentResolver, file.name, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }

@@ -63,12 +63,14 @@ private fun summaryReportFields(plan: Plan): List<Pair<String, String>> {
         "Success Rate" to String.format(Locale.ENGLISH, "%.1f%%", summary.successRate),
         "Total KM" to String.format(Locale.ENGLISH, "%.1f KM", summary.totalKm),
         "Cash on Hand" to formatCurrency(plan.cashOnHand),
-        "Tax" to formatCurrency(plan.tax)
+        "Tax" to formatTax(plan),
+        "Rate" to plan.exchangeRate,
+        "Remark" to plan.remark
     )
 }
 
 fun buildSummaryReport(plan: Plan): String = buildString {
-    append("IZZ Delivery Summary")
+    append("Runner Route Planning Summary")
     summaryReportFields(plan).forEach { (label, value) ->
         append('\n').append(label).append(": ").append(value)
     }
@@ -76,7 +78,7 @@ fun buildSummaryReport(plan: Plan): String = buildString {
 
 internal fun summaryReportShareIntent(plan: Plan): Intent = Intent(Intent.ACTION_SEND).apply {
     type = "text/plain"
-    putExtra(Intent.EXTRA_SUBJECT, "IZZ Delivery Summary")
+    putExtra(Intent.EXTRA_SUBJECT, "Runner Route Planning Summary")
     putExtra(Intent.EXTRA_TEXT, buildSummaryReport(plan))
 }
 
@@ -88,7 +90,7 @@ internal fun shareSummaryReport(context: Context, plan: Plan) {
 
 internal fun copySummaryReport(context: Context, plan: Plan) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("IZZ Delivery Summary", buildSummaryReport(plan)))
+    clipboard.setPrimaryClip(ClipData.newPlainText("Runner Route Planning Summary", buildSummaryReport(plan)))
     Toast.makeText(context, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
 }
 
@@ -109,7 +111,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
         ) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "Delivery Summary Report Preview",
+                    "Runner Route Planning Report Preview",
                     color = PremiumGold,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold

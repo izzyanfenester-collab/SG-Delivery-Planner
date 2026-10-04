@@ -12,6 +12,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -173,6 +174,51 @@ class RoomPersistenceTest {
         assertNull(restored.reviewedFinishedAt)
         assertEquals("120.00", restored.cashOnHand)
         assertEquals("4.50", restored.tax)
+    }
+
+    @Test
+    fun selectedDeletionSurvivesRestartAndKeepsOtherRoutesAndCaches() = runBlocking {
+        val first = openDatabase()
+        val routes = List(3) { samplePlan() }
+        routes.forEach { first.dao().save(SavedRoute(it.id, PlanJson.encode(it), it.created)) }
+        val place = CachedPlace("018956", "{}", 1L)
+        first.dao().place(place)
+        first.dao().deleteRoutes(listOf(routes[0].id, routes[2].id))
+        first.close()
+        val reopened = openDatabase()
+        assertNull(reopened.dao().route(routes[0].id))
+        assertNull(reopened.dao().route(routes[2].id))
+        assertEquals(routes[1], PlanJson.decode(requireNotNull(reopened.dao().route(routes[1].id)).json))
+        assertEquals(place, reopened.dao().place(place.postal))
+        reopened.dao().deleteRoutes(emptyList())
+        assertNotNull(reopened.dao().route(routes[1].id))
+    }
+
+    @Test
+    fun v11FieldsAndActualTimesSurviveRoomRestartWhileOldRowsGetDefaults() = runBlocking {
+        val plan = reviewStop(samplePlan(), "DELIVERED", "2026-10-03T10:24:37")
+            .copy(exchangeRate = "3.60", tax = "27.72", remark = "Fuel receipt retained")
+        val old = JsonParser.parseString(PlanJson.encode(samplePlan())).asJsonObject.apply {
+            remove("exchangeRate"); add("remark", JsonNull.INSTANCE); remove("etaReturned")
+            getAsJsonArray("stops").forEach { element ->
+                element.asJsonObject.apply { remove("etaArrival"); remove("etaLeave"); remove("completedAt") }
+            }
+        }
+        val oldId = old.get("id").asString
+        val first = openDatabase()
+        first.dao().save(SavedRoute(plan.id, PlanJson.encode(plan), plan.created))
+        first.dao().save(SavedRoute(oldId, old.toString(), plan.created))
+        first.close()
+        val reopened = openDatabase()
+        val restored = PlanJson.decode(requireNotNull(reopened.dao().route(plan.id)).json)
+        assertEquals(plan, restored)
+        assertEquals("99.79", taxMyr(restored.tax, restored.exchangeRate))
+        assertEquals("2026-10-03T10:24:37", restored.stops.first().completedAt)
+        val legacy = PlanJson.decode(requireNotNull(reopened.dao().route(oldId)).json)
+        assertEquals("3.60", legacy.exchangeRate)
+        assertEquals("", legacy.remark)
+        assertNull(legacy.etaReturned)
+        assertTrue(legacy.stops.all { it.completedAt == null && it.etaArrival == null && it.etaLeave == null })
     }
 
     private fun samplePlan(): Plan {

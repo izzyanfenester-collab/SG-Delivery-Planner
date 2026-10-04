@@ -69,7 +69,7 @@ class ScheduleExportAndroidTest {
         assertEquals(EXCEL_MIME_TYPE, intent.type)
         assertEquals("content", uri.scheme)
         assertEquals("${app.packageName}.excel-files", uri.authority)
-        assertEquals("IZZ_Delivery_2026-10-03.xlsx", uri.lastPathSegment)
+        assertEquals("Runner_Route_Planning_2026-10-03.xlsx", uri.lastPathSegment)
         assertEquals(uri, intent.clipData?.getItemAt(0)?.uri)
         assertEquals(file.name, intent.clipData?.description?.label)
         assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -316,10 +316,10 @@ class ScheduleExportAndroidTest {
     @Test
     fun documentPickerKeepsReturnedUriGrantsAndCancelReturnsNoDestination() {
         val contract = CreateExcelDocument()
-        val intent = contract.createIntent(app, "IZZ_Delivery_2026-10-03.xlsx")
+        val intent = contract.createIntent(app, "Runner_Route_Planning_2026-10-03.xlsx")
         assertEquals(Intent.ACTION_CREATE_DOCUMENT, intent.action)
         assertEquals(EXCEL_MIME_TYPE, intent.type)
-        assertEquals("IZZ_Delivery_2026-10-03.xlsx", intent.getStringExtra(Intent.EXTRA_TITLE))
+        assertEquals("Runner_Route_Planning_2026-10-03.xlsx", intent.getStringExtra(Intent.EXTRA_TITLE))
         val expectedFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
             Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
         assertEquals(expectedFlags, intent.flags and expectedFlags)

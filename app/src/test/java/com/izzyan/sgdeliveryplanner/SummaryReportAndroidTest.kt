@@ -25,7 +25,7 @@ class SummaryReportAndroidTest {
             Locale.setDefault(Locale.forLanguageTag("ms-MY"))
             val plan = route().copy(cashOnHand = "320", tax = "12.5")
             assertEquals(
-                """IZZ Delivery Summary
+                """Runner Route Planning Summary
 Date: 3 Oct 2026
 Start Location: Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203
 End Location: Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203
@@ -39,7 +39,9 @@ Pending: 1
 Success Rate: 25.0%
 Total KM: 20.0 KM
 Cash on Hand: SGD 320.00
-Tax: SGD 12.50""",
+Tax: SGD 12.50 (RM 45.00)
+Rate: 3.60
+Remark: """,
                 buildSummaryReport(plan)
             )
             assertFalse(buildSummaryReport(plan).contains("Net Cash", ignoreCase = true))
@@ -75,7 +77,7 @@ Tax: SGD 12.50""",
         val intent = summaryReportShareIntent(plan)
         assertEquals(Intent.ACTION_SEND, intent.action)
         assertEquals("text/plain", intent.type)
-        assertEquals("IZZ Delivery Summary", intent.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals("Runner Route Planning Summary", intent.getStringExtra(Intent.EXTRA_SUBJECT))
         assertEquals(buildSummaryReport(plan), intent.getStringExtra(Intent.EXTRA_TEXT))
         assertNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
     }
@@ -102,7 +104,7 @@ Tax: SGD 12.50""",
         copySummaryReport(app, plan)
         val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = requireNotNull(clipboard.primaryClip)
-        assertEquals("IZZ Delivery Summary", clip.description.label)
+        assertEquals("Runner Route Planning Summary", clip.description.label)
         assertEquals(1, clip.itemCount)
         assertEquals(buildSummaryReport(plan), clip.getItemAt(0).coerceToText(app).toString())
         assertEquals("Report copied to clipboard", ShadowToast.getTextOfLatestToast())

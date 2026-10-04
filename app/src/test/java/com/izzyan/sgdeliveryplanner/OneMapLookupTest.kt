@@ -397,6 +397,7 @@ private class MemoryPlannerDao : PlannerDao {
     override suspend fun leg(key: String): CachedLeg? = legs[key]
     override suspend fun leg(l: CachedLeg) { legs[l.key] = l }
     override suspend fun save(r: SavedRoute) { routes[r.id] = r }
+    override suspend fun deleteRoutes(ids: List<String>) { ids.forEach(routes::remove) }
     override fun history(): Flow<List<SavedRoute>> = flowOf(routes.values.toList())
     override suspend fun route(id: String): SavedRoute? = routes[id]
 }

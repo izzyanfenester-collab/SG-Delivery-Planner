@@ -17,6 +17,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +45,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -91,6 +95,12 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 @Composable
 fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
+    val view = LocalView.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(view, lifecycle, vm.screen) {
+        val awake = DeliveryScreenAwake(view, lifecycle, vm.screen)
+        onDispose { awake.close() }
+    }
     val screenStates = rememberSaveableStateHolder()
     BackHandler(enabled = vm.canGoBack) { vm.goBack() }
     Scaffold(
@@ -98,17 +108,19 @@ fun App(vm: PlannerViewModel) {
         topBar = {
             Surface(color = PremiumNavy, shadowElevation = 4.dp) {
                 Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    if (vm.canGoBack) {
-                        TextButton(
-                            onClick = vm::goBack, enabled = !vm.busy,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = PremiumGold,
-                                disabledContentColor = Color(0xFF8292AC)
-                            ),
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (vm.canGoBack) {
+                            TextButton(
+                                onClick = vm::goBack, enabled = !vm.busy,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = PremiumGold,
+                                    disabledContentColor = Color(0xFF8292AC)
+                                ),
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
+                        }
+                        Text(stringResource(R.string.app_name), Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.titleLarge)
                     }
-                    Text(stringResource(R.string.app_name), color = Color.White, style = MaterialTheme.typography.headlineSmall)
                     Text(
                         when (vm.screen) {
                             "Home" -> "Singapore parcel delivery"
@@ -492,13 +504,15 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     HorizontalDivider(color = Color(0xFF31486B))
                     Text("Planned arrival: ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = Color(0xFFB7C7E1))
+                    stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", color = PremiumGold) }
+                    stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", color = PremiumGold) }
                     Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                 }
             }
             PrimaryAction("Navigate", { navigate(context, stop.place) }, enabled = !vm.busy)
-            PrimaryAction("Mark as delivered", { vm.progress("DELIVERED") }, enabled = !vm.busy, color = PremiumEmerald)
-            PrimaryAction("Put on hold", { holdStop = p.current }, enabled = !vm.busy, color = PremiumAmber)
-            PrimaryAction("Skip delivery", { vm.progress("SKIP") }, enabled = !vm.busy, color = Color(0xFF4F5E73))
+            PrimaryAction("Mark as delivered", { vm.progress("DELIVERED") }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald)
+            PrimaryAction("Put on hold", { holdStop = p.current }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumAmber)
+            PrimaryAction("Skip delivery", { vm.progress("SKIP") }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73))
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
@@ -562,7 +576,8 @@ private fun StopCard(stop: Stop, index: Int, current: Boolean, onClick: () -> Un
             Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
             Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Planned arrival: ${time(stop.arrival)} • Departure: ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            stop.completedAt?.let { Text("Delivered ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
+            stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", style = MaterialTheme.typography.bodyMedium) }
+            stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
             holdDetails(stop)?.let { Text("On hold: $it", style = MaterialTheme.typography.bodyMedium) }
             Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
@@ -634,12 +649,12 @@ fun Results(vm: PlannerViewModel, p: Plan) {
 @Composable
 fun ScheduleTable(p: Plan) {
     val startPlace = p.startLocation.asPlace()
-    val headings = listOf("Stop", "Postal code", "Block", "Area", "Arrival", "Distance from previous stop", "Driving time", "Traffic allowance", "Planned travel time", "Delivery period", "Departure", "Distance so far")
-    val start = listOf("START", startPlace.postal, startPlace.block, startPlace.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km")
+    val headings = listOf("Stop", "Postal code", "Block", "Area", "Planned arrival", "Distance from previous stop", "Driving time", "Traffic allowance", "Planned travel time", "Delivery period", "Planned departure", "Distance so far", "Updated ETA", "Updated finish", "Actual / Delivered at")
+    val start = listOf("START", startPlace.postal, startPlace.block, startPlace.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km", "—", "—", "—")
     val rows = p.stops.mapIndexed { index, stop ->
-        listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm))
+        listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm), stop.etaArrival?.let(::time) ?: "—", stop.etaLeave?.let(::time) ?: "—", stop.completedAt?.let(::time) ?: "—")
     }
-    val end = listOf("END", startPlace.postal, startPlace.block, startPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm))
+    val end = listOf("END", startPlace.postal, startPlace.block, startPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
     Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
@@ -660,12 +675,15 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
     val summary = deliverySummary(p)
     var cash by rememberSaveable(p.id, p.cashOnHand) { mutableStateOf(p.cashOnHand) }
     var tax by rememberSaveable(p.id, p.tax) { mutableStateOf(p.tax) }
+    var rate by rememberSaveable(p.id, p.exchangeRate) { mutableStateOf(p.exchangeRate) }
+    var remark by rememberSaveable(p.id, p.remark) { mutableStateOf(p.remark) }
+    LaunchedEffect(p.id) { vm.refreshExchangeRate() }
     val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("IZZ Delivery Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
+        PageTitle("Runner Route Planning Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
@@ -700,7 +718,19 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CurrencyField("Cash on hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
                 CurrencyField("Tax", tax, { if (validCurrencyInput(it)) tax = it }, !vm.busy)
-                PrimaryAction("Save Summary", { vm.saveSummary(cash, tax) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null)
+                Text("Cash on Hand: ${formatCurrency(cash)}")
+                Text("Tax: ${formatCurrency(tax)} (RM ${taxMyr(tax, rate)})")
+                OutlinedTextField(rate, { rate = it }, label = { Text("Rate (SGD → MYR)") },
+                    supportingText = { Text("Online rate +0.40; you can override the final rate.") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = normalizedExchangeRate(rate) == null, singleLine = true, enabled = !vm.busy, modifier = Modifier.fillMaxWidth())
+                if (vm.rateNotice.isNotBlank()) Text(vm.rateNotice, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { rate = vm.latestExchangeRate }, enabled = !vm.busy && !vm.rateBusy) {
+                    Text("Use latest rate: ${vm.latestExchangeRate}")
+                }
+                TextButton(onClick = vm::refreshExchangeRate, enabled = !vm.rateBusy) { Text("Refresh online rate") }
+                OutlinedTextField(remark, { remark = it.take(1000) }, label = { Text("Remark") }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth())
+                PrimaryAction("Save Summary", { vm.saveSummary(cash, tax, rate, remark) }, enabled = !vm.busy && normalizedCurrency(cash) != null && normalizedCurrency(tax) != null && normalizedExchangeRate(rate) != null)
                 p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
@@ -727,40 +757,65 @@ private fun CurrencyField(label: String, value: String, onChange: (String) -> Un
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun History(vm: PlannerViewModel) {
     val saved by vm.history.collectAsState(initial = emptyList())
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var confirmIds by remember { mutableStateOf<Set<String>?>(null) }
+    fun toggle(id: String) { selected = if (id in selected) selected - id else selected + id }
+    confirmIds?.let { ids ->
+        AlertDialog(onDismissRequest = { confirmIds = null }, title = { Text("Delete selected history?") },
+            text = { Text("Permanently delete ${ids.size} selected record(s)? This cannot be undone.") },
+            confirmButton = { TextButton(onClick = {
+                vm.deleteHistory(ids); confirmIds = null; selected = emptyList(); selecting = false
+            }, enabled = !vm.busy) { Text("Delete Selected") } },
+            dismissButton = { TextButton(onClick = { confirmIds = null }) { Text("Cancel") } })
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { PageTitle("Route history", "Open a saved delivery summary and continue any unfinished deliveries.") }
+        item {
+            PageTitle("Route history", "Tap to open details. Select records to delete them.")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { selecting = !selecting; selected = emptyList() }, enabled = !vm.busy) {
+                    Text(if (selecting) "Cancel selection" else "Select history")
+                }
+                if (selecting) TextButton(onClick = { confirmIds = selected.toSet() }, enabled = selected.isNotEmpty() && !vm.busy) {
+                    Text("Delete Selected (${selected.size})")
+                }
+            }
+        }
         if (saved.isEmpty()) item {
             PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(20.dp)) }
         }
         items(saved, key = { it.id }) { record ->
             val p = runCatching { vm.repo.decode(record) }.getOrNull()
-            if (p == null) {
-                PremiumCard(Modifier.fillMaxWidth()) {
-                    Text("This saved route could not be read. Its stored data has been kept.", Modifier.padding(20.dp))
-                }
-                return@items
-            }
-            val summary = deliverySummary(p)
-            val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
-            PremiumCard(Modifier.fillMaxWidth().clickable { if (!vm.busy) vm.open(record) }) {
+            PremiumCard(Modifier.fillMaxWidth().combinedClickable(
+                enabled = !vm.busy,
+                onClick = { if (selecting) toggle(record.id) else vm.open(record) },
+                onLongClick = { selecting = true; toggle(record.id) }
+            )) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(p.start.take(10), style = MaterialTheme.typography.titleLarge)
-                    DetailRow("Start location", p.startLocation.reportLabel)
-                    DetailRow("End location", p.startLocation.reportLabel)
-                    DetailRow("Start time", time(summary.start))
-                    DetailRow("Total parcels", summary.totalParcel.toString())
-                    Text("Delivered: ${summary.delivered} • On hold: ${summary.onHold} • Skipped: ${summary.skipped} • Pending: ${summary.pending}", style = MaterialTheme.typography.bodyLarge)
-                    DetailRow("Success rate", "%.1f%%".format(Locale.ENGLISH, summary.successRate))
-                    DetailRow("Total distance", km(summary.totalKm))
-                    DetailRow(if (estimated) "Estimated finish time" else "Finish time", time(summary.finish))
-                    Text("Cash on hand: ${formatCurrency(p.cashOnHand)} • Tax: ${formatCurrency(p.tax)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    Text("Open delivery summary", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    if (selecting) Checkbox(record.id in selected, { toggle(record.id) }, enabled = !vm.busy)
+                    if (p == null) {
+                        Text("This saved route could not be read. Its stored data has been kept.")
+                    } else {
+                        val summary = deliverySummary(p)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.start.take(10), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                            if (isRouteCompleted(p)) Surface(color = PremiumNavy, contentColor = PremiumGold,
+                                shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, PremiumGold)) {
+                                Text("COMPLETED", Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        DetailRow("Total Parcel", summary.totalParcel.toString())
+                        DetailRow("Success Rate", "%.1f%%".format(Locale.ENGLISH, summary.successRate))
+                        DetailRow("Total Distance", km(summary.totalKm))
+                        DetailRow("Finish Time", time(summary.finish))
+                    }
                 }
             }
         }
