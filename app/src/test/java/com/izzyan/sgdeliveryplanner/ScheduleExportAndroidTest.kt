@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -16,6 +17,7 @@ import java.io.OutputStream
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.resetMain
@@ -37,6 +39,7 @@ class ScheduleExportAndroidTest {
     private lateinit var app: Application
     private lateinit var scheduler: TestCoroutineScheduler
     private val viewModels = mutableListOf<ViewModelStore>()
+    private val exportJobs = mutableListOf<Job>()
 
     @Before
     fun setUp() {
@@ -55,8 +58,16 @@ class ScheduleExportAndroidTest {
     @After
     fun cleanUp() {
         viewModels.forEach(ViewModelStore::clear)
-        Dispatchers.resetMain()
-        File(app.cacheDir, "exports").deleteRecursively()
+        try {
+            // Clearing cancels the scopes, but real IO may still be deleting a snapshot.
+            // Wait for every child to finish before walking the same cache directories.
+            await("Finish cancelled export IO before deleting the test cache") {
+                exportJobs.all { it.isCompleted }
+            }
+            File(app.cacheDir, "exports").deleteRecursively()
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
@@ -69,7 +80,7 @@ class ScheduleExportAndroidTest {
         assertEquals(EXCEL_MIME_TYPE, intent.type)
         assertEquals("content", uri.scheme)
         assertEquals("${app.packageName}.excel-files", uri.authority)
-        assertEquals("IZZ_Delivery_2026-10-03.xlsx", uri.lastPathSegment)
+        assertEquals("Runner_Route_Planning_2026-10-03.xlsx", uri.lastPathSegment)
         assertEquals(uri, intent.clipData?.getItemAt(0)?.uri)
         assertEquals(file.name, intent.clipData?.description?.label)
         assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -316,10 +327,10 @@ class ScheduleExportAndroidTest {
     @Test
     fun documentPickerKeepsReturnedUriGrantsAndCancelReturnsNoDestination() {
         val contract = CreateExcelDocument()
-        val intent = contract.createIntent(app, "IZZ_Delivery_2026-10-03.xlsx")
+        val intent = contract.createIntent(app, "Runner_Route_Planning_2026-10-03.xlsx")
         assertEquals(Intent.ACTION_CREATE_DOCUMENT, intent.action)
         assertEquals(EXCEL_MIME_TYPE, intent.type)
-        assertEquals("IZZ_Delivery_2026-10-03.xlsx", intent.getStringExtra(Intent.EXTRA_TITLE))
+        assertEquals("Runner_Route_Planning_2026-10-03.xlsx", intent.getStringExtra(Intent.EXTRA_TITLE))
         val expectedFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
             Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
         assertEquals(expectedFlags, intent.flags and expectedFlags)
@@ -333,6 +344,7 @@ class ScheduleExportAndroidTest {
 
     private fun model(state: SavedStateHandle): ScheduleExportViewModel =
         ScheduleExportViewModel(app, state).also { model ->
+            exportJobs += requireNotNull(model.viewModelScope.coroutineContext[Job])
             viewModels += ViewModelStore().apply { put("export", model) }
         }
 

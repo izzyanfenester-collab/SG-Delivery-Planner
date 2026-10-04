@@ -20,7 +20,7 @@ import kotlin.math.ceil
 class ScheduleExcelTest {
     private val headings = listOf(
         "Stop", "Postal Code", "Block", "Area", "Arrival", "Distance From Previous",
-        "Base Drive", "Traffic Buffer", "Planned Travel", "Delivery", "Leave", "Cumulative KM"
+        "Base Drive", "Traffic Buffer", "Planned Travel", "Delivery", "Leave", "Cumulative KM", "Updated ETA", "Updated Finish", "Actual / Delivered At"
     )
     private val formatter = DataFormatter(Locale.US)
 
@@ -77,9 +77,9 @@ class ScheduleExcelTest {
             assertEquals(1, book.numberOfSheets)
             assertEquals("Delivery Schedule", book.getSheetName(0))
             val sheet = book.getSheetAt(0)
-            assertEquals("IZZ Delivery - Complete Delivery Schedule", sheet.getRow(0).getCell(0).stringCellValue)
+            assertEquals("Runner Route Planning - Complete Delivery Schedule", sheet.getRow(0).getCell(0).stringCellValue)
             assertTrue(sheet.asSequence().flatMap { it.asSequence() }.any {
-                it.cellType == CellType.STRING && it.stringCellValue == "IZZ Delivery Route Summary"
+                it.cellType == CellType.STRING && it.stringCellValue == "Runner Route Planning Route Summary"
             })
             val headers = header(sheet)
             assertEquals(headings, headings.indices.map { headers.getCell(it).stringCellValue })
@@ -306,8 +306,24 @@ class ScheduleExcelTest {
         }
     }
 
+    @Test fun exportsActualAndUpdatedTimesWithoutChangingPlannedTimesOrOrder() {
+        val base = route().copy(tax = "27.72", exchangeRate = "3.60", remark = "Paid in SGD")
+        val plan = reviewStop(base, "DELIVERED", "2026-10-04T00:25:37")
+        workbook(plan).use { book ->
+            val sheet = book.getSheetAt(0)
+            val row = header(sheet).rowNum
+            assertDateTime("2026-10-04T00:25:37", sheet.getRow(row + 2).getCell(14))
+            assertDateTime(requireNotNull(plan.stops[1].etaArrival), sheet.getRow(row + 3).getCell(12))
+            assertDateTime(requireNotNull(plan.stops[1].etaLeave), sheet.getRow(row + 3).getCell(13))
+            assertDateTime(base.stops[1].arrival, sheet.getRow(row + 3).getCell(4))
+            assertEquals("RM 99.79", summaryCell(sheet, "Tax MYR").stringCellValue)
+            assertEquals("3.60", summaryCell(sheet, "Rate").stringCellValue)
+            assertEquals("Paid in SGD", summaryCell(sheet, "Remark").stringCellValue)
+        }
+    }
+
     @Test fun filenameUsesRouteStartDateRatherThanCreationOrExportDate() {
-        assertEquals("IZZ_Delivery_2026-10-03.xlsx", deliveryExcelFileName(route()))
+        assertEquals("Runner_Route_Planning_2026-10-03.xlsx", deliveryExcelFileName(route()))
         assertEquals("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", EXCEL_MIME_TYPE)
     }
 }

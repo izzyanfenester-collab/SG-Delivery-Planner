@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-class PlannerViewModel(app: Application) : AndroidViewModel(app) {
+class PlannerViewModel @JvmOverloads constructor(app: Application, private val exchangeRateProvider: ExchangeRateProvider = OnlineExchangeRateProvider()) : AndroidViewModel(app) {
     val repo = Repository(app)
     private val prefs = app.getSharedPreferences("settings", 0)
     private val locationSettings = StartLocationSettings(app)
@@ -34,10 +34,59 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
     var notice by mutableStateOf("")
     var service by mutableStateOf(prefs.getInt("service", 8))
     var startMinute by mutableStateOf(prefs.getInt("start", 600))
+    var deliveryDate by mutableStateOf(
+        runCatching { LocalDate.parse(prefs.getString("deliveryDate", null)) }.getOrNull() ?: LocalDate.now(singapore)
+    )
+        private set
+
+    fun selectDeliveryDate(date: LocalDate) {
+        if (busy) return
+        deliveryDate = date
+        persist()
+    }
+
+    fun scheduledStart(): LocalDateTime = deliveryDate.atStartOfDay().plusMinutes(startMinute.toLong())
     var traffic by mutableStateOf(prefs.getString("traffic", "Normal")!!)
     var theme by mutableStateOf(prefs.getString("theme", "System")!!)
     var endpoint by mutableStateOf(prefs.getString("endpoint", "https://router.project-osrm.org")!!)
+    var latestExchangeRate by mutableStateOf(normalizedExchangeRate(prefs.getString("exchangeRate", "3.60")!!) ?: "3.60")
+        private set
+    var rateBusy by mutableStateOf(false)
+        private set
+    var rateNotice by mutableStateOf("")
+        private set
     val history = repo.dao.history()
+
+    fun refreshExchangeRate() {
+        if (rateBusy) return
+        rateBusy = true
+        rateNotice = "Updating SGD → MYR rate…"
+        viewModelScope.launch {
+            try {
+                latestExchangeRate = requireNotNull(normalizedExchangeRate(exchangeRateProvider.finalSgdMyrRate()))
+                prefs.edit().putString("exchangeRate", latestExchangeRate).apply()
+                rateNotice = "Online rate includes +0.40. Save Summary to use it for this route."
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { rateNotice = "Online rate unavailable. Your saved/manual rate is still available." }
+            finally { rateBusy = false }
+        }
+    }
+
+    fun deleteHistory(ids: Set<String>) {
+        if (busy || ids.isEmpty()) return
+        busy = true
+        viewModelScope.launch {
+            try {
+                repo.dao.deleteRoutes(ids.toList())
+                if (route?.id in ids) { route = null; reportPreview = null }
+                if (prefs.getString("active", null) in ids) prefs.edit().remove("active").apply()
+                notice = "Selected history deleted."
+                message = ""
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message = englishError(e, "Could not delete selected history. Please try again.") }
+            finally { busy = false }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -64,7 +113,8 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
     fun persist() {
         prefs.edit().putInt("service", service).putInt("start", startMinute)
             .putString("traffic", traffic).putString("theme", theme)
-            .putString("endpoint", endpoint).putString("input", input).apply()
+            .putString("endpoint", endpoint).putString("input", input)
+            .putString("deliveryDate", deliveryDate.toString()).apply()
     }
 
     fun goBack() {
@@ -112,16 +162,20 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
                 else "Use six digits for each Singapore postal code. Check these entries: ${parsed.invalid.joinToString()}"
             return
         }
+        val routeStart = scheduledStart()
         persist()
+        refreshExchangeRate()
         busy = true
         notice = ""
         viewModelScope.launch {
             try {
                 val planned = repo.plan(
-                    parsed.valid, LocalDate.now(singapore).atStartOfDay().plusMinutes(startMinute.toLong()),
+                    parsed.valid, routeStart,
                     service, traffic, endpoint, selectedStartLocation
                 ) { message = it }
-                route = planned
+                val withRate = planned.copy(exchangeRate = latestExchangeRate)
+                repo.save(withRate)
+                route = withRate
                 prefs.edit().putString("active", planned.id).apply()
                 screen = "Route"
                 message = ""
@@ -146,12 +200,13 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
         if (busy) return
         val planned = route ?: return
         if (planned.current !in planned.stops.indices) { screen = "Summary"; return }
+        val actionTime = LocalDateTime.now().toString()
         busy = true
         message = ""
         notice = ""
         viewModelScope.launch {
             try {
-                val updated = reviewStop(planned, action, LocalDateTime.now(singapore).toString(), holdReason, holdNote)
+                val updated = reviewStop(planned, action, actionTime, holdReason, holdNote)
                 // Persist before advancing the visible stop so a failed save does not lose a delivery action.
                 repo.save(updated)
                 route = updated
@@ -188,13 +243,14 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveSummary(cash: String, tax: String) {
+    fun saveSummary(cash: String, tax: String, rate: String = route?.exchangeRate ?: latestExchangeRate, remark: String = route?.remark.orEmpty()) {
         if (busy) return
         val planned = route ?: return
         val normalizedCash = normalizedCurrency(cash)
         val normalizedTax = normalizedCurrency(tax)
-        if (normalizedCash == null || normalizedTax == null) {
-            message = "Enter cash and tax amounts of zero or more in SGD, with up to two decimal places."
+        val normalizedRate = normalizedExchangeRate(rate)
+        if (normalizedCash == null || normalizedTax == null || normalizedRate == null) {
+            message = "Enter cash and tax amounts of zero or more in SGD, with up to two decimal places, and a positive exchange rate up to 100."
             return
         }
         busy = true
@@ -202,8 +258,11 @@ class PlannerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val updated = planned.copy(cashOnHand = normalizedCash, tax = normalizedTax,
-                    summarySavedAt = LocalDateTime.now(singapore).toString())
+                    exchangeRate = normalizedRate, remark = remark.trim().take(1000),
+                    summarySavedAt = LocalDateTime.now().toString())
                 repo.save(updated)
+                latestExchangeRate = normalizedRate
+                prefs.edit().putString("exchangeRate", normalizedRate).apply()
                 route = updated
                 message = ""
                 notice = "Summary saved."

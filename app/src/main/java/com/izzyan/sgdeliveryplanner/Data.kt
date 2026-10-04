@@ -28,6 +28,7 @@ private inline fun checkPlanning(condition: Boolean, message: () -> String) {
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun leg(l:CachedLeg)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun save(r:SavedRoute)
  @Query("SELECT * FROM routes ORDER BY created DESC") fun history(): Flow<List<SavedRoute>>
+ @Query("DELETE FROM routes WHERE id IN (:ids)") suspend fun deleteRoutes(ids:List<String>)
  @Query("SELECT * FROM routes WHERE id=:id") suspend fun route(id:String): SavedRoute?
 }
 @Database(entities=[CachedPlace::class,SavedRoute::class,CachedLeg::class],version=1,exportSchema=false)
