@@ -3,7 +3,6 @@ package com.izzyan.sgdeliveryplanner
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -28,29 +27,20 @@ fun ChatGptHeaderButton() {
     }
 }
 
-/** Open ChatGPT's home without a question, share payload or route context. */
-internal fun chatGptIntent(packageName: String? = null): Intent =
-    Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/")).apply {
-        packageName?.let { setPackage(it) }
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-
+/** Launch only the official Android app, with no prompt, URL, share payload or clipboard writes. */
 internal fun openChatGpt(context: Context): Boolean {
-    if (tryOpenChatGpt(context, chatGptIntent("com.openai.chatgpt"))) return true
-    if (tryOpenChatGpt(context, chatGptIntent())) return true
-    Toast.makeText(
-        context,
-        "ChatGPT could not be opened. Please install ChatGPT or a web browser and try again.",
-        Toast.LENGTH_LONG
-    ).show()
+    val message = try {
+        val launch = context.packageManager.getLaunchIntentForPackage("com.openai.chatgpt")
+        if (launch == null) "ChatGPT app is not installed."
+        else {
+            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        }
+    } catch (_: ActivityNotFoundException) {
+        "ChatGPT app could not be opened. Please check that it is installed."
+    } catch (_: SecurityException) {
+        "ChatGPT app could not be opened. Please check that it is installed."
+    }
+    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     return false
-}
-
-private fun tryOpenChatGpt(context: Context, intent: Intent): Boolean = try {
-    context.startActivity(intent)
-    true
-} catch (_: ActivityNotFoundException) {
-    false
-} catch (_: SecurityException) {
-    false
 }

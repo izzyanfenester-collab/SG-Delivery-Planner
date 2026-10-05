@@ -19,6 +19,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -126,7 +127,12 @@ fun App(vm: PlannerViewModel) {
                             color = Color.White, style = MaterialTheme.typography.titleMedium,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
-                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) ChatGptHeaderButton()
+                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
+                            IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
+                                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
+                            }
+                            ChatGptHeaderButton()
+                        }
                     }
                     Text(
                         when (vm.screen) {
@@ -151,7 +157,7 @@ fun App(vm: PlannerViewModel) {
                         Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "History", "Settings").forEach { label ->
+                        listOf("Home", "Route", "Delivery", "Map", "History").forEach { label ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
@@ -353,6 +359,19 @@ fun Settings(vm: PlannerViewModel) {
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
         PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Default Navigation", style = MaterialTheme.typography.titleLarge)
+                (listOf<NavigationChoice?>(null) + NavigationChoice.entries).forEach { choice ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        .selectable(vm.navigationPreferences.default == choice, enabled = !vm.busy, role = androidx.compose.ui.semantics.Role.RadioButton,
+                            onClick = { vm.navigationPreferences.updateDefault(choice) }), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(vm.navigationPreferences.default == choice, onClick = null, enabled = !vm.busy)
+                        Text(choice?.label ?: "Ask every time", Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Schedule", style = MaterialTheme.typography.titleLarge)
                 DeliveryDateControl(vm)
@@ -486,6 +505,12 @@ private fun holdDetails(stop: Stop): String? {
 @Composable
 fun Delivery(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
+    var showNavigation by remember(p.id, p.current) { mutableStateOf(false) }
+    if (showNavigation) NavigationChooser(
+        onDismiss = { showNavigation = false },
+        onChoose = { choice, saveDefault -> showNavigation = !vm.navigationPreferences.launch(context, p, choice, saveDefault) },
+        enabled = !vm.busy, initialSelection = vm.navigationPreferences.default
+    )
     var holdStop by remember(p.id, p.current) { mutableStateOf<Int?>(null) }
     if (holdStop != null) {
         HoldDialog(
@@ -532,7 +557,10 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryAction("Navigate", { navigate(context, stop.place) }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
+                    PrimaryAction("Navigate", {
+                        val choice = vm.navigationPreferences.default
+                        showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
+                    }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
                     PrimaryAction("Delivered", { vm.progress("DELIVERED") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald, minHeight = 56.dp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

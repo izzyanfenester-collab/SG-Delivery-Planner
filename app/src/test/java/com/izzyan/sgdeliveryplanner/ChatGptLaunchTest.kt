@@ -7,6 +7,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ResolveInfo
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.*
 import org.junit.Test
@@ -19,87 +21,64 @@ import org.robolectric.shadows.ShadowToast
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ChatGptLaunchTest {
-    @Test
-    fun intentTargetsOnlyTheBlankChatGptHomeWithoutAnyQuestionOrContext() {
-        val native = chatGptIntent("com.openai.chatgpt")
-        assertEquals("com.openai.chatgpt", native.`package`)
-        assertBlankHomeIntent(native)
-        val browser = chatGptIntent()
-        assertNull(browser.`package`)
-        assertBlankHomeIntent(browser)
-    }
-
-    @Test
-    fun installedChatGptOpensDirectlyWithoutSharingOrChangingTheClipboard() {
+    @Test fun installedChatGptLaunchesItsAndroidLauncherWithoutUrlPromptOrClipboardChanges() {
         val app = ApplicationProvider.getApplicationContext<Application>()
+        installChatGptLauncher(app)
         val clipboard = seedClipboard(app)
         assertTrue(openChatGpt(app))
         val launched = Shadows.shadowOf(app).nextStartedActivity
-        assertEquals("com.openai.chatgpt", launched.`package`)
-        assertBlankHomeIntent(launched)
+        assertEquals(Intent.ACTION_MAIN, launched.action)
+        assertTrue(launched.categories.contains(Intent.CATEGORY_LAUNCHER))
+        assertEquals("com.openai.chatgpt", launched.component!!.packageName)
+        assertNull(launched.data); assertNull(launched.type); assertNull(launched.extras); assertNull(launched.clipData)
+        assertTrue(launched.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertNull(Shadows.shadowOf(app).nextStartedActivity)
         assertClipboardUnchanged(app, clipboard)
     }
 
-    @Test
-    fun missingChatGptAppFallsBackToTheSameBlankUrlInTheExternalBrowser() {
-        val context = RecordingContext(listOf(ActivityNotFoundException("No ChatGPT app")))
-        assertTrue(openChatGpt(context))
-        assertEquals(2, context.attempts.size)
-        assertEquals("com.openai.chatgpt", context.attempts[0].`package`)
-        assertNull(context.attempts[1].`package`)
-        context.attempts.forEach(::assertBlankHomeIntent)
-        assertClipboardUnchanged(context, context.clipboard)
-    }
-
-    @Test
-    fun deniedChatGptAppAlsoFallsBackWithoutAddingAnyText() {
-        val context = RecordingContext(listOf(SecurityException("Package denied")))
-        assertTrue(openChatGpt(context))
-        assertEquals(2, context.attempts.size)
-        context.attempts.forEach(::assertBlankHomeIntent)
-        assertNull(context.attempts[1].`package`)
-        assertClipboardUnchanged(context, context.clipboard)
-    }
-
-    @Test
-    fun missingAppAndBrowserShowAnEnglishErrorAndKeepTheClipboardUnchanged() {
-        val context = RecordingContext(listOf(
-            ActivityNotFoundException("No ChatGPT app"),
-            ActivityNotFoundException("No browser")
-        ))
+    @Test fun missingChatGptShowsInstallMessageWithoutOpeningBrowserOrStore() {
+        val context = RecordingContext()
         assertFalse(openChatGpt(context))
-        assertEquals(2, context.attempts.size)
-        context.attempts.forEach(::assertBlankHomeIntent)
-        assertEquals(
-            "ChatGPT could not be opened. Please install ChatGPT or a web browser and try again.",
-            ShadowToast.getTextOfLatestToast()
-        )
+        assertTrue(context.attempts.isEmpty())
+        assertEquals("ChatGPT app is not installed.", ShadowToast.getTextOfLatestToast())
         assertClipboardUnchanged(context, context.clipboard)
     }
 
-    @Test
-    fun bothDeniedLaunchesAreHandledWithoutSharingOrCopyingAnything() {
-        val context = RecordingContext(listOf(SecurityException("App denied"), SecurityException("Browser denied")))
+    @Test fun installedPackageWithoutLauncherDoesNotOpenBrowser() {
+        val context = RecordingContext()
+        val info = android.content.pm.PackageInfo().apply { packageName = "com.openai.chatgpt" }
+        Shadows.shadowOf(context.packageManager).installPackage(info)
         assertFalse(openChatGpt(context))
-        assertEquals(2, context.attempts.size)
-        context.attempts.forEach(::assertBlankHomeIntent)
-        assertEquals(
-            "ChatGPT could not be opened. Please install ChatGPT or a web browser and try again.",
-            ShadowToast.getTextOfLatestToast()
-        )
+        assertTrue(context.attempts.isEmpty())
+        assertEquals("ChatGPT app is not installed.", ShadowToast.getTextOfLatestToast())
         assertClipboardUnchanged(context, context.clipboard)
     }
 
-    private fun assertBlankHomeIntent(intent: Intent) {
-        assertEquals(Intent.ACTION_VIEW, intent.action)
-        assertEquals("https://chatgpt.com/", intent.data.toString())
-        assertNull(intent.data?.query)
-        assertNull(intent.data?.fragment)
-        assertNull(intent.type)
-        assertNull(intent.extras)
-        assertNull(intent.clipData)
-        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+    @Test fun appRemovedBetweenLookupAndLaunchIsHandledWithoutBrowserFallback() {
+        assertFailedLaunchWithoutFallback(ActivityNotFoundException("App removed"))
+    }
+
+    @Test fun deniedLaunchIsHandledWithoutBrowserFallback() {
+        assertFailedLaunchWithoutFallback(SecurityException("App denied"))
+    }
+
+    private fun assertFailedLaunchWithoutFallback(failure: RuntimeException) {
+        val context = RecordingContext(failure)
+        installChatGptLauncher(context)
+        assertFalse(openChatGpt(context))
+        assertEquals(1, context.attempts.size)
+        assertEquals("com.openai.chatgpt", context.attempts.single().component!!.packageName)
+        assertNull(context.attempts.single().data); assertNull(context.attempts.single().extras)
+        assertEquals("ChatGPT app could not be opened. Please check that it is installed.", ShadowToast.getTextOfLatestToast())
+        assertClipboardUnchanged(context, context.clipboard)
+    }
+
+    private fun installChatGptLauncher(context: Context) {
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.openai.chatgpt")
+        val info = ResolveInfo().apply {
+            activityInfo = ActivityInfo().apply { packageName = "com.openai.chatgpt"; name = "com.openai.chatgpt.MainActivity"; exported = true }
+        }
+        Shadows.shadowOf(context.packageManager).addResolveInfoForIntent(launcher, info)
     }
 
     private fun seedClipboard(context: Context): ClipboardManager {
@@ -115,14 +94,13 @@ class ChatGptLaunchTest {
         assertEquals("My existing clipboard text", clip.getItemAt(0).coerceToText(context).toString())
     }
 
-    private inner class RecordingContext(private val failures: List<RuntimeException>) :
+    private inner class RecordingContext(private val failure: RuntimeException? = null) :
         ContextWrapper(ApplicationProvider.getApplicationContext<Application>()) {
         val attempts = mutableListOf<Intent>()
         val clipboard = seedClipboard(this)
-
         override fun startActivity(intent: Intent) {
             attempts.add(Intent(intent))
-            failures.getOrNull(attempts.lastIndex)?.let { throw it }
+            failure?.let { throw it }
         }
     }
 }

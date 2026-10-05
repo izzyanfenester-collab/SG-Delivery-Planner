@@ -14,6 +14,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     val repo = Repository(app)
     private val prefs = app.getSharedPreferences("settings", 0)
     private val locationSettings = StartLocationSettings(app)
+    internal val navigationPreferences = NavigationPreferences(app)
     private val navigation = ScreenHistory()
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
