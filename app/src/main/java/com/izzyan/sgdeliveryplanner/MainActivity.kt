@@ -126,7 +126,12 @@ fun App(vm: PlannerViewModel) {
                             color = Color.White, style = MaterialTheme.typography.titleMedium,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
-                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) ChatGptHeaderButton()
+                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
+                            IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
+                                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
+                            }
+                            ChatGptHeaderButton()
+                        }
                     }
                     Text(
                         when (vm.screen) {
@@ -151,7 +156,7 @@ fun App(vm: PlannerViewModel) {
                         Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "History", "Settings").forEach { label ->
+                        listOf("Home", "Route", "Delivery", "Map", "History").forEach { label ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
