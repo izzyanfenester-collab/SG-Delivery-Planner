@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDateTime
@@ -111,7 +112,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                 Text(
                     "Delivery Report Summary",
                     color = PremiumGold,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
                     fontWeight = FontWeight.Bold
                 )
                 Column(
@@ -126,7 +127,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                                 "On Hold" -> Color(0xFFFFC570)
                                 else -> Color.White
                             },
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 17.sp, lineHeight = 22.sp)
                         )
                     }
                 }

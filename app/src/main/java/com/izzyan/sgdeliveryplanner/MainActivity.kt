@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -119,8 +120,12 @@ fun App(vm: PlannerViewModel) {
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
-                        Text(stringResource(R.string.app_name), Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.titleLarge)
-                        if (vm.screen == "Home") ChatGptHeaderButton()
+                        Text(
+                            stringResource(R.string.app_name), Modifier.weight(1f),
+                            color = Color.White, style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) ChatGptHeaderButton()
                     }
                     Text(
                         when (vm.screen) {
@@ -203,7 +208,6 @@ fun App(vm: PlannerViewModel) {
                                     Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
                                 }
                                 PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
-                                if (vm.screen == "Delivery" || vm.screen == "Route") AskChatGptButton()
                             }
                         } else when (vm.screen) {
                             "Delivery" -> Delivery(vm, p)
@@ -528,7 +532,6 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
-        AskChatGptButton()
     }
 }
 
@@ -624,7 +627,6 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         PrimaryAction("Start or resume deliveries", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
         SecondaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
-        AskChatGptButton()
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Planning estimate • ${trafficLabel(p.mode)}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
