@@ -80,7 +80,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
         }
         routeLine?.let { native.removePolyline(it) }
         if (session.shape.size >= 2) {
-            routeLine = native.addPolyline(PolylineOptions().addAll(session.shape.map { LatLng(it.lat, it.lon) }).color(android.graphics.Color.rgb(216, 185, 112)).width(6f))
+            routeLine = native.addPolyline(PolylineOptions().addAll(session.shape.map { LatLng(it.lat, it.lon) }).color(android.graphics.Color.rgb(46, 204, 113)).width(6f))
         }
     }
     LaunchedEffect(styleReady, session.location, session.cameraMode, session.cameraRequest, session.route) {
