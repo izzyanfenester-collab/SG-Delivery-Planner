@@ -66,6 +66,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
+        var showCameras by remember { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -100,7 +101,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     session.street?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodyLarge) }
                     if (session.remainingMeters != null && session.remainingSeconds != null && !session.arrived) {
                         val eta = Instant.ofEpochMilli(navigationEta(System.currentTimeMillis(), session.remainingSeconds!!)).atZone(ZoneId.of("Asia/Singapore")).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
-                        Text("${metricDistance(session.remainingMeters!!)} • ${duration(session.remainingSeconds!!)} • ETA $eta", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                        Text("${metricDistance(session.remainingMeters!!)} • ${duration(session.remainingSeconds!!)} • Navigation ETA $eta", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     }
                     session.message?.let {
                         Text(it, color = Color(0xFFFFD492))
@@ -115,11 +116,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     OutlinedButton(onClick = { session.cameraMode = "follow"; session.cameraRequest++ }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Recenter") }
                     OutlinedButton(onClick = { session.cameraMode = "overview"; session.cameraRequest++ }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Overview") }
                 }
+                OutlinedButton(onClick = { showCameras = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Traffic Cameras") }
                 Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)) {
                     Text(if (session.arrived) "Back to Delivery" else "End Navigation / Back to Delivery")
                 }
             }
         }
+        if (showCameras) TrafficCameraDialog(session) { showCameras = false }
     }
     private fun hasPreciseLocation() = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
@@ -149,6 +152,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var mapMessage by mutableStateOf<String?>(null)
+    val trafficCameras = TrafficCameraClient()
+    private val adaptiveEta = AdaptiveNavigationEta()
+    private var baseRemainingSeconds: Double? = null
     private val feed = SessionLocationEngine()
     private val sdk = AndroidMapLibreNavigation(context, locationEngine = feed, options = MapLibreNavigationOptions(
         defaultMilestonesEnabled = false, enableOffRouteDetection = false, enableFasterRouteDetection = false,
@@ -181,7 +187,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     suspend fun run(): Unit = coroutineScope {
-        active = true; scope = this; arrival = ArrivalDetector(); reroute.resetDrift(); voiceGate.reset()
+        active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); voiceGate.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
                 message = "Resolving destination…"
@@ -194,23 +200,26 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     delay(5_000)
                     if (!arrived && (lastFix == 0L || SystemClock.elapsedRealtime() - lastFix > 15_000)) {
                         message = "GPS signal unavailable. Enable location and move to an open area."
-                        reroute.resetDrift(); arrival = ArrivalDetector(); speech?.stop()
+                        reroute.resetDrift(); arrival = ArrivalDetector(); adaptiveEta.reset(); remainingSeconds = baseRemainingSeconds; speech?.stop()
                     }
                 }
             }
             var initialAttempt = false
             fusedLocations(context).collect { fix ->
                 val now = SystemClock.elapsedRealtime()
-                if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || fix.accuracy > 50) {
+                if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || !fix.accuracy.isFinite() || fix.accuracy < 0 || fix.accuracy > 50) {
                     message = "GPS accuracy is low. Waiting for a precise location…"
                     reroute.resetDrift(); arrival = ArrivalDetector(); return@collect
                 }
                 lastFix = now; location = fix
+                adaptiveEta.observe(if (fix.hasSpeed()) fix.speed.toDouble() else null, fix.accuracy.toDouble(), fix.elapsedRealtimeNanos / 1_000_000,
+                    if (fix.hasSpeedAccuracy()) fix.speedAccuracyMetersPerSecond.toDouble() else null)
+                baseRemainingSeconds?.let { base -> remainingSeconds = adaptiveEta.remainingSeconds(base, remainingMeters ?: 0.0, now) }
                 if (message?.startsWith("GPS") == true) message = null
                 if (arrived) return@collect
                 val point = GpsPoint(fix.latitude, fix.longitude)
                 if (arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
-                    arrived = true; instruction = "Arrived"; remainingMeters = 0.0; remainingSeconds = 0.0
+                    arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
                 if (route == null && !initialAttempt) { initialAttempt = true; requestRoute(fix) }
@@ -237,6 +246,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 val newRoute = client.route(GpsPoint(fix.latitude, fix.longitude), GpsPoint(destination.lat, destination.lon))
                 if (!active || arrived) return@launch
                 shape = decodeNavigationGeometry(newRoute.geometry); route = newRoute
+                adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
                 instruction = "Follow the route"; voiceGate.reset(); sdk.startNavigation(newRoute)
             } catch (e: CancellationException) { throw e }
@@ -246,7 +256,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     private fun updateProgress(p: RouteProgress) {
-        remainingMeters = p.distanceRemaining.coerceAtLeast(0.0); remainingSeconds = p.durationRemaining.coerceAtLeast(0.0)
+        remainingMeters = p.distanceRemaining.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        baseRemainingSeconds = p.durationRemaining.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        remainingSeconds = adaptiveEta.remainingSeconds(baseRemainingSeconds!!, remainingMeters!!, SystemClock.elapsedRealtime())
         turnMeters = p.stepDistanceRemaining.coerceAtLeast(0.0)
         val current = p.currentLegProgress.currentStepProgress
         val next = current.nextStep ?: current.step
