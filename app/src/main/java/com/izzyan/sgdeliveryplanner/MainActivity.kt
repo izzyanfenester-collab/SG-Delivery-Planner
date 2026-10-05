@@ -491,6 +491,12 @@ private fun holdDetails(stop: Stop): String? {
 @Composable
 fun Delivery(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
+    var showNavigation by remember(p.id, p.current) { mutableStateOf(false) }
+    if (showNavigation) NavigationChooser(
+        onDismiss = { showNavigation = false },
+        onChoose = { choice -> showNavigation = false; openDeliveryNavigation(context, p, choice) },
+        enabled = !vm.busy
+    )
     var holdStop by remember(p.id, p.current) { mutableStateOf<Int?>(null) }
     if (holdStop != null) {
         HoldDialog(
@@ -537,7 +543,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryAction("Navigate", { builtInNavigationIntent(context, p)?.let(context::startActivity) }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
+                    PrimaryAction("Navigate", { showNavigation = true }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
                     PrimaryAction("Delivered", { vm.progress("DELIVERED") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald, minHeight = 56.dp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
