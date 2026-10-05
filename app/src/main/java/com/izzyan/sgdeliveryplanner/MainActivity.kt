@@ -120,6 +120,7 @@ fun App(vm: PlannerViewModel) {
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
                         Text(stringResource(R.string.app_name), Modifier.weight(1f), color = Color.White, style = MaterialTheme.typography.titleLarge)
+                        if (vm.screen == "Home") ChatGptHeaderButton()
                     }
                     Text(
                         when (vm.screen) {
@@ -328,7 +329,6 @@ fun Home(vm: PlannerViewModel) {
         }
         PrimaryAction("Optimize route", vm::optimize, enabled = !vm.busy)
         SecondaryAction("Clear postal codes", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
-        AskChatGptButton()
         TaxDeclareButton()
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
@@ -695,7 +695,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PageTitle("Runner Route Planning Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
+        PageTitle("Delivery Report Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
