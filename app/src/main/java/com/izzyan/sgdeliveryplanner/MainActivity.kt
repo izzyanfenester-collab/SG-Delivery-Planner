@@ -4,10 +4,6 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -884,14 +880,7 @@ fun RouteMap(p: Plan) {
     } }
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Start & End" to PremiumRoyal, "Delivered" to PremiumEmerald, "On hold" to PremiumAmber, "Skipped" to Color(0xFF4F5E73), "Pending" to Color(0xFF537199)).forEach { (label, color) ->
-                Surface(color = color, contentColor = Color.White, shape = RoundedCornerShape(50)) {
-                    Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-        Text("Gold ring: current stop • © OpenStreetMap contributors", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Red marker: Next Delivery / Current Target • © OpenStreetMap contributors", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().weight(1f), update = { view ->
             view.overlays.clear()
             val line = Polyline().apply {
@@ -900,37 +889,16 @@ fun RouteMap(p: Plan) {
                 outlinePaint.strokeWidth = 7f
             }
             view.overlays.add(line)
-            fun marker(place: Place, label: String, color: Int, title: String, current: Boolean = false) {
-                val bitmap = Bitmap.createBitmap(92, 92, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-                paint.color = if (current) android.graphics.Color.rgb(228, 188, 105) else android.graphics.Color.WHITE
-                canvas.drawCircle(46f, 46f, 44f, paint)
-                paint.color = color
-                canvas.drawCircle(46f, 46f, 37f, paint)
-                paint.color = android.graphics.Color.WHITE
-                paint.textSize = 30f
-                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText(label, 46f, 56f, paint)
+            p.stops.getOrNull(p.current)?.let { stop ->
                 view.overlays.add(Marker(view).apply {
-                    position = GeoPoint(place.lat, place.lon)
-                    this.title = title
-                    icon = BitmapDrawable(context.resources, bitmap)
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    position = GeoPoint(stop.place.lat, stop.place.lon)
+                    title = "Next Delivery / Current Target: ${stop.place.postal}"
+                    snippet = stop.place.address
+                    icon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_current_delivery)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 })
             }
             val startPlace = p.startLocation.asPlace()
-            marker(startPlace, "S/E", android.graphics.Color.rgb(24, 60, 120), "Start & End: ${p.startLocation.reportLabel}")
-            p.stops.forEachIndexed { index, stop ->
-                val color = when (normalizedStatus(stop.status)) {
-                    "DELIVERED" -> android.graphics.Color.rgb(18, 107, 80)
-                    "ON_HOLD" -> android.graphics.Color.rgb(155, 88, 7)
-                    "SKIPPED" -> android.graphics.Color.rgb(79, 94, 115)
-                    else -> if (index == p.current) android.graphics.Color.rgb(155, 88, 7) else android.graphics.Color.rgb(83, 113, 153)
-                }
-                marker(stop.place, "${index + 1}", color, "${index + 1}: ${stop.place.postal} • ${statusLabel(stop.status)}\n${stop.place.address}${holdDetails(stop)?.let { "\n$it" }.orEmpty()}", index == p.current)
-            }
             val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(startPlace.lat, startPlace.lon)
             view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 80) }
             view.invalidate()
