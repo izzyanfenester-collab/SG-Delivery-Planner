@@ -65,7 +65,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             try {
                 latestExchangeRate = requireNotNull(normalizedExchangeRate(exchangeRateProvider.finalSgdMyrRate()))
                 prefs.edit().putString("exchangeRate", latestExchangeRate).apply()
-                rateNotice = "Online rate includes +0.40. Save Summary to use it for this route."
+                rateNotice = ""
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { rateNotice = "Online rate unavailable. Your saved/manual rate is still available." }
             finally { rateBusy = false }

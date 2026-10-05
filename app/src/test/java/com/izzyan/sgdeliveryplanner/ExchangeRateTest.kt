@@ -9,6 +9,7 @@ import java.math.BigDecimal
 class ExchangeRateTest {
     @Test fun markupAndMyrTaxUseDecimalHalfUpRounding() {
         assertEquals("3.60", markedUpExchangeRate(BigDecimal("3.20")))
+        assertEquals("3.59", markedUpExchangeRate(BigDecimal("3.19")))
         assertEquals("99.79", taxMyr("27.72", "3.60"))
         assertEquals("0.02", taxMyr("0.01", "1.50"))
         assertEquals("0.00", taxMyr("0", "3.60"))

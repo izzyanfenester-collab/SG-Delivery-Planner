@@ -736,7 +736,6 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 Text("Cash on Hand: ${formatCurrency(cash)}")
                 Text("Tax: ${formatCurrency(tax)} (RM ${taxMyr(tax, rate)})")
                 OutlinedTextField(rate, { rate = it }, label = { Text("Rate (SGD → MYR)") },
-                    supportingText = { Text("Online rate +0.40; you can override the final rate.") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = normalizedExchangeRate(rate) == null, singleLine = true, enabled = !vm.busy, modifier = Modifier.fillMaxWidth())
                 if (vm.rateNotice.isNotBlank()) Text(vm.rateNotice, style = MaterialTheme.typography.bodySmall)
