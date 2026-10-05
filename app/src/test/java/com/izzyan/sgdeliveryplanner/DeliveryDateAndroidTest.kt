@@ -120,7 +120,7 @@ class DeliveryDateAndroidTest {
         vm.open(row)
         assertEquals(started, vm.route)
         assertEquals(LocalDate.of(2030, 6, 12), vm.deliveryDate)
-        assertTrue(buildSummaryReport(started).startsWith("Runner Route Planning Summary\nDate: 29 Feb 2028\n"))
+        assertTrue(buildSummaryReport(started).startsWith("Delivery Report Summary\nDate: 29 Feb 2028\n"))
         assertTrue(buildSummaryReport(started).contains("Finish: 12:20 AM (1 Mar 2028)"))
         assertEquals("Runner_Route_Planning_2028-02-29.xlsx", deliveryExcelFileName(started))
         val bytes = ByteArrayOutputStream().also { writeDeliveryScheduleXlsx(started, it) }.toByteArray()

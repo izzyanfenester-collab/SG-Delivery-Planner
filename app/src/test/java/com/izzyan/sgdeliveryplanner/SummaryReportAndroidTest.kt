@@ -25,7 +25,7 @@ class SummaryReportAndroidTest {
             Locale.setDefault(Locale.forLanguageTag("ms-MY"))
             val plan = route().copy(cashOnHand = "320", tax = "12.5", remark = "Fuel receipt retained")
             assertEquals(
-                """Runner Route Planning Summary
+                """Delivery Report Summary
 Date: 3 Oct 2026
 Start: 10:00 AM
 Finish: 11:00 AM
@@ -46,6 +46,21 @@ Remark: Fuel receipt retained""",
         } finally {
             Locale.setDefault(original)
         }
+    }
+
+    @Test
+    fun multilineRemarkKeepsCompactFieldsInPreviewShareAndClipboardText() {
+        val plan = route().copy(remark = "timah belum bayar\nabu xde rumah")
+        val report = buildSummaryReport(plan)
+        assertFalse(report.contains("\n\n"))
+        assertEquals(16, report.lines().size)
+        assertTrue(report.endsWith("Remark: timah belum bayar\nabu xde rumah"))
+        assertEquals(report, summaryReportShareIntent(plan).getStringExtra(Intent.EXTRA_TEXT))
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        copySummaryReport(app, plan)
+        val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        assertEquals(report, clipboard.primaryClip!!.getItemAt(0).coerceToText(app).toString())
+        assertEquals("timah belum bayar\nabu xde rumah", plan.remark)
     }
 
     @Test
@@ -75,7 +90,7 @@ Remark: Fuel receipt retained""",
         val intent = summaryReportShareIntent(plan)
         assertEquals(Intent.ACTION_SEND, intent.action)
         assertEquals("text/plain", intent.type)
-        assertEquals("Runner Route Planning Summary", intent.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals("Delivery Report Summary", intent.getStringExtra(Intent.EXTRA_SUBJECT))
         assertEquals(buildSummaryReport(plan), intent.getStringExtra(Intent.EXTRA_TEXT))
         assertNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
     }
@@ -102,7 +117,7 @@ Remark: Fuel receipt retained""",
         copySummaryReport(app, plan)
         val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = requireNotNull(clipboard.primaryClip)
-        assertEquals("Runner Route Planning Summary", clip.description.label)
+        assertEquals("Delivery Report Summary", clip.description.label)
         assertEquals(1, clip.itemCount)
         assertEquals(buildSummaryReport(plan), clip.getItemAt(0).coerceToText(app).toString())
         assertEquals("Report copied to clipboard", ShadowToast.getTextOfLatestToast())

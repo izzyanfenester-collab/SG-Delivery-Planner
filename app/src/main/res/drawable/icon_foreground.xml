@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fractional insets preserve the full IZZYAN wordmark within adaptive mask bounds. -->
+<!-- 29% insets keep the complete square artwork inside the 66dp adaptive safe circle. -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:insetLeft="19%"
-    android:insetTop="19%"
-    android:insetRight="19%"
-    android:insetBottom="19%">
+    android:insetLeft="29%"
+    android:insetTop="29%"
+    android:insetRight="29%"
+    android:insetBottom="29%">
     <bitmap
-        android:src="@drawable/izzyan_icon"
+        android:src="@drawable/delivery_icon"
         android:gravity="fill"
         android:filter="true" />
 </inset>

@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDateTime
@@ -68,7 +69,7 @@ private fun summaryReportFields(plan: Plan): List<Pair<String, String>> {
 }
 
 fun buildSummaryReport(plan: Plan): String = buildString {
-    append("Runner Route Planning Summary")
+    append("Delivery Report Summary")
     summaryReportFields(plan).forEach { (label, value) ->
         append('\n').append(label).append(": ").append(value)
     }
@@ -76,7 +77,7 @@ fun buildSummaryReport(plan: Plan): String = buildString {
 
 internal fun summaryReportShareIntent(plan: Plan): Intent = Intent(Intent.ACTION_SEND).apply {
     type = "text/plain"
-    putExtra(Intent.EXTRA_SUBJECT, "Runner Route Planning Summary")
+    putExtra(Intent.EXTRA_SUBJECT, "Delivery Report Summary")
     putExtra(Intent.EXTRA_TEXT, buildSummaryReport(plan))
 }
 
@@ -88,7 +89,7 @@ internal fun shareSummaryReport(context: Context, plan: Plan) {
 
 internal fun copySummaryReport(context: Context, plan: Plan) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Runner Route Planning Summary", buildSummaryReport(plan)))
+    clipboard.setPrimaryClip(ClipData.newPlainText("Delivery Report Summary", buildSummaryReport(plan)))
     Toast.makeText(context, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
 }
 
@@ -107,16 +108,16 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
             border = BorderStroke(1.dp, PremiumGold.copy(alpha = .7f)),
             tonalElevation = 0.dp
         ) {
-            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Runner Route Planning Summary",
+                    "Delivery Report Summary",
                     color = PremiumGold,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
                     fontWeight = FontWeight.Bold
                 )
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     fields.forEach { (label, value) ->
                         Text(
@@ -126,7 +127,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                                 "On Hold" -> Color(0xFFFFC570)
                                 else -> Color.White
                             },
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 17.sp, lineHeight = 22.sp)
                         )
                     }
                 }
