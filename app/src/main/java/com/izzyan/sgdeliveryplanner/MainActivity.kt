@@ -532,7 +532,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryAction("Navigate", { navigate(context, stop.place) }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
+                    PrimaryAction("Navigate", { builtInNavigationIntent(context, p)?.let(context::startActivity) }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
                     PrimaryAction("Delivered", { vm.progress("DELIVERED") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald, minHeight = 56.dp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

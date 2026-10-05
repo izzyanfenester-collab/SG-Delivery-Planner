@@ -2,12 +2,13 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.izzyan.sgdeliveryplanner"
  compileSdk = 36
- defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 2; versionName = "1.1" }
+ defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 3; versionName = "1.2" }
  buildFeatures { compose = true }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
- kotlinOptions { jvmTarget = "17" }
+
  testOptions { unitTests.isIncludeAndroidResources = true }
 }
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
  implementation(platform("androidx.compose:compose-bom:2025.12.00"))
  implementation("androidx.activity:activity-compose:1.12.1")
@@ -24,6 +25,9 @@ dependencies {
  implementation("com.squareup.retrofit2:converter-gson:2.11.0")
  implementation("com.squareup.okhttp3:okhttp:4.12.0")
  implementation("org.osmdroid:osmdroid-android:6.1.20")
+ implementation("org.maplibre.navigation:navigation-core-android:5.0.0")
+ implementation("org.maplibre.gl:android-sdk:13.5.0")
+ implementation("com.google.android.gms:play-services-location:21.4.0")
  testImplementation("junit:junit:4.13.2")
  testImplementation("androidx.test:core:1.7.0")
  testImplementation("org.robolectric:robolectric:4.16.1")
