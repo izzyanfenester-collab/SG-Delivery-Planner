@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalView
@@ -239,11 +240,12 @@ private fun PrimaryAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    color: Color = PremiumRoyal
+    color: Color = PremiumRoyal,
+    minHeight: Dp = 64.dp
 ) {
     Button(
         onClick = onClick, enabled = enabled,
-        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = minHeight),
         shape = RoundedCornerShape(18.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
@@ -251,10 +253,10 @@ private fun PrimaryAction(
 }
 
 @Composable
-private fun SecondaryAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+private fun SecondaryAction(label: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier, minHeight: Dp = 64.dp) {
     OutlinedButton(
         onClick = onClick, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(18.dp)
+        modifier = modifier.fillMaxWidth().heightIn(min = minHeight), shape = RoundedCornerShape(18.dp)
     ) { Text(label, style = MaterialTheme.typography.titleMedium) }
 }
 
@@ -280,26 +282,26 @@ private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, 
 }
 
 @Composable
-fun DeliveryDateControl(vm: PlannerViewModel) {
+fun DeliveryDateControl(vm: PlannerViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val context = LocalContext.current
     SecondaryAction(
-        "Delivery Date: ${vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}",
+        "Delivery Date${if (compact) "\n" else ": "}${vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}",
         { deliveryDatePicker(context, vm.deliveryDate, vm::selectDeliveryDate).show() },
-        enabled = !vm.busy
+        enabled = !vm.busy, modifier = modifier, minHeight = if (compact) 56.dp else 64.dp
     )
 }
 
 @Composable
-fun Clock(vm: PlannerViewModel) {
+fun Clock(vm: PlannerViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val context = LocalContext.current
     SecondaryAction(
-        "Start time: ${LocalTime.of(vm.startMinute / 60, vm.startMinute % 60).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))}",
+        "Start time${if (compact) "\n" else ": "}${LocalTime.of(vm.startMinute / 60, vm.startMinute % 60).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))}",
         {
             TimePickerDialog(context, { _, hour, minute ->
                 vm.startMinute = hour * 60 + minute
                 vm.persist()
             }, vm.startMinute / 60, vm.startMinute % 60, false).show()
-        }, enabled = !vm.busy
+        }, enabled = !vm.busy, modifier = modifier, minHeight = if (compact) 56.dp else 64.dp
     )
 }
 
@@ -307,13 +309,15 @@ fun Clock(vm: PlannerViewModel) {
 fun Home(vm: PlannerViewModel) {
     val parsed = parseInput(vm.input)
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
         StartLocationControls(vm)
-        DeliveryDateControl(vm)
-        Clock(vm)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DeliveryDateControl(vm, Modifier.weight(1f), compact = true)
+            Clock(vm, Modifier.weight(1f), compact = true)
+        }
         Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             value = vm.input, onValueChange = { vm.input = it; vm.persist() },
@@ -331,8 +335,10 @@ fun Home(vm: PlannerViewModel) {
                 Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-        PrimaryAction("Optimize route", vm::optimize, enabled = !vm.busy)
-        SecondaryAction("Clear postal codes", { vm.input = ""; vm.persist() }, enabled = !vm.busy)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryAction("Optimize route", vm::optimize, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
+            SecondaryAction("Clear postal code", { vm.input = ""; vm.persist() }, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
+        }
         TaxDeclareButton()
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
@@ -491,8 +497,8 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
         )
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         if (p.current !in p.stops.indices) {
             PageTitle("All stops reviewed", "Your delivery summary is ready, including any stops to revisit.")
@@ -509,11 +515,10 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
         } else {
             val stop = p.stops[p.current]
             PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Stop ${p.current + 1} of ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
-                    Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
-                    Text("Block ${stop.place.block}", color = Color.White, style = MaterialTheme.typography.titleLarge)
-                    Text(stop.place.area, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge)
                     StatusBadge(stop.status)
                     holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
@@ -525,10 +530,16 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                 }
             }
-            PrimaryAction("Navigate", { navigate(context, stop.place) }, enabled = !vm.busy)
-            PrimaryAction("Mark as delivered", { vm.progress("DELIVERED") }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald)
-            PrimaryAction("Put on hold", { holdStop = p.current }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumAmber)
-            PrimaryAction("Skip delivery", { vm.progress("SKIP") }, enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryAction("Navigate", { navigate(context, stop.place) }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
+                    PrimaryAction("Delivered", { vm.progress("DELIVERED") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald, minHeight = 56.dp)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryAction("On Hold", { holdStop = p.current }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumAmber, minHeight = 56.dp)
+                    PrimaryAction("Skipped", { vm.progress("SKIP") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73), minHeight = 56.dp)
+                }
+            }
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
