@@ -7,7 +7,10 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -15,21 +18,50 @@ internal enum class NavigationChoice(val label: String, val packageName: String?
     BUILT_IN("Built-in GPS"), GOOGLE_MAPS("Google Maps", "com.google.android.apps.maps"), WAZE("Waze", "com.waze")
 }
 
+/** Stored independently of route/history data; unknown legacy values safely mean Ask every time. */
+internal class NavigationPreferences(context: Context) {
+    private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    var default by mutableStateOf(NavigationChoice.entries.firstOrNull { it.name == prefs.getString("defaultNavigation", null) })
+        private set
+    fun updateDefault(choice: NavigationChoice?) {
+        default = choice
+        prefs.edit().apply { if (choice == null) remove("defaultNavigation") else putString("defaultNavigation", choice.name) }.apply()
+    }
+    fun launch(context: Context, plan: Plan, choice: NavigationChoice, saveDefault: Boolean): Boolean {
+        if (saveDefault) updateDefault(choice)
+        return openDeliveryNavigation(context, plan, choice)
+    }
+}
+
 @Composable
-internal fun NavigationChooser(onDismiss: () -> Unit, onChoose: (NavigationChoice) -> Unit, enabled: Boolean) {
+internal fun NavigationChooser(onDismiss: () -> Unit, onChoose: (NavigationChoice, Boolean) -> Unit, enabled: Boolean, initialSelection: NavigationChoice?) {
+    var selected by remember { mutableStateOf(initialSelection) }
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = PremiumNavy, titleContentColor = PremiumGold,
         title = { Text("Choose Navigation") },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NavigationChoice.entries.forEach { choice ->
-                    OutlinedButton(onClick = { onChoose(choice) }, enabled = enabled,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = PremiumGold)) { Text(choice.label) }
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        .selectable(selected == choice, enabled = enabled, role = Role.RadioButton, onClick = { selected = choice }),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected == choice, onClick = null, enabled = enabled,
+                            colors = RadioButtonDefaults.colors(selectedColor = PremiumGold, unselectedColor = PremiumGold))
+                        Text(choice.label, color = PremiumGold, modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } }
+        confirmButton = {
+            Button(onClick = { selected?.let { onChoose(it, true) } }, enabled = enabled && selected != null,
+                modifier = Modifier.heightIn(min = 52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)) { Text("Set Default") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = { selected?.let { onChoose(it, false) } }, enabled = enabled && selected != null,
+                modifier = Modifier.heightIn(min = 52.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = PremiumGold)) { Text("Just Once") }
+        }
     )
 }
 
