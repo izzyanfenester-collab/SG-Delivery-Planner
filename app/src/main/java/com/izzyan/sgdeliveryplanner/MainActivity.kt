@@ -104,7 +104,7 @@ fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
     if (vm.showWhatsAppImport) key(vm.whatsAppImportCodes, vm.whatsAppImportAnalysis) { WhatsAppImportDialog(
         initialCodes = vm.whatsAppImportCodes, initialAnalysis = vm.whatsAppImportAnalysis,
-        alreadyAdded = vm.existingImportCodes(), availableSlots = (50 - parseInput(vm.input).valid.size).coerceAtLeast(0), enabled = !vm.busy,
+        availableSlots = (50 - parseInput(vm.input).valid.size).coerceAtLeast(0), enabled = !vm.busy,
         onDismiss = vm::closeWhatsAppImport, onAdd = vm::addWhatsAppCodes
     ) }
     val view = LocalView.current
@@ -344,7 +344,7 @@ fun Home(vm: PlannerViewModel) {
         SecondaryAction("Import WhatsApp Orders", { vm.openWhatsAppImport() }, enabled = !vm.busy)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CountTile("Valid stops", parsed.valid.size, Modifier.weight(1f))
-            CountTile("Duplicates removed", parsed.duplicates, Modifier.weight(1f))
+            CountTile("Repeated stops", parsed.duplicates, Modifier.weight(1f))
         }
         if (parsed.invalid.isNotEmpty()) {
             PremiumCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.errorContainer) {
