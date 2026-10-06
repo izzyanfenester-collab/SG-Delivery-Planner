@@ -18,6 +18,31 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     private val navigation = ScreenHistory()
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
+    internal var whatsAppImportCodes by mutableStateOf<List<String>?>(null)
+    internal var showWhatsAppImport by mutableStateOf(false)
+    internal fun openWhatsAppImport(codes: List<String>? = null) {
+        whatsAppImportCodes = codes
+        showWhatsAppImport = true
+    }
+    internal fun closeWhatsAppImport() {
+        showWhatsAppImport = false; whatsAppImportCodes = null
+    }
+    internal fun existingImportCodes(): Set<String> = parseInput(input).valid.toSet() + route?.stops.orEmpty().map { it.place.postal }
+    internal fun addWhatsAppCodes(selected: List<String>) {
+        if (busy) return
+        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) && it !in existingImportCodes() }.distinct()
+        if (parseInput(input).valid.size + newCodes.size > 50) {
+            message = "Routes support up to 50 stops. Select fewer postal codes or remove existing entries."
+            return
+        }
+        if (newCodes.isNotEmpty()) {
+            input = listOf(input.trim(), newCodes.joinToString("\n")).filter { it.isNotEmpty() }.joinToString("\n")
+            persist()
+        }
+        notice = "${newCodes.size} postal codes imported successfully."
+        closeWhatsAppImport()
+        screen = "Home"
+    }
     var input by mutableStateOf(prefs.getString("input", "")!!)
     var screen: String
         get() = currentScreen

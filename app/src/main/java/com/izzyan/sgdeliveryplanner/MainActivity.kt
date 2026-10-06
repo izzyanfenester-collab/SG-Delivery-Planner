@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.viewModels
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
@@ -59,6 +60,12 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
 class MainActivity : ComponentActivity() {
+    private val plannerViewModel: PlannerViewModel by viewModels()
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeWhatsAppShare(intent)?.let(plannerViewModel::openWhatsAppImport)
+    }
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(englishAppContext(newBase))
     }
@@ -70,8 +77,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        consumeWhatsAppShare(intent)?.let(plannerViewModel::openWhatsAppImport)
         setContent {
-            val vm: PlannerViewModel = viewModel()
+            val vm = plannerViewModel
             val dark = vm.theme == "Dark" || (vm.theme == "System" && isSystemInDarkTheme())
             IzzDeliveryTheme(dark) { App(vm) }
         }
@@ -94,6 +102,10 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 @Composable
 fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
+    if (vm.showWhatsAppImport) key(vm.whatsAppImportCodes) { WhatsAppImportDialog(
+        initialCodes = vm.whatsAppImportCodes, alreadyAdded = vm.existingImportCodes(), availableSlots = (50 - parseInput(vm.input).valid.size).coerceAtLeast(0), enabled = !vm.busy,
+        onDismiss = vm::closeWhatsAppImport, onAdd = vm::addWhatsAppCodes
+    ) }
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(view, lifecycle, vm.screen) {
@@ -328,6 +340,7 @@ fun Home(vm: PlannerViewModel) {
             modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),
             shape = RoundedCornerShape(20.dp), enabled = !vm.busy
         )
+        SecondaryAction("Import WhatsApp Orders", { vm.openWhatsAppImport() }, enabled = !vm.busy)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CountTile("Valid stops", parsed.valid.size, Modifier.weight(1f))
             CountTile("Duplicates removed", parsed.duplicates, Modifier.weight(1f))
