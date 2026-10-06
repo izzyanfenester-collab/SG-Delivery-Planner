@@ -19,18 +19,36 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
     internal var whatsAppImportCodes by mutableStateOf<List<String>?>(null)
+    internal var whatsAppImportAnalysis by mutableStateOf<WhatsAppImportAnalysis?>(null)
     internal var showWhatsAppImport by mutableStateOf(false)
     internal fun openWhatsAppImport(codes: List<String>? = null) {
         whatsAppImportCodes = codes
+        whatsAppImportAnalysis = codes?.let {
+            WhatsAppImportAnalysis(it.distinct(), it.size, it.size - it.distinct().size, 0)
+        }
+        showWhatsAppImport = true
+    }
+    internal fun openWhatsAppImport(analysis: WhatsAppImportAnalysis) {
+        whatsAppImportCodes = analysis.postalCodes
+        whatsAppImportAnalysis = analysis
         showWhatsAppImport = true
     }
     internal fun closeWhatsAppImport() {
-        showWhatsAppImport = false; whatsAppImportCodes = null
+        showWhatsAppImport = false
+        whatsAppImportCodes = null
+        whatsAppImportAnalysis = null
     }
     internal fun existingImportCodes(): Set<String> = parseInput(input).valid.toSet() + route?.stops.orEmpty().map { it.place.postal }
-    internal fun addWhatsAppCodes(selected: List<String>) {
+    internal fun addWhatsAppCodes(
+        selected: List<String>,
+        importAnalysis: WhatsAppImportAnalysis? = whatsAppImportAnalysis
+    ) {
         if (busy) return
-        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) && it !in existingImportCodes() }.distinct()
+        val existingBefore = existingImportCodes()
+        val analysis = importAnalysis ?: WhatsAppImportAnalysis(
+            selected.distinct(), selected.size, selected.size - selected.distinct().size, 0
+        )
+        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) && it !in existingBefore }.distinct()
         if (parseInput(input).valid.size + newCodes.size > 50) {
             message = "Routes support up to 50 stops. Select fewer postal codes or remove existing entries."
             return
@@ -39,7 +57,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             input = listOf(input.trim(), newCodes.joinToString("\n")).filter { it.isNotEmpty() }.joinToString("\n")
             persist()
         }
-        notice = "${newCodes.size} postal codes imported successfully."
+        val duplicateCount = analysis.duplicate + analysis.postalCodes.count { it in existingBefore }
+        notice = "Found ${analysis.found} / Added ${newCodes.size} / Duplicate $duplicateCount / Failed ${analysis.failed}"
         closeWhatsAppImport()
         screen = "Home"
     }
