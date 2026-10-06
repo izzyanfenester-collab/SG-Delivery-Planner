@@ -16,7 +16,11 @@ class WhatsAppShareTest {
             .putExtra(Intent.EXTRA_TEXT, "Customer Private\nAlamat: Singapore 792452\nNo.telefon: +6592483000")
             .putExtra(Intent.EXTRA_SUBJECT, "Payment details")
         intent.clipData = ClipData.newPlainText("Customer", "Private order")
-        assertEquals(listOf("792452"), consumeWhatsAppShare(intent))
+        val result = consumeWhatsAppShare(intent)
+        assertEquals(listOf("792452"), result?.postalCodes)
+        assertEquals(1, result?.found)
+        assertEquals(0, result?.duplicate)
+        assertEquals(0, result?.failed)
         assertNull(intent.extras); assertNull(intent.clipData); assertNull(intent.data)
         assertNull(consumeWhatsAppShare(intent))
     }
