@@ -39,7 +39,7 @@ class WhatsAppImportViewModelTest {
         vm.addWhatsAppCodes(listOf("792452", "731625", "650202", "650202", "Customer name"))
         assertEquals("792452\n650202", vm.input)
         assertSame(plan, vm.route)
-        assertEquals("1 postal codes imported successfully.", vm.notice)
+        assertEquals("Found 3 / Added 1 / Duplicate 2 / Failed 0", vm.notice)
         assertEquals("Home", vm.screen)
         assertEquals(vm.input, app.getSharedPreferences("settings", 0).getString("input", null))
         assertFalse(vm.showWhatsAppImport); assertNull(vm.whatsAppImportCodes)
