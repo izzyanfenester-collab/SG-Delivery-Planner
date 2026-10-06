@@ -102,8 +102,9 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 @Composable
 fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
-    if (vm.showWhatsAppImport) key(vm.whatsAppImportCodes) { WhatsAppImportDialog(
-        initialCodes = vm.whatsAppImportCodes, alreadyAdded = vm.existingImportCodes(), availableSlots = (50 - parseInput(vm.input).valid.size).coerceAtLeast(0), enabled = !vm.busy,
+    if (vm.showWhatsAppImport) key(vm.whatsAppImportCodes, vm.whatsAppImportAnalysis) { WhatsAppImportDialog(
+        initialCodes = vm.whatsAppImportCodes, initialAnalysis = vm.whatsAppImportAnalysis,
+        alreadyAdded = vm.existingImportCodes(), availableSlots = (50 - parseInput(vm.input).valid.size).coerceAtLeast(0), enabled = !vm.busy,
         onDismiss = vm::closeWhatsAppImport, onAdd = vm::addWhatsAppCodes
     ) }
     val view = LocalView.current
