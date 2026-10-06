@@ -9,34 +9,76 @@ internal data class WhatsAppImportAnalysis(
 
 private val whatsAppPostalRegex = Regex("(?<!\\d)\\d{6}(?!\\d)")
 
+private val addressSectionRegex = Regex(
+    "(?ims)^\\s*(?:alamat(?:\\s+penghantaran)?|address|delivery\\s+address|shipping\\s+address|delivery\\s+location|lokasi(?:\\s+penghantaran)?|addr)\\s*:\\s*" +
+        "(.*?)" +
+        "(?=^\\s*(?:" +
+        "whatsapp(?:\\s+(?:no\\.?|number))?|wa(?:\\s+no\\.?)?|no\\.?\\s*telefon|phone(?:\\s+no\\.?)?|mobile|telefon|" +
+        "order|item|total|name|nama|fb|facebook|page|tarikh(?:\\s+order)?|date|payment|amount|price|harga|bayaran|jumlah|" +
+        "alamat(?:\\s+penghantaran)?|address|delivery\\s+address|shipping\\s+address|delivery\\s+location|lokasi(?:\\s+penghantaran)?|addr" +
+        ")\\s*:|\\z)"
+)
+
 private fun sanitizeWhatsAppImportSource(source: String): String = source
-    .replace(Regex("(?im)^[ \\t]*(?:payment|amount|total|price|harga|bayaran|jumlah|customer|name|nama|facebook|order(?:[ \\t]+id)?)[ \\t]*:[^\\n]*"), "")
-    .replace(Regex("(?im)^[ \\t]*(?:no\\.?[ \\t]*telefon|phone|mobile|telefon)[ \\t]*:[ \\t]*(?:\\n[ \\t]*)?[^\\n]*"), "")
+    // Remove links first so WhatsApp phone URLs can never contribute digits.
     .replace(Regex("(?i)https?://\\S+"), "")
-    .replace(Regex("\\+[0-9][0-9 ()-]{7,}"), "")
+    // Remove common labelled non-address fields.
+    .replace(
+        Regex(
+            "(?im)^[ \\t]*(?:payment|amount|total|price|harga|bayaran|jumlah|customer|name|nama|facebook|fb|page|" +
+                "order(?:[ \\t]+id)?|invoice|tarikh(?:[ \\t]+order)?|date)[ \\t]*:[^\\n]*"
+        ),
+        ""
+    )
+    // Remove phone/WhatsApp fields, including a number or URL on the next line.
+    .replace(
+        Regex(
+            "(?im)^[ \\t]*(?:whatsapp(?:[ \\t]+(?:no\\.?|number))?|wa(?:[ \\t]+no\\.?)?|" +
+                "no\\.?[ \\t]*telefon|phone(?:[ \\t]+no\\.?)?|mobile|telefon)[ \\t]*:[ \\t]*(?:\\n[ \\t]*)?[^\\n]*"
+        ),
+        ""
+    )
+    // Remove international/local phone-like digit runs before looking for six-digit postal codes.
+    .replace(Regex("(?<!\\d)\\+?65[ \\-]?[3689](?:[ \\-]?\\d){7}(?!\\d)"), "")
+    .replace(Regex("(?<!\\d)[3689](?:[ \\-]?\\d){7}(?!\\d)"), "")
+    .replace(Regex("(?<!\\d)\\d{7,}(?!\\d)"), "")
 
 /**
  * Analyze a pasted/shared WhatsApp batch without persisting customer text.
  *
- * found = valid postal-code occurrences detected in address sections (including repeats)
- * duplicate = repeated postal-code occurrences inside this import batch
- * failed = Alamat sections where no valid six-digit postal code was detected
+ * Supported address labels include:
+ * Alamat, Alamat Penghantaran, Address, Delivery Address, Shipping Address,
+ * Delivery Location, Lokasi, Lokasi Penghantaran and Addr.
+ *
+ * If no known address label exists, a safe whole-message fallback is used after
+ * phone numbers, URLs, dates, totals and other common non-address fields are removed.
+ *
+ * found = valid postal-code occurrences detected in the batch (including repeats)
+ * duplicate = repeated postal-code occurrences inside this one import batch
+ * failed = labelled address sections where no valid six-digit postal code was detected
  */
 internal fun analyzeWhatsAppImport(text: String): WhatsAppImportAnalysis {
     val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
-    val addresses = Regex("(?ims)^\\s*alamat\\s*:\\s*(.*?)(?=^\\s*(?:no\\.?\\s*telefon|alamat)\\s*:|\\z)")
-        .findAll(normalized).map { it.groupValues[1] }.toList()
-    val sections = if (addresses.isNotEmpty()) addresses else listOf(normalized)
-    val occurrencesBySection = sections.map { section ->
-        whatsAppPostalRegex.findAll(sanitizeWhatsAppImportSource(section)).map { it.value }.toList()
+    val addressSections = addressSectionRegex.findAll(normalized).map { it.groupValues[1] }.toList()
+
+    val occurrencesBySection = if (addressSections.isNotEmpty()) {
+        addressSections.map { section ->
+            whatsAppPostalRegex.findAll(sanitizeWhatsAppImportSource(section)).map { it.value }.toList()
+        }
+    } else {
+        listOf(
+            whatsAppPostalRegex.findAll(sanitizeWhatsAppImportSource(normalized)).map { it.value }.toList()
+        )
     }
+
     val occurrences = occurrencesBySection.flatten()
     val distinct = occurrences.distinct()
+
     return WhatsAppImportAnalysis(
         postalCodes = distinct,
         found = occurrences.size,
         duplicate = occurrences.size - distinct.size,
-        failed = if (addresses.isNotEmpty()) occurrencesBySection.count { it.isEmpty() } else 0
+        failed = if (addressSections.isNotEmpty()) occurrencesBySection.count { it.isEmpty() } else 0
     )
 }
 
