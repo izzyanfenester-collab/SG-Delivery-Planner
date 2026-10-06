@@ -59,6 +59,93 @@ class WhatsAppImportTest {
         assertEquals(1, result.duplicate)
         assertEquals(1, result.failed)
     }
+    @Test fun detectsMalayAlamatTemplate() {
+        val text = """TT.Co 💍 INVOICE: 28/9/26
+
+            Total: $55  (COD)
+
+            Nama: Komala
+            FB: Komala Sobari
+
+            Alamat:
+            18 Eunos Crescent #02-2889 Singapura 400018
+
+            No.telefon:
+            https://wa.me/+6583915054
+        """.trimIndent()
+        assertEquals(listOf("400018"), extractWhatsAppPostalCodes(text))
+    }
+
+    @Test fun detectsEnglishAddressTemplateWithSgPrefix() {
+        val text = """🔥ORDER SARUNG MIRAA🔥
+
+            Tarikh Order: 18/08/2026
+            Total: $130 (COD)
+            Name: Salamah Mohd
+            FB: Salamah Mohd
+            Page: Syurga Wanita
+
+            Address:
+            Blk 268 #03-254 Bukit Batok East Ave 4 SG 650268
+
+            Whatsapp no.:
+            https://wa.me/+6591779029
+
+            Item:
+            7 COLOURS
+        """.trimIndent()
+        assertEquals(listOf("650268"), extractWhatsAppPostalCodes(text))
+    }
+
+    @Test fun detectsEnglishMultilineAddressWithTrailingPeriod() {
+        val text = """🌸ORDER SHAKIRA🌸
+
+            Total: $ 80 (COD)
+
+            FB: Norlaili Mohd Nor
+            Name: Norlaili bte Mohd Nor
+
+            Address:
+            Blk 512 # 07 -04
+            Wellington Circle Singapore 750512.
+
+            Whatsapp no.:
+            https://wa.me/+6584253239
+
+            Tarikh Order: 24/7/2026
+        """.trimIndent()
+        assertEquals(listOf("750512"), extractWhatsAppPostalCodes(text))
+    }
+
+    @Test fun detectsMixedAddressLabelsInOneBulkPaste() {
+        val text = """Alamat:
+            Singapore 400018
+            No.telefon:
+            https://wa.me/+6583915054
+
+            Address:
+            SG 650268
+            Whatsapp no.:
+            https://wa.me/+6591779029
+
+            Delivery Address:
+            Singapore 750512.
+            Phone:
+            +6584253239
+        """.trimIndent()
+        assertEquals(listOf("400018", "650268", "750512"), extractWhatsAppPostalCodes(text))
+    }
+
+    @Test fun fallbackFindsPostalCodeWithoutKnownAddressLabelButIgnoresPhoneAndDates() {
+        val text = """ORDER TEST
+            Tarikh Order: 18/08/2026
+            Customer location Singapore 560123
+            Whatsapp no.:
+            +6591779029
+        """.trimIndent()
+        assertEquals(listOf("560123"), extractWhatsAppPostalCodes(text))
+    }
+
     @Test fun emptyAndPhoneOnlyTextProduceNoCodes() {
         listOf("", "+6592483000", "https://wa.me/+6596430908", "No.telefon: 123456").forEach { assertTrue(extractWhatsAppPostalCodes(it).isEmpty()) }
     }
