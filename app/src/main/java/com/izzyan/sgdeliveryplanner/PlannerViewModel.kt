@@ -38,17 +38,17 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         whatsAppImportCodes = null
         whatsAppImportAnalysis = null
     }
-    internal fun existingImportCodes(): Set<String> = parseInput(input).valid.toSet() + route?.stops.orEmpty().map { it.place.postal }
     internal fun addWhatsAppCodes(
         selected: List<String>,
         importAnalysis: WhatsAppImportAnalysis? = whatsAppImportAnalysis
     ) {
         if (busy) return
-        val existingBefore = existingImportCodes()
         val analysis = importAnalysis ?: WhatsAppImportAnalysis(
             selected.distinct(), selected.size, selected.size - selected.distinct().size, 0
         )
-        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) && it !in existingBefore }.distinct()
+        // Repeated postal codes are allowed across separate imports because two customers
+        // can share the same postal code. Within one import action, add each selected code once.
+        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) }.distinct()
         if (parseInput(input).valid.size + newCodes.size > 50) {
             message = "Routes support up to 50 stops. Select fewer postal codes or remove existing entries."
             return
@@ -57,8 +57,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             input = listOf(input.trim(), newCodes.joinToString("\n")).filter { it.isNotEmpty() }.joinToString("\n")
             persist()
         }
-        val duplicateCount = analysis.duplicate + analysis.postalCodes.count { it in existingBefore }
-        notice = "Found ${analysis.found} / Added ${newCodes.size} / Duplicate $duplicateCount / Failed ${analysis.failed}"
+        notice = "Found ${analysis.found} / Added ${newCodes.size} / Duplicate ${analysis.duplicate} / Failed ${analysis.failed}"
         closeWhatsAppImport()
         screen = "Home"
     }
