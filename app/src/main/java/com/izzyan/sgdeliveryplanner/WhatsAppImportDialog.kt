@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 internal fun WhatsAppImportDialog(
     initialCodes: List<String>?,
     initialAnalysis: WhatsAppImportAnalysis?,
-    alreadyAdded: Set<String>,
     availableSlots: Int,
     enabled: Boolean,
     onDismiss: () -> Unit,
@@ -33,7 +32,7 @@ internal fun WhatsAppImportDialog(
     }
     var analysis by remember { mutableStateOf(initial) }
     var selected by remember {
-        mutableStateOf(initial?.postalCodes.orEmpty().filterNot { it in alreadyAdded }.toSet())
+        mutableStateOf(initial?.postalCodes.orEmpty().toSet())
     }
     var clipboardMessage by remember { mutableStateOf<String?>(null) }
 
@@ -41,14 +40,12 @@ internal fun WhatsAppImportDialog(
         val result = analyzeWhatsAppImport(raw)
         text = ""
         analysis = result
-        selected = result.postalCodes.filterNot { it in alreadyAdded }.toSet()
+        selected = result.postalCodes.toSet()
     }
 
     val codes = analysis?.postalCodes
-    val addedCount = selected.count { it !in alreadyAdded }
-    val duplicateCount = analysis?.let { result ->
-        result.duplicate + result.postalCodes.count { code -> code in alreadyAdded }
-    } ?: 0
+    val addedCount = selected.size
+    val duplicateCount = analysis?.duplicate ?: 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -101,18 +98,17 @@ internal fun WhatsAppImportDialog(
                     }
                     if (codes!!.isEmpty()) Text("No postal codes found. Cancel and paste another message.")
                     TextButton(
-                        onClick = { selected = codes.filterNot { it in alreadyAdded }.toSet() },
+                        onClick = { selected = codes.toSet() },
                         enabled = enabled,
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) { Text("SELECT ALL") }
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
                         items(codes, key = { it }) { code ->
-                            val existing = code in alreadyAdded
                             Row(
                                 Modifier.fillMaxWidth().heightIn(min = 52.dp)
                                     .toggleable(
-                                        code in selected && !existing,
-                                        enabled = enabled && !existing,
+                                        code in selected,
+                                        enabled = enabled,
                                         role = Role.Checkbox,
                                         onValueChange = { checked ->
                                             selected = if (checked) selected + code else selected - code
@@ -121,14 +117,11 @@ internal fun WhatsAppImportDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
-                                    code in selected && !existing,
+                                    code in selected,
                                     onCheckedChange = null,
-                                    enabled = enabled && !existing
+                                    enabled = enabled
                                 )
-                                Text(
-                                    if (existing) "$code · Already added" else code,
-                                    Modifier.padding(start = 8.dp)
-                                )
+                                Text(code, Modifier.padding(start = 8.dp))
                             }
                         }
                     }
@@ -139,7 +132,7 @@ internal fun WhatsAppImportDialog(
             Button(
                 onClick = {
                     if (analysis == null) preview(text)
-                    else onAdd(codes!!.filter { it in selected && it !in alreadyAdded }, analysis!!)
+                    else onAdd(codes!!.filter { it in selected }, analysis!!)
                 },
                 enabled = enabled && (
                     if (analysis == null) text.isNotBlank()
