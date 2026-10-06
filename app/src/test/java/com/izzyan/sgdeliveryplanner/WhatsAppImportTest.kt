@@ -37,6 +37,28 @@ class WhatsAppImportTest {
         val text = "Payment: 100000\nCustomer: 123456\nFacebook: https://example.com/650202\nSingapore 792452"
         assertEquals(listOf("792452"), extractWhatsAppPostalCodes(text))
     }
+    @Test fun reportsFoundDuplicatesAndFailedAddressSections() {
+        val text = """Alamat:
+            Singapore 792452
+            No.telefon:
+            +6592483000
+
+            Alamat:
+            Singapore 792452
+            No.telefon:
+            +6596430908
+
+            Alamat:
+            Blk 999 Missing Postal
+            No.telefon:
+            +6591112222
+        """.trimIndent()
+        val result = analyzeWhatsAppImport(text)
+        assertEquals(listOf("792452"), result.postalCodes)
+        assertEquals(2, result.found)
+        assertEquals(1, result.duplicate)
+        assertEquals(1, result.failed)
+    }
     @Test fun emptyAndPhoneOnlyTextProduceNoCodes() {
         listOf("", "+6592483000", "https://wa.me/+6596430908", "No.telefon: 123456").forEach { assertTrue(extractWhatsAppPostalCodes(it).isEmpty()) }
     }
