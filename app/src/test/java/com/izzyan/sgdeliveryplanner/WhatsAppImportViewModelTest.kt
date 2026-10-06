@@ -30,16 +30,15 @@ class WhatsAppImportViewModelTest {
         dispatcher.scheduler.runCurrent()
     }
     @After fun cleanup() { store.clear(); Dispatchers.resetMain() }
-    @Test fun appendsOnlyUniqueSelectedCodesAndPreservesActivePlan() {
+    @Test fun allowsSamePostalAcrossImportsButDeduplicatesOneImportAction() {
         val plan = schedule(listOf(Place("731625", 1.35, 103.8, "1", "Area", "Road")),
             List(2) { Leg(1.0, 100.0, 10.0) }, LocalDateTime.of(2026, 10, 6, 10, 0), 8, "Normal Traffic", emptyList())
         vm.route = plan; vm.screen = "Delivery"; vm.input = "792452"
         vm.openWhatsAppImport(listOf("792452", "731625", "650202"))
-        assertEquals(setOf("792452", "731625"), vm.existingImportCodes())
         vm.addWhatsAppCodes(listOf("792452", "731625", "650202", "650202", "Customer name"))
-        assertEquals("792452\n650202", vm.input)
+        assertEquals("792452\n792452\n731625\n650202", vm.input)
         assertSame(plan, vm.route)
-        assertEquals("Found 3 / Added 1 / Duplicate 2 / Failed 0", vm.notice)
+        assertEquals("Found 3 / Added 3 / Duplicate 0 / Failed 0", vm.notice)
         assertEquals("Home", vm.screen)
         assertEquals(vm.input, app.getSharedPreferences("settings", 0).getString("input", null))
         assertFalse(vm.showWhatsAppImport); assertNull(vm.whatsAppImportCodes)
