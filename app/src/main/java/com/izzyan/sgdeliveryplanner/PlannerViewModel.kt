@@ -18,6 +18,49 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     private val navigation = ScreenHistory()
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
+    internal var whatsAppImportCodes by mutableStateOf<List<String>?>(null)
+    internal var whatsAppImportAnalysis by mutableStateOf<WhatsAppImportAnalysis?>(null)
+    internal var showWhatsAppImport by mutableStateOf(false)
+    internal fun openWhatsAppImport(codes: List<String>? = null) {
+        whatsAppImportCodes = codes
+        whatsAppImportAnalysis = codes?.let {
+            WhatsAppImportAnalysis(it.distinct(), it.size, it.size - it.distinct().size, 0)
+        }
+        showWhatsAppImport = true
+    }
+    internal fun openWhatsAppImport(analysis: WhatsAppImportAnalysis) {
+        whatsAppImportCodes = analysis.postalCodes
+        whatsAppImportAnalysis = analysis
+        showWhatsAppImport = true
+    }
+    internal fun closeWhatsAppImport() {
+        showWhatsAppImport = false
+        whatsAppImportCodes = null
+        whatsAppImportAnalysis = null
+    }
+    internal fun addWhatsAppCodes(
+        selected: List<String>,
+        importAnalysis: WhatsAppImportAnalysis? = whatsAppImportAnalysis
+    ) {
+        if (busy) return
+        val analysis = importAnalysis ?: WhatsAppImportAnalysis(
+            selected.distinct(), selected.size, selected.size - selected.distinct().size, 0
+        )
+        // Repeated postal codes are allowed across separate imports because two customers
+        // can share the same postal code. Within one import action, add each selected code once.
+        val newCodes = selected.filter { it.matches(Regex("[0-9]{6}")) }.distinct()
+        if (parseInput(input).valid.size + newCodes.size > 50) {
+            message = "Routes support up to 50 stops. Select fewer postal codes or remove existing entries."
+            return
+        }
+        if (newCodes.isNotEmpty()) {
+            input = listOf(input.trim(), newCodes.joinToString("\n")).filter { it.isNotEmpty() }.joinToString("\n")
+            persist()
+        }
+        notice = "Found ${analysis.found} / Added ${newCodes.size} / Duplicate ${analysis.duplicate} / Failed ${analysis.failed}"
+        closeWhatsAppImport()
+        screen = "Home"
+    }
     var input by mutableStateOf(prefs.getString("input", "")!!)
     var screen: String
         get() = currentScreen

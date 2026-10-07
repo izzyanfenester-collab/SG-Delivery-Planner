@@ -10,7 +10,7 @@ data class Input(val valid: List<String>, val invalid: List<String>, val duplica
 fun parseInput(raw: String): Input {
  val tokens = raw.trim().split(Regex("[\\s,;]+" )).filter { it.isNotEmpty() }
  val valid = tokens.filter { it.matches(Regex("[0-9]{6}")) }
- return Input(valid.distinct(),tokens.filterNot { it.matches(Regex("[0-9]{6}")) }.distinct(),valid.size-valid.distinct().size)
+ return Input(valid,tokens.filterNot { it.matches(Regex("[0-9]{6}")) }.distinct(),valid.size-valid.distinct().size)
 }
 data class Leg(val km: Double, val baseSeconds: Double, val bufferSeconds: Double) { val plannedSeconds get() = baseSeconds + bufferSeconds }
 data class Stop(val place: Place, val leg: Leg, val arrival: String, val leave: String, val cumulativeKm: Double, val status: String = "PENDING", val completedAt: String? = null, val holdReason: String? = null, val holdNote: String? = null, val reviewedAt: String? = null, val etaArrival: String? = null, val etaLeave: String? = null)

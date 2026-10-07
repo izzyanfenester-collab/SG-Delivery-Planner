@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 class PlannerTest {
  @Test fun validationPreservesLeadingZerosAndReportsErrors() {
   val p=parseInput("012345,730120;730120\nBAD 12345 １２３４５６")
-  assertEquals(listOf("012345","730120"),p.valid)
+  assertEquals(listOf("012345","730120","730120"),p.valid)
   assertEquals(listOf("BAD","12345","１２３４５６"),p.invalid)
   assertEquals(1,p.duplicates)
  }
