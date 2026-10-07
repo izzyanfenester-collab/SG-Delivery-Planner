@@ -10,9 +10,9 @@ internal data class WhatsAppImportAnalysis(
 private val whatsAppPostalRegex = Regex("(?<!\\d)\\d{6}(?!\\d)")
 
 private val addressSectionRegex = Regex(
-    "(?ims)^\\s*(?:alamat(?:\\s+penghantaran)?|address|delivery\\s+address|shipping\\s+address|delivery\\s+location|lokasi(?:\\s+penghantaran)?|addr)\\s*:\\s*" +
+    "(?ims)^[^\\p{L}\\p{N}\\r\\n]*(?:alamat(?:\\s+penghantaran)?|address|delivery\\s+address|shipping\\s+address|delivery\\s+location|lokasi(?:\\s+penghantaran)?|addr)\\s*:\\s*" +
         "(.*?)" +
-        "(?=^\\s*(?:" +
+        "(?=^[^\\p{L}\\p{N}\\r\\n]*(?:" +
         "whatsapp(?:\\s+(?:no\\.?|number))?|wa(?:\\s+no\\.?)?|no\\.?\\s*telefon|phone(?:\\s+no\\.?)?|mobile|telefon|" +
         "order|item|total|name|nama|fb|facebook|page|tarikh(?:\\s+order)?|date|payment|amount|price|harga|bayaran|jumlah|" +
         "alamat(?:\\s+penghantaran)?|address|delivery\\s+address|shipping\\s+address|delivery\\s+location|lokasi(?:\\s+penghantaran)?|addr" +
@@ -25,7 +25,7 @@ private fun sanitizeWhatsAppImportSource(source: String): String = source
     // Remove common labelled non-address fields.
     .replace(
         Regex(
-            "(?im)^[ \\t]*(?:payment|amount|total|price|harga|bayaran|jumlah|customer|name|nama|facebook|fb|page|" +
+            "(?im)^[^\\p{L}\\p{N}\\r\\n]*(?:payment|amount|total|price|harga|bayaran|jumlah|customer|name|nama|facebook|fb|page|" +
                 "order(?:[ \\t]+id)?|invoice|tarikh(?:[ \\t]+order)?|date)[ \\t]*:[^\\n]*"
         ),
         ""
@@ -33,7 +33,7 @@ private fun sanitizeWhatsAppImportSource(source: String): String = source
     // Remove phone/WhatsApp fields, including a number or URL on the next line.
     .replace(
         Regex(
-            "(?im)^[ \\t]*(?:whatsapp(?:[ \\t]+(?:no\\.?|number))?|wa(?:[ \\t]+no\\.?)?|" +
+            "(?im)^[^\\p{L}\\p{N}\\r\\n]*(?:whatsapp(?:[ \\t]+(?:no\\.?|number))?|wa(?:[ \\t]+no\\.?)?|" +
                 "no\\.?[ \\t]*telefon|phone(?:[ \\t]+no\\.?)?|mobile|telefon)[ \\t]*:[ \\t]*(?:\\n[ \\t]*)?[^\\n]*"
         ),
         ""
