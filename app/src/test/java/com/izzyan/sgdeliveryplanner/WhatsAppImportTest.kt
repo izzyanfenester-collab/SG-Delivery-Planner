@@ -136,6 +136,131 @@ class WhatsAppImportTest {
         assertEquals(listOf("400018", "650268", "750512"), extractWhatsAppPostalCodes(text))
     }
 
+    @Test fun detectsTwentyOnePostalCodesFromEmojiPrefixedBulkWhatsAppPaste() {
+        val text = """📍 Alamat:
+            Blk 189B Marsiling Road
+            #11-960 S'pore 732189
+            📱 WhatsApp:
+            https://wa.me/+6597983272
+
+            📍 Alamat:
+            Block 623, Woodlands Dr 52, #10-02, S 730623
+            📱 WhatsApp:
+            https://wa.me/+6586838323
+
+            📍 Alamat:
+            Block 689E #06-138 Woodlands Dr 75 SINGAPORE 735689
+            📱 WhatsApp:
+            https://wa.me/+6590377878
+
+            Alamat:
+            Blk 372B #06-225 Sun Sails Sembawang Ave S 752372
+            No.telefon:
+            https://wa.me/+6589781308
+
+            📍 Alamat:
+            Blk 462 sembawang drive, 13-231, Singapore 750462
+            📱 WhatsApp:
+            https://wa.me/+6596431748
+
+            Address:
+            Blk 512 # 07 -04
+            Wellington Circle Singapore 750512.
+            Whatsapp no.:
+            https://wa.me/+6584253239
+
+            📍 Alamat:
+            Blk 296 # 03-07 Yishun St. 20 S'pore 760296
+            📱 WhatsApp:
+            https://wa.me/+6598321920
+
+            📍 Alamat:
+            Blk 706 #03-184 Yishun Avenue 5 Spore 760706
+            📱 WhatsApp:
+            https://wa.me/+6581616455
+
+            Alamat:
+            Blk 709 #09-66 Yishun Ave 5 S 760709
+            No.telefon:
+            https://wa.me/+6581003668
+
+            Alamat:
+            776 Yishun Ave 2 #12-1601 Singapore 760776
+            No.telefon:
+            https://wa.me/+6596999130
+
+            📍 Alamat:
+            Blk 199 -B Punggol Field #10-421 SE 822199
+            📱 WhatsApp:
+            https://wa.me/+6591072985
+
+            📍 Alamat:
+            Blk 422A Northshore Drive #18-729 S 821422
+            📱 WhatsApp:
+            https://wa.me/+6588660551
+
+            📍 Alamat:
+            233C Sumang lane #02-305
+            Matilda Court Singapore 823233
+            📱 WhatsApp:
+            https://wa.me/+6580143418
+
+            Address:
+            Blk 466 tampines street 44 #03-36 S 520466
+            Whatsapp no.:
+            https://wa.me/+6586127661
+
+            📍 Alamat:
+            BLK 863 TAMPINES STREET 83 #06-474 S(520863)
+            📱 WhatsApp:
+            https://wa.me/+6588962432
+
+            📍 Alamat:
+            Blk 704 #03-209 Hougang Ave 2(530704)
+            📱 WhatsApp:
+            https://wa.me/+6594795775
+
+            Alamat:
+            151 Bedok Reservoir Road #04-1745 Singapore 470151
+            No.telefon:
+            https://wa.me/+6596170731
+
+            📍 Alamat:
+            Blk 22 Eunos Crescent
+            #03-3001 Singapore 400022
+            📱 WhatsApp:
+            https://wa.me/+6597543440
+
+            Address:
+            Blk 316 #02-371 Ubi ave 1 S 400316
+            Whatsapp no.:
+            https://wa.me/+6591119759
+
+            📍 Alamat:
+            Blk 142 lor 2 Toa payoh #05-166 S 310142
+            📱 WhatsApp:
+            https://wa.me/+6593894171
+
+            Alamat:
+            Blk 513 #04-34 Wellington Circle Singapore 750513
+            No.telefon:
+            https://wa.me/+6587683467
+        """.trimIndent()
+
+        val result = analyzeWhatsAppImport(text)
+        assertEquals(
+            listOf(
+                "732189", "730623", "735689", "752372", "750462", "750512", "760296",
+                "760706", "760709", "760776", "822199", "821422", "823233", "520466",
+                "520863", "530704", "470151", "400022", "400316", "310142", "750513"
+            ),
+            result.postalCodes
+        )
+        assertEquals(21, result.found)
+        assertEquals(0, result.duplicate)
+        assertEquals(0, result.failed)
+    }
+
     @Test fun fallbackFindsPostalCodeWithoutKnownAddressLabelButIgnoresPhoneAndDates() {
         val text = """ORDER TEST
             Tarikh Order: 18/08/2026
