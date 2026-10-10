@@ -17,7 +17,13 @@ import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class SummaryReportAndroidTest {
+    @org.junit.Before fun resetProviderRoots() {
+        // Robolectric assigns a new app cache directory per test, unlike an Android process.
+        val cache=androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply {isAccessible=true}
+        (cache.get(null) as MutableMap<*,*>).clear()
+    }
     @Test
     fun fullEnglishReportUsesTheRequestedOrderAndSavedMoneyWithoutNetCash() {
         val original = Locale.getDefault()
@@ -55,7 +61,6 @@ Remark: Fuel receipt retained""",
         assertFalse(report.contains("\n\n"))
         assertEquals(16, report.lines().size)
         assertTrue(report.endsWith("Remark: timah belum bayar\nabu xde rumah"))
-        assertEquals(report, summaryReportShareIntent(plan).getStringExtra(Intent.EXTRA_TEXT))
         val app = ApplicationProvider.getApplicationContext<Application>()
         copySummaryReport(app, plan)
         val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -85,29 +90,35 @@ Remark: Fuel receipt retained""",
     }
 
     @Test
-    fun shareIntentContainsTheCompleteTextWithPlainTextMimeType() {
+    fun shareIntentContainsOnlyTheThemedPngWithReadPermission() {
         val plan = route()
-        val intent = summaryReportShareIntent(plan)
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val intent = summaryReportShareIntent(app,plan)
         assertEquals(Intent.ACTION_SEND, intent.action)
-        assertEquals("text/plain", intent.type)
+        assertEquals("image/png", intent.type)
         assertEquals("Delivery Report Summary", intent.getStringExtra(Intent.EXTRA_SUBJECT))
-        assertEquals(buildSummaryReport(plan), intent.getStringExtra(Intent.EXTRA_TEXT))
-        assertNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
+        assertNull(intent.getStringExtra(Intent.EXTRA_TEXT))
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        val uri=requireNotNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
+        assertEquals("content",uri.scheme)
+        assertEquals("${app.packageName}.excel-files",uri.authority)
+        assertNotNull(intent.clipData)
     }
 
     @Test
     fun shareReportOpensAnAndroidChooserWithTheCompleteReport() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val plan = route()
-        shareSummaryReport(app, plan)
+        openSummaryReportShare(app,summaryReportShareIntent(app,plan))
         val chooser = Shadows.shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         assertEquals("Share Report", chooser.getCharSequenceExtra(Intent.EXTRA_TITLE))
         assertTrue(chooser.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         val send = requireNotNull(chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT))
         assertEquals(Intent.ACTION_SEND, send.action)
-        assertEquals("text/plain", send.type)
-        assertEquals(buildSummaryReport(plan), send.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("image/png", send.type)
+        assertNull(send.getStringExtra(Intent.EXTRA_TEXT))
+        assertNotNull(send.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
     }
 
     @Test
@@ -121,6 +132,30 @@ Remark: Fuel receipt retained""",
         assertEquals(1, clip.itemCount)
         assertEquals(buildSummaryReport(plan), clip.getItemAt(0).coerceToText(app).toString())
         assertEquals("Report copied to clipboard", ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test fun summaryPngHasNavyGoldThemeAndWrappingRemarkExpandsWithoutChangingSavedValues() {
+        val app=ApplicationProvider.getApplicationContext<Application>()
+        val original=route().copy(cashOnHand="400.00",tax="15.00",exchangeRate="3.59",remark="timah belum bayar\nabu xde rumah")
+        val before=PlanJson.encode(original)
+        val file=generateSummaryReportImage(app,original)
+        val png=android.graphics.BitmapFactory.decodeFile(file.path)
+        assertEquals(1080,png.width)
+        assertEquals(android.graphics.Color.rgb(7,23,45),png.getPixel(0,0))
+        assertEquals(android.graphics.Color.rgb(16,39,68),png.getPixel(35,png.height/2))
+        var gold=false;var letters=false
+        for(y in 20 until png.height-20 step 2) for(x in 20 until png.width-20 step 2) {
+            val pixel=png.getPixel(x,y)
+            if(android.graphics.Color.red(pixel)>180 && android.graphics.Color.green(pixel)>130 && android.graphics.Color.blue(pixel)<130) gold=true
+            if(android.graphics.Color.red(pixel)>210 && android.graphics.Color.green(pixel)>210 && android.graphics.Color.blue(pixel)>210) letters=true
+        }
+        assertTrue("Gold accents missing",gold);assertTrue("Summary text not rendered",letters)
+        val more=generateSummaryReportImage(app,original.copy(remark=(1..20).joinToString("\n") {"Additional remark $it"}))
+        val longer=android.graphics.BitmapFactory.decodeFile(more.path)
+        assertTrue(longer.height > png.height)
+        png.recycle();longer.recycle()
+        assertEquals(before,PlanJson.encode(original))
+        assertTrue(buildSummaryReport(original).contains("Tax: SGD 15.00 (RM 53.85)"))
     }
 
     private fun route(): Plan {

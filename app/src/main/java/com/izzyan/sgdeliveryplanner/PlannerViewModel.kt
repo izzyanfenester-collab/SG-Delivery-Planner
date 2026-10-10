@@ -46,8 +46,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             if (queue.isNullOrEmpty()) CustomerOrder(postalCode = code) else queue.removeAt(0)
         }
     }
-    fun saveProof(request: ProofRequest, uri: android.net.Uri) {
-        if (busy) return
+    fun saveProof(request: ProofRequest, uri: android.net.Uri, captureFile: java.io.File? = null) {
+        if (busy) { captureFile?.delete(); return }
         busy = true
         viewModelScope.launch {
             val store = OrderProofStore(getApplication())
@@ -66,7 +66,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 newId = null; notice = "Proof saved."
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e,"Proof could not be saved. Your existing proof is retained.") }
-            finally { newId?.let { store.delete(it) }; busy = false }
+            finally { newId?.let { store.delete(it) }; captureFile?.delete(); busy = false }
         }
     }
     var input by mutableStateOf(prefs.getString("input", "")!!)

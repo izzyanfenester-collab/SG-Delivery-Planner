@@ -545,7 +545,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             PrimaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
             SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
             p.stops.forEachIndexed { index, stop ->
-                if (normalizedStatus(stop.status) != "DELIVERED") StopCard(vm, p, stop, index, false) { vm.revisit(index) }
+                if (normalizedStatus(stop.status) != "DELIVERED") StopCard(vm, p, stop, index, false, showShareReport = false) { vm.revisit(index) }
             }
         } else {
             val stop = p.stops[p.current]
@@ -579,12 +579,11 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text("Proof of Payment")}
-                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text("Proof of Delivery")}
+                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.paymentProofFileId != null) "✓ Proof of Payment" else "Proof of Payment")}
+                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.proofFileId != null) "✓ Proof of Delivery" else "Proof of Delivery")}
             }
             if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
-            OrderShareButton(stop,p.current,!vm.busy)
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
@@ -633,7 +632,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
 }
 
 @Composable
-private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, onClick: () -> Unit) {
+private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
     PremiumCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) PremiumGold else null
@@ -658,7 +657,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
             stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
             holdDetails(stop)?.let { Text("On hold: $it", style = MaterialTheme.typography.bodyMedium) }
             Text("Distance from previous stop: ${km(stop.leg.km)}")
-            OrderShareButton(stop,index,!vm.busy)
+            if (showShareReport) OrderShareButton(stop,index,!vm.busy)
             Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
     }

@@ -9,7 +9,7 @@ import java.io.File
 import java.util.UUID
 
 enum class ProofKind { PAYMENT, DELIVERY }
-data class ProofRequest(val routeId: String, val orderId: String, val kind: ProofKind)
+data class ProofRequest(val routeId: String, val orderId: String, val kind: ProofKind, val chooseSource: Boolean = false)
 
 class OrderProofStore(private val context: Context) {
     private val directory get() = File(context.filesDir, "order_proofs").apply { mkdirs() }

@@ -24,6 +24,11 @@ import java.time.LocalDateTime
 @Config(sdk=[28])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class OrderProofAndReportTest {
+    @org.junit.Before fun resetProviderRoots() {
+        // Robolectric assigns a new app cache directory per test, unlike an Android process.
+        val cache=androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply {isAccessible=true}
+        (cache.get(null) as MutableMap<*,*>).clear()
+    }
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private fun plan(): Plan {
         val place=Place("650417",1.35,103.8,"417","Area","OneMap address")

@@ -55,16 +55,47 @@ import kotlinx.coroutines.withContext
 }
 
 @Composable fun ProofPickerHost(vm: PlannerViewModel) {
+    val context=LocalContext.current
+    val capture=remember(context) {ProofCameraCapture(context)}
     var pendingRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOrder by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingKind by rememberSaveable { mutableStateOf<String?>(null) }
+    var captureName by rememberSaveable {mutableStateOf<String?>(null)}
+    fun pending()=pendingRoute?.let { route -> pendingOrder?.let { order -> pendingKind?.let { kind -> ProofRequest(route,order,ProofKind.valueOf(kind)) } } }
+    fun clear() {pendingRoute=null; pendingOrder=null; pendingKind=null; captureName=null}
+    fun target(request: ProofRequest) {pendingRoute=request.routeId; pendingOrder=request.orderId; pendingKind=request.kind.name; vm.proofRequest=null}
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        val request = pendingRoute?.let { route -> pendingOrder?.let { order -> pendingKind?.let { kind -> ProofRequest(route,order,ProofKind.valueOf(kind)) } } }
-        pendingRoute=null; pendingOrder=null; pendingKind=null
-        if (uri != null && request != null) vm.saveProof(request,uri)
+        val request=pending(); clear()
+        if(uri!=null && request!=null) vm.saveProof(request,uri)
     }
-    LaunchedEffect(vm.proofRequest) {
-        vm.proofRequest?.let { request -> pendingRoute=request.routeId; pendingOrder=request.orderId; pendingKind=request.kind.name; vm.proofRequest=null; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    val camera = rememberLauncherForActivityResult(ProofTakePicture()) { success ->
+        val request=pending(); val file=capture.file(captureName); clear()
+        if(success && request!=null && file!=null) vm.saveProof(request,capture.uri(file),file)
+        else file?.delete()
+    }
+    fun gallery(request: ProofRequest) {
+        target(request)
+        try {picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))}
+        catch(_: Exception) {clear(); android.widget.Toast.makeText(context,"Gallery could not be opened. Please try again.",android.widget.Toast.LENGTH_LONG).show()}
+    }
+    LaunchedEffect(vm.proofRequest) {vm.proofRequest?.takeIf { !it.chooseSource }?.let {gallery(it)}}
+    vm.proofRequest?.takeIf {it.chooseSource}?.let {request ->
+        AlertDialog(onDismissRequest={vm.proofRequest=null},title={Text("Add Proof")},text={
+            Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Button(onClick={
+                    target(request)
+                    try {
+                        val file=capture.create(); captureName=file.name
+                        camera.launch(capture.uri(file))
+                    } catch(_: Exception) {
+                        capture.file(captureName)?.delete(); clear()
+                        android.widget.Toast.makeText(context,"Camera could not be opened. Please choose from Gallery.",android.widget.Toast.LENGTH_LONG).show()
+                        vm.proofRequest=request
+                    }
+                },enabled=!vm.busy,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) {Text("Take Photo")}
+                OutlinedButton(onClick={gallery(request)},enabled=!vm.busy,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) {Text("Choose from Gallery")}
+            }
+        },confirmButton={},dismissButton={TextButton(onClick={vm.proofRequest=null}) {Text("Cancel")}})
     }
 }
 
@@ -121,7 +152,7 @@ import kotlinx.coroutines.withContext
         }
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             if(id!=null) TextButton(onClick={viewing=true}) {Text("View Photo")}
-            OutlinedButton(onClick={vm.proofRequest=ProofRequest(plan.id,stop.orderId,kind)},enabled=!vm.busy,modifier=Modifier.heightIn(min=52.dp)) {Text(if(id!=null) "Replace Photo" else if(kind==ProofKind.PAYMENT) "Upload Payment Proof" else "Upload Proof")}
+            OutlinedButton(onClick={vm.proofRequest=ProofRequest(plan.id,stop.orderId,kind,chooseSource=vm.screen=="Delivery")},enabled=!vm.busy,modifier=Modifier.heightIn(min=52.dp)) {Text(if(id!=null) "Replace Photo" else if(kind==ProofKind.PAYMENT) "Upload Payment Proof" else "Upload Proof")}
         }
     }
     if(viewing) ProofViewer(id,title) {viewing=false}
