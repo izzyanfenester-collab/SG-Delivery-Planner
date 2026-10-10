@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -15,9 +17,60 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     private val prefs = app.getSharedPreferences("settings", 0)
     private val locationSettings = StartLocationSettings(app)
     internal val navigationPreferences = NavigationPreferences(app)
+    internal val whatsappPreferences = WhatsAppPreferences(app)
+    var deliveryReportOrderId by mutableStateOf<String?>(null)
     private val navigation = ScreenHistory()
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
+    var draftOrders by mutableStateOf<List<CustomerOrder>>(runCatching {
+        com.google.gson.Gson().fromJson(prefs.getString("draftCustomerOrders", "[]"), Array<CustomerOrder>::class.java).toList()
+    }.getOrDefault(emptyList())); private set
+    var proofRequest by mutableStateOf<ProofRequest?>(null)
+    var importOrdersDialog by mutableStateOf(false)
+    internal fun ordersBeforeImport(): List<CustomerOrder> =
+        if (parseInput(input).invalid.isEmpty()) planningOrders() else emptyList()
+    fun importOrders(orders: List<CustomerOrder>, failed: Int = 0) {
+        if (busy) return
+        val existing=ordersBeforeImport()
+        if (existing.size + orders.size > 50) { message = "Routes support at most 50 deliveries. Select fewer orders."; return }
+        // Raw chat and invalid manual tokens can never leak through the import path.
+        draftOrders = existing + orders
+        input = draftOrders.joinToString("\n") { it.postalCode }
+        persist(); importOrdersDialog = false; message = ""
+        notice = "${orders.size} orders imported.\nDuplicate postals preserved.\n$failed ${if(failed==1) "order" else "orders"} failed."
+    }
+    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); persist() }
+    internal fun planningOrders(): List<CustomerOrder> {
+        if (draftOrders.isEmpty()) return parseInput(input).valid.map { CustomerOrder(postalCode = it) }
+        val queues = draftOrders.groupBy { it.postalCode }.mapValues { it.value.toMutableList() }
+        return input.trim().split(Regex("[\\s,;]+")).filter { it.matches(Regex("[0-9]{6}")) }.map { code ->
+            val queue = queues[code]
+            if (queue.isNullOrEmpty()) CustomerOrder(postalCode = code) else queue.removeAt(0)
+        }
+    }
+    fun saveProof(request: ProofRequest, uri: android.net.Uri, captureFile: java.io.File? = null) {
+        if (busy) { captureFile?.delete(); return }
+        busy = true
+        viewModelScope.launch {
+            val store = OrderProofStore(getApplication())
+            var newId: String? = null
+            try {
+                withContext(Dispatchers.IO) { newId = store.import(uri, request.kind) }
+                val current = route?.takeIf { it.id == request.routeId } ?: error("Route changed. Open the correct order and try again.")
+                val old = current.stops.single { it.orderId == request.orderId }.order
+                val updated = updateOrderProof(current,request.orderId,request.kind,requireNotNull(newId),LocalDateTime.now(singapore).toString())
+                repo.save(updated); route = updated
+                newId = null
+                val oldId = if (request.kind == ProofKind.PAYMENT) old?.paymentProofFileId else old?.proofFileId
+                if (updated.stops.none { it.order?.paymentProofFileId == oldId || it.order?.proofFileId == oldId }) {
+                    withContext(Dispatchers.IO) { store.delete(oldId) }
+                }
+                newId = null; notice = "Proof saved."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message = englishError(e,"Proof could not be saved. Your existing proof is retained.") }
+            finally { newId?.let { store.delete(it) }; captureFile?.delete(); busy = false }
+        }
+    }
     var input by mutableStateOf(prefs.getString("input", "")!!)
     var screen: String
         get() = currentScreen
@@ -112,6 +165,10 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     }
 
     fun persist() {
+        prefs.edit().apply {
+            if (draftOrders.isEmpty()) remove("draftCustomerOrders")
+            else putString("draftCustomerOrders",com.google.gson.Gson().toJson(draftOrders))
+        }.apply()
         prefs.edit().putInt("service", service).putInt("start", startMinute)
             .putString("traffic", traffic).putString("theme", theme)
             .putString("endpoint", endpoint).putString("input", input)
@@ -163,6 +220,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 else "Use six digits for each Singapore postal code. Check these entries: ${parsed.invalid.joinToString()}"
             return
         }
+        val orders = planningOrders()
+        if (orders.size > 50) { message = "Routes support at most 50 deliveries."; return }
         val routeStart = scheduledStart()
         persist()
         refreshExchangeRate()
@@ -172,7 +231,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             try {
                 val planned = repo.plan(
                     parsed.valid, routeStart,
-                    service, traffic, endpoint, selectedStartLocation
+                    service, traffic, endpoint, selectedStartLocation, orders
                 ) { message = it }
                 val withRate = planned.copy(exchangeRate = latestExchangeRate)
                 repo.save(withRate)
@@ -212,6 +271,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 repo.save(updated)
                 route = updated
                 if (updated.reviewedFinishedAt != null) screen = "Summary"
+                if (action == "DELIVERED") deliveryReportOrderId = planned.stops[planned.current].orderId
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not save your delivery progress. Please try again.") }
             finally { busy = false }

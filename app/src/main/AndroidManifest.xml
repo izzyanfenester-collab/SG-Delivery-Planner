@@ -3,7 +3,7 @@
  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
- <queries><package android:name="com.openai.chatgpt"/><package android:name="com.google.android.apps.maps"/><package android:name="com.waze"/><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
+ <queries><package android:name="com.whatsapp"/><package android:name="com.whatsapp.w4b"/><package android:name="com.openai.chatgpt"/><package android:name="com.google.android.apps.maps"/><package android:name="com.waze"/><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
  <application android:name=".IzzDeliveryApplication" android:localeConfig="@xml/locales_config" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:theme="@style/AppTheme" android:supportsRtl="true" android:usesCleartextTraffic="false">
   <provider android:name=".ExcelFileProvider" android:authorities="${applicationId}.excel-files" android:exported="false" android:grantUriPermissions="true">
    <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/excel_file_paths"/>

@@ -24,6 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -75,15 +79,14 @@ fun buildSummaryReport(plan: Plan): String = buildString {
     }
 }
 
-internal fun summaryReportShareIntent(plan: Plan): Intent = Intent(Intent.ACTION_SEND).apply {
-    type = "text/plain"
-    putExtra(Intent.EXTRA_SUBJECT, "Delivery Report Summary")
-    putExtra(Intent.EXTRA_TEXT, buildSummaryReport(plan))
-}
+internal fun summaryReportShareIntent(context: Context, plan: Plan): Intent =
+    singleDeliveryShareIntent(context,generateSummaryReportImage(context,plan)).apply {
+        putExtra(Intent.EXTRA_SUBJECT,"Delivery Report Summary")
+    }
 
-internal fun shareSummaryReport(context: Context, plan: Plan) {
-    val chooser = Intent.createChooser(summaryReportShareIntent(plan), "Share Report")
-    if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+internal fun openSummaryReportShare(context: Context, send: Intent) {
+    val chooser=Intent.createChooser(send,"Share Report")
+    if(context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(chooser)
 }
 
@@ -97,6 +100,8 @@ internal fun copySummaryReport(context: Context, plan: Plan) {
 @Composable
 fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sharing by remember(plan) { mutableStateOf(false) }
     val fields = remember(plan) { summaryReportFields(plan) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * .9f
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -134,18 +139,21 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
                         onClick = {
-                            try {
-                                shareSummaryReport(context, plan)
-                            } catch (_: android.content.ActivityNotFoundException) {
-                                Toast.makeText(context, "No app is available to share the report.", Toast.LENGTH_LONG).show()
-                            } catch (_: SecurityException) {
-                                Toast.makeText(context, "The report could not be shared. Please try again.", Toast.LENGTH_LONG).show()
+                            sharing=true
+                            scope.launch {
+                                try {
+                                    val send=withContext(Dispatchers.IO) {summaryReportShareIntent(context,plan)}
+                                    openSummaryReportShare(context,send)
+                                } catch(e: kotlinx.coroutines.CancellationException) {throw e}
+                                catch(_: Exception) {Toast.makeText(context,"The report could not be shared. Please try again.",Toast.LENGTH_LONG).show()}
+                                finally {sharing=false}
                             }
                         },
+                        enabled=!sharing,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy),
                         shape = RoundedCornerShape(14.dp)
-                    ) { Text("Share Report") }
+                    ) { Text(if(sharing) "Preparing report…" else "Share Report") }
                     OutlinedButton(
                         onClick = {
                             try {
