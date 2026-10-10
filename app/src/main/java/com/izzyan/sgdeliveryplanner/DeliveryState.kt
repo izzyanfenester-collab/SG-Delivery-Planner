@@ -145,8 +145,11 @@ object PlanJson {
         if (!root.has("startLocation") || root.get("startLocation").isJsonNull) {
             root.add("startLocation", gson.toJsonTree(woodlandsStartLocation))
         }
-        root.getAsJsonArray("stops").forEach { element ->
+        root.getAsJsonArray("stops").forEachIndexed { index, element ->
             val stop = element.asJsonObject
+            if (stop.optionalString("orderId").isNullOrBlank()) {
+                stop.addProperty("orderId", java.util.UUID.nameUUIDFromBytes("${root.optionalString("id")}:$index".toByteArray()).toString())
+            }
             val status = normalizedStatus(stop.optionalString("status") ?: "PENDING")
             stop.addProperty("status", status)
             if (legacy && status != "PENDING" && stop.optionalString("reviewedAt") == null) {
