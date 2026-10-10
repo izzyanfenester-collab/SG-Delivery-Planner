@@ -95,6 +95,7 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
     ProofPickerHost(vm)
+    DeliveryReportPreviewHost(vm)
     if (vm.importOrdersDialog) CustomerImportDialog(vm)
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -360,6 +361,15 @@ fun Settings(vm: PlannerViewModel) {
         PageTitle("Settings", "Set the defaults for your next route.")
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Default WhatsApp App", style = MaterialTheme.typography.titleLarge)
+                (listOf<WhatsAppChoice?>(null) + WhatsAppChoice.entries).forEach { choice ->
+                    Row(Modifier.fillMaxWidth().heightIn(min=52.dp).selectable(vm.whatsappPreferences.default == choice, enabled=!vm.busy, role=androidx.compose.ui.semantics.Role.RadioButton,
+                        onClick={vm.whatsappPreferences.updateDefault(choice)}),verticalAlignment=Alignment.CenterVertically) {
+                        RadioButton(vm.whatsappPreferences.default == choice,null,enabled=!vm.busy)
+                        Text(choice?.label ?: "Ask every time",Modifier.padding(start=8.dp))
+                    }
+                }
+                HorizontalDivider()
                 Text("Default Navigation", style = MaterialTheme.typography.titleLarge)
                 (listOf<NavigationChoice?>(null) + NavigationChoice.entries).forEach { choice ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -540,11 +550,11 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
         } else {
             val stop = p.stops[p.current]
             PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Stop ${p.current + 1} of ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(stop,"Payment Mode") }
+                    if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
                     StatusBadge(stop.status)
                     holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
                     HorizontalDivider(color = Color(0xFF31486B))
@@ -628,7 +638,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) PremiumGold else null
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 StatusBadge(stop.status)
@@ -637,7 +647,10 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
             if (stop.order == null) {
                 Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
                 Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else CustomerDetails(stop)
+            } else {
+                Text("Block ${stop.place.block} • ${stop.place.area}", style = MaterialTheme.typography.titleMedium)
+                CustomerDetails(vm,stop)
+            }
             OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
             Text("Planned arrival: ${time(stop.arrival)} • Departure: ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
