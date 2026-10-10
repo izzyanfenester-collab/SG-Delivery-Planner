@@ -94,6 +94,8 @@ fun km(value: Double) = "%.1f km".format(Locale.US, value)
 @Composable
 fun App(vm: PlannerViewModel) {
     ScheduleExportHost()
+    ProofPickerHost(vm)
+    if (vm.importOrdersDialog) CustomerImportDialog(vm)
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(view, lifecycle, vm.screen) {
@@ -328,9 +330,11 @@ fun Home(vm: PlannerViewModel) {
             modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),
             shape = RoundedCornerShape(20.dp), enabled = !vm.busy
         )
+        SecondaryAction("Import WhatsApp Orders", { vm.importOrdersDialog = true }, enabled = !vm.busy)
+        if (vm.draftOrders.isNotEmpty()) Text("Orders found: ${vm.planningOrders().size} · Duplicate postals preserved: ${vm.planningOrders().size - vm.planningOrders().map { it.postalCode }.distinct().size}")
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CountTile("Valid stops", parsed.valid.size, Modifier.weight(1f))
-            CountTile("Duplicates removed", parsed.duplicates, Modifier.weight(1f))
+            CountTile("Valid stops", if (vm.draftOrders.isEmpty()) parsed.valid.size else vm.planningOrders().size, Modifier.weight(1f))
+            CountTile(if (vm.draftOrders.isEmpty()) "Duplicates removed" else "Duplicate postals preserved", parsed.duplicates, Modifier.weight(1f))
         }
         if (parsed.invalid.isNotEmpty()) {
             PremiumCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.errorContainer) {
@@ -339,7 +343,7 @@ fun Home(vm: PlannerViewModel) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryAction("Optimize route", vm::optimize, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
-            SecondaryAction("Clear postal code", { vm.input = ""; vm.persist() }, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
+            SecondaryAction("Clear postal code", vm::clearPostalCodes, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
         }
         TaxDeclareButton()
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -493,7 +497,7 @@ private fun StatusBadge(status: String) {
     }
 }
 
-private fun holdDetails(stop: Stop): String? {
+fun holdDetails(stop: Stop): String? {
     if (normalizedStatus(stop.status) != "ON_HOLD") return null
     return listOfNotNull(stop.holdReason?.takeIf { it.isNotBlank() }, stop.holdNote?.takeIf { it.isNotBlank() }).joinToString(" • ").takeIf { it.isNotBlank() }
 }
@@ -531,7 +535,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             PrimaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
             SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
             p.stops.forEachIndexed { index, stop ->
-                if (normalizedStatus(stop.status) != "DELIVERED") StopCard(stop, index, false) { vm.revisit(index) }
+                if (normalizedStatus(stop.status) != "DELIVERED") StopCard(vm, p, stop, index, false) { vm.revisit(index) }
             }
         } else {
             val stop = p.stops[p.current]
@@ -540,7 +544,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text("Stop ${p.current + 1} of ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge)
+                    if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(stop,"Payment Mode") }
                     StatusBadge(stop.status)
                     holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
                     HorizontalDivider(color = Color(0xFF31486B))
@@ -564,6 +568,13 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     PrimaryAction("Skipped", { vm.progress("SKIP") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73), minHeight = 56.dp)
                 }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text("Proof of Payment")}
+                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text("Proof of Delivery")}
+            }
+            if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
+            if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
+            OrderShareButton(stop,p.current,!vm.busy)
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
@@ -612,7 +623,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
 }
 
 @Composable
-private fun StopCard(stop: Stop, index: Int, current: Boolean, onClick: () -> Unit) {
+private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, onClick: () -> Unit) {
     PremiumCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) PremiumGold else null
@@ -623,12 +634,18 @@ private fun StopCard(stop: Stop, index: Int, current: Boolean, onClick: () -> Un
                 StatusBadge(stop.status)
             }
             if (current) Text("Current delivery", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
-            Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
-            Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (stop.order == null) {
+                Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
+                Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else CustomerDetails(stop)
+            OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
+            OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
             Text("Planned arrival: ${time(stop.arrival)} • Departure: ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", style = MaterialTheme.typography.bodyMedium) }
             stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
             holdDetails(stop)?.let { Text("On hold: $it", style = MaterialTheme.typography.bodyMedium) }
+            Text("Distance from previous stop: ${km(stop.leg.km)}")
+            OrderShareButton(stop,index,!vm.busy)
             Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
     }
@@ -688,7 +705,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
-        p.stops.forEachIndexed { index, stop -> StopCard(stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
+        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
@@ -789,7 +806,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         if (remaining.isNotEmpty()) {
             Text("Revisit a delivery", style = MaterialTheme.typography.titleLarge)
             Text("Parcels that are on hold, skipped or pending can still be delivered.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            remaining.forEach { (index, stop) -> StopCard(stop, index, false) { if (!vm.busy) vm.revisit(index) } }
+            remaining.forEach { (index, stop) -> StopCard(vm, p, stop, index, false) { if (!vm.busy) vm.revisit(index) } }
         }
     }
 }
