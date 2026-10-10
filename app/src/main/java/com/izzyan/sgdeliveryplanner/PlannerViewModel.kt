@@ -27,15 +27,17 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     }.getOrDefault(emptyList())); private set
     var proofRequest by mutableStateOf<ProofRequest?>(null)
     var importOrdersDialog by mutableStateOf(false)
-    fun importOrders(orders: List<CustomerOrder>) {
+    internal fun ordersBeforeImport(): List<CustomerOrder> =
+        if (parseInput(input).invalid.isEmpty()) planningOrders() else emptyList()
+    fun importOrders(orders: List<CustomerOrder>, failed: Int = 0) {
         if (busy) return
-        val count = if (draftOrders.isEmpty()) parseInput(input).valid.size else input.trim().split(Regex("[\\s,;]+")).count { it.matches(Regex("[0-9]{6}")) }
-        if (count + orders.size > 50) { message = "Routes support at most 50 deliveries. Select fewer orders."; return }
-        if (draftOrders.isEmpty() && parseInput(input).invalid.isEmpty()) input = parseInput(input).valid.joinToString("\n")
-        draftOrders = draftOrders + orders
-        input = listOf(input.trim(),orders.joinToString("\n") { it.postalCode }).filter { it.isNotEmpty() }.joinToString("\n")
-        persist(); importOrdersDialog = false
-        notice = "${orders.size} orders imported. Duplicate postals preserved."
+        val existing=ordersBeforeImport()
+        if (existing.size + orders.size > 50) { message = "Routes support at most 50 deliveries. Select fewer orders."; return }
+        // Raw chat and invalid manual tokens can never leak through the import path.
+        draftOrders = existing + orders
+        input = draftOrders.joinToString("\n") { it.postalCode }
+        persist(); importOrdersDialog = false; message = ""
+        notice = "${orders.size} orders imported.\nDuplicate postals preserved.\n$failed ${if(failed==1) "order" else "orders"} failed."
     }
     fun clearPostalCodes() { input = ""; draftOrders = emptyList(); persist() }
     internal fun planningOrders(): List<CustomerOrder> {

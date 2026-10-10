@@ -21,48 +21,87 @@ fun normalizeCustomerPhone(raw: String?): String? {
         else -> null
     }
 }
+private enum class OrderField { NAME, ADDRESS, PHONE, PRICE, END }
+private data class OrderLabel(val field: OrderField, val value: String)
+private val orderLabel = Regex("^([^:]+):[ \t]*(.*)$")
+private fun label(line: String): OrderLabel? {
+    // Only matching labels is normalized: customer/address content stays untouched.
+    val clean=line.trimStart().replace(Regex("^[^\\p{L}\\p{N}]+"), "")
+    val match=orderLabel.matchEntire(clean) ?: return null
+    val key=match.groupValues[1].trim().lowercase(java.util.Locale.ENGLISH)
+        .replace(".", "").replace(Regex("[ \t]+"), " ")
+    val field=when(key) {
+        "nama", "name", "customer", "customer name" -> OrderField.NAME
+        "alamat", "address" -> OrderField.ADDRESS
+        "no telefon", "notelefon", "phone", "phone no", "telephone", "whatsapp", "whatsapp no" -> OrderField.PHONE
+        "total", "amount" -> OrderField.PRICE
+        "order", "item", "tarikh order", "date", "fb", "page" -> OrderField.END
+        else -> return null
+    }
+    return OrderLabel(field,match.groupValues[2])
+}
+private val chatHeader=Regex("^[ \t]*\\[[0-9]{1,4}[/.-][0-9]{1,2}[^]\\n]*][ \t]*[^:\\n]+:[ \t]*(.*)$")
+private val plainChatHeader=Regex("^[ \t]*[0-9]{1,4}[/.-][0-9]{1,2}(?:[/.-][0-9]{2,4})?,[ \t]*[0-9]{1,2}:[0-9]{2}[^\\n]*? - [^:\\n]+:[ \t]*(.*)$")
+private fun orderHeading(line: String): Boolean {
+    if(label(line)!=null) return false
+    val clean=line.trimStart().replace(Regex("^[^\\p{L}\\p{N}]+"), "")
+    return Regex("(?i)^ORDER\\b|\\bINVOICE[ \t]*:").containsMatchIn(clean)
+}
 fun parseCustomerOrders(raw: String): OrderImport {
-    val text = raw.replace("\r\n", "\n").replace('\r', '\n')
-        .replace(Regex("(?m)^\\[[^\\n]+][ \t]*[^\\n]*?:[ \t]*"), "")
-    val markers = Regex("(?im)^[ \t]*(Total|Nama)[ \t]*:").findAll(text).toList()
-    val boundaries = mutableListOf<Int>()
-    var hasName = false; var hasTotal = false
-    for (marker in markers) {
-        val name = marker.groupValues[1].equals("Nama",ignoreCase=true)
-        val hasAddress = boundaries.lastOrNull()?.let { Regex("(?im)^\\s*Alamat\\s*:").containsMatchIn(text.substring(it,marker.range.first)) } ?: false
-        if (boundaries.isEmpty() || (name && (hasName || hasAddress)) || (!name && (hasTotal || hasAddress))) {
-            boundaries.add(marker.range.first); hasName=false; hasTotal=false
-        }
-        if (name) hasName=true else hasTotal=true
+    if(raw.isBlank()) return OrderImport(emptyList(),0)
+    val blocks=mutableListOf<List<String>>()
+    var lines=mutableListOf<String>()
+    var seen=mutableSetOf<OrderField>()
+    fun flush() {
+        if(lines.any {it.isNotBlank()}) blocks.add(lines.toList())
+        lines=mutableListOf();seen=mutableSetOf()
     }
-    if (boundaries.isEmpty()) return OrderImport(emptyList(), if (text.isBlank()) 0 else 1)
-    var failed = 0
-    val orders = boundaries.mapIndexedNotNull { index, offset ->
-        val block = text.substring(offset, boundaries.getOrNull(index + 1) ?: text.length)
-        val addressStart = Regex("(?im)^[ \t]*Alamat[ \t]*:[ \t]*").find(block)
-        val address = addressStart?.let { label ->
-            val body = block.substring(label.range.last+1)
-            val end = Regex("(?im)^[ \t]*No\\.?[ \t]*telefon[ \t]*:").find(body)?.range?.first
-                ?: Regex("(?im)^[ \t]*Order[ \t]*:").find(body)?.range?.first ?: body.length
-            body.substring(0,end).trim()
+    raw.replace("\r\n","\n").replace('\r','\n').lineSequence().forEach { original ->
+        val header=chatHeader.matchEntire(original) ?: plainChatHeader.matchEntire(original)
+        if(header!=null) flush()
+        val line=header?.groupValues?.get(1) ?: original
+        val field=label(line)?.field
+        val primary=field in listOf(OrderField.NAME,OrderField.PRICE,OrderField.ADDRESS)
+        if((orderHeading(line) && seen.isNotEmpty()) ||
+            (primary && (field in seen || (OrderField.ADDRESS in seen && field != OrderField.ADDRESS)))) flush()
+        lines.add(line)
+        field?.let {seen.add(it)}
+    }
+    flush()
+    var failed=0
+    val orders=blocks.mapNotNull { block ->
+        val fields=mutableMapOf<OrderField,String>()
+        var current: OrderField?=null
+        val value=StringBuilder()
+        fun save() {current?.let {fields.putIfAbsent(it,value.toString().trim())};value.clear()}
+        block.forEach { line ->
+            val found=label(line)
+            if(found!=null) {save();current=found.field;value.append(found.value)}
+            else if(orderHeading(line)) {save();current=null}
+            else if(current!=null) {if(value.isNotEmpty()) value.append('\n');value.append(line)}
         }
-        val postal = address?.let {
-            Regex("(?i)(?:\\bSingapore|\\bS'pore|\\bSG|\\bS)[ \t]*([0-9]{6})(?![0-9])").find(it)?.groupValues?.get(1)
-                ?: Regex("(?<!\\d)\\d{6}(?!\\d)").find(it)?.value
+        save()
+        val address=fields[OrderField.ADDRESS]?.takeIf {it.isNotBlank()}
+        val searchable=address?.replace(Regex("https?://\\S+",RegexOption.IGNORE_CASE)," ")
+            ?.replace(Regex("\\b[0-9]{1,4}[/.-][0-9]{1,2}[/.-][0-9]{2,4}\\b")," ")
+        val postal=searchable?.let {
+            Regex("(?i)(?:\\bSingapore|\\bS['’]pore|\\bSG|\\bS)[ \t]*([0-9]{6})(?![0-9])").find(it)?.groupValues?.get(1)
+                ?: Regex("(?<!\\d)[0-9]{6}(?!\\d)").find(it)?.value
         }
-        if (postal == null) { failed++; null }
+        if(postal==null) {failed++;null}
         else {
-            val phoneField = Regex("(?ims)^\\s*No\\.?\\s*telefon\\s*:[ \\t]*\\n?([^\\n]*)").find(block)?.groupValues?.get(1).orEmpty()
-            val phone = Regex("(?i)wa\\.me/\\+?([0-9]+)").find(phoneField)?.groupValues?.get(1) ?: phoneField
-            val total = Regex("(?im)Total\\s*:[ \\t]*(?:\\$|SGD[ \\t]*)?([0-9]+(?:\\.[0-9]{1,2})?)(?![0-9.])").find(block)?.groupValues?.get(1)
-            val mode = Regex("(?i)\\b(COD|PAYNOW)\\b").find(Regex("(?im)^[ \t]*Total[^\\n]*").find(block)?.value.orEmpty())?.value?.uppercase()
-            CustomerOrder(postalCode = postal,
-                customerName = Regex("(?im)^\\s*Nama\\s*:[ \\t]*([^\\n]*)").find(block)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() },
-                phoneNumber = normalizeCustomerPhone(phone), fullAddress = address,
-                parcelPrice = total?.let { normalizedCurrency(it)?.toBigDecimal() }, paymentStatus = mode)
+            val phoneField=fields[OrderField.PHONE].orEmpty()
+            val phone=Regex("(?i)wa\\.me/\\+?([0-9]+)").find(phoneField)?.groupValues?.get(1)
+                ?: phoneField.lines().firstOrNull {it.isNotBlank()}
+            val total=fields[OrderField.PRICE].orEmpty()
+            val amount=Regex("(?i)^(?:\\$[ \t]*|SGD[ \t]*)?([0-9]+(?:\\.[0-9]{1,2})?)(?![0-9.])").find(total)?.groupValues?.get(1)
+            CustomerOrder(postalCode=postal,customerName=fields[OrderField.NAME]?.lines()?.firstOrNull {it.isNotBlank()},
+                phoneNumber=normalizeCustomerPhone(phone),fullAddress=address,
+                parcelPrice=amount?.let {normalizedCurrency(it)?.toBigDecimal()},
+                paymentStatus=Regex("(?i)\\b(COD|PAYNOW)\\b").find(total)?.value?.uppercase(java.util.Locale.ENGLISH))
         }
     }
-    return OrderImport(orders, failed)
+    return OrderImport(orders,failed)
 }
 fun orderPrice(order: CustomerOrder?) = order?.parcelPrice?.let { "$${it.setScale(2).toPlainString()}" } ?: "—"
 fun orderPayment(order: CustomerOrder?) = when (order?.paymentStatus) { "COD" -> "COD"; "PAYNOW" -> "PayNow"; else -> "—" }

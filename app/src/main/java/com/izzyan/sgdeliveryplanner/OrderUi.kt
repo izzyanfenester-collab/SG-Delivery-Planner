@@ -33,10 +33,10 @@ import kotlinx.coroutines.withContext
     var raw by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<OrderImport?>(null) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val capacity = (50-vm.planningOrders().size).coerceAtLeast(0)
+    val capacity = (50-vm.ordersBeforeImport().size).coerceAtLeast(0)
     AlertDialog(onDismissRequest = { vm.importOrdersDialog = false }, title = { Text("WhatsApp Import") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (parsed == null) OutlinedTextField(raw,{raw=it},label={Text("Paste full WhatsApp orders")},modifier=Modifier.fillMaxWidth().height(240.dp))
+            if (parsed == null) OutlinedTextField(raw,{raw=it},label={Text("Paste full WhatsApp orders")},placeholder={Text("English / Malay / emoji templates supported")},modifier=Modifier.fillMaxWidth().height(240.dp))
             else {
                 val result = parsed!!
                 Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${result.orders.size-result.orders.map { it.postalCode }.distinct().size}\nFailed: ${result.failed}")
@@ -51,7 +51,7 @@ import kotlinx.coroutines.withContext
                 } }
             }
         }
-    },confirmButton={Button(onClick={if(parsed==null) { parsed=parseCustomerOrders(raw); raw=""; selected=parsed!!.orders.map { it.orderId }.toSet() } else vm.importOrders(parsed!!.orders.filter { it.orderId in selected })},enabled=!vm.busy && (if(parsed==null) raw.isNotBlank() else selected.size in 1..capacity)) {Text(if(parsed==null) "PREVIEW" else "ADD TO ROUTE")}},dismissButton={TextButton(onClick={vm.importOrdersDialog=false}) {Text("CANCEL")}})
+    },confirmButton={Button(onClick={if(parsed==null) { parsed=parseCustomerOrders(raw); raw=""; selected=parsed!!.orders.map { it.orderId }.toSet() } else vm.importOrders(parsed!!.orders.filter { it.orderId in selected },parsed!!.failed)},enabled=!vm.busy && (if(parsed==null) raw.isNotBlank() else selected.size in 1..capacity)) {Text(if(parsed==null) "PREVIEW" else "Use These Orders")}},dismissButton={TextButton(onClick={vm.importOrdersDialog=false}) {Text("CANCEL")}})
 }
 
 @Composable fun ProofPickerHost(vm: PlannerViewModel) {

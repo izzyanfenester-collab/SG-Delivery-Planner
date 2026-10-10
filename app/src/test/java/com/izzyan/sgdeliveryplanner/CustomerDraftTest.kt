@@ -55,6 +55,37 @@ class CustomerDraftTest {
         kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
         assertNull(vm.deliveryReportOrderId)
     }
+    @Test fun mixedExportImportNeverFeedsRawWordsIntoHomePostalValidation() {
+        val vm=model("mixed")
+        val raw=WhatsAppImportFixture.mixed
+        // Reproduces the reported failure even if chat was previously pasted into Home.
+        vm.input=raw
+        vm.message="Invalid postal codes: ORDER, Name, emoji"
+        val result=parseCustomerOrders(raw)
+        vm.importOrders(result.orders,result.failed)
+        assertEquals("750512\n760776\n823233",vm.input)
+        assertTrue(parseInput(vm.input).invalid.isEmpty())
+        assertTrue(vm.input.lines().all {it.matches(Regex("[0-9]{6}"))})
+        assertEquals(WhatsAppImportFixture.names,vm.draftOrders.map {it.customerName})
+        assertEquals(WhatsAppImportFixture.phones,vm.draftOrders.map {it.phoneNumber})
+        assertEquals(WhatsAppImportFixture.addresses,vm.draftOrders.map {it.fullAddress})
+        assertEquals(listOf("80.00","55.00","60.00"),vm.draftOrders.map {it.parcelPrice!!.toPlainString()})
+        assertEquals(listOf("COD","PAYNOW","COD"),vm.draftOrders.map {it.paymentStatus})
+        assertEquals("",vm.message)
+        assertTrue(vm.notice.contains("3 orders imported."));assertTrue(vm.notice.contains("0 orders failed."))
+        assertEquals(vm.draftOrders,model("restarted").planningOrders())
+    }
+    @Test fun importAppendsToValidManualListKeepsDuplicateCustomersAndReportsFailures() {
+        val vm=model("append")
+        vm.input="650417"
+        val result=parseCustomerOrders(WhatsAppImportFixture.mixed)
+        vm.importOrders(result.orders+result.orders.take(1).map {it.copy(orderId="duplicate-order")},1)
+        assertEquals("650417\n750512\n760776\n823233\n750512",vm.input)
+        assertEquals(5,vm.planningOrders().size)
+        assertEquals(5,vm.planningOrders().map {it.orderId}.distinct().size)
+        assertTrue(parseInput(vm.input).invalid.isEmpty())
+        assertTrue(vm.notice.contains("1 order failed."))
+    }
     @Test fun manualPostalEntryAndFiftyOrderCapacityRemainSupported() {
         val vm=model("one")
         vm.input="650417\n650417\n650331"
