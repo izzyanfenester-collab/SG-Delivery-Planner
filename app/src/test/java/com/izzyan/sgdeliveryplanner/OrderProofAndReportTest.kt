@@ -74,17 +74,20 @@ class OrderProofAndReportTest {
         val delivery=store.import(Uri.fromFile(image(Color.BLUE)),ProofKind.DELIVERY)
         val stop=plan().stops[0].copy(status="DELIVERED",completedAt="2026-10-10T10:30:00",order=plan().stops[0].order!!.copy(paymentProofFileId=payment,proofFileId=delivery))
         val text=singleDeliveryReportText(stop,0,"10 Oct 2026, 10:35 AM")
+        assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertTrue(text.contains("Payment Mode : COD")); assertFalse(text.contains("\n\n"));
         assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertTrue(text.contains("COD"));assertTrue(text.contains("DELIVERED"))
         assertFalse(text.contains("OtherCustomer"));assertFalse(text.contains("+65 8198"));assertFalse(text.contains("Other address"));assertFalse(text.contains("$99.00"))
         val file=generateSingleDeliveryReport(app,stop,0)
         val png=BitmapFactory.decodeFile(file.path)
         assertEquals(1080,png.width)
-        var red=false;var blue=false
+        var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
+        assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
         for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {
             val pixel=png.getPixel(x,y)
-            if(Color.red(pixel)>200 && Color.blue(pixel)<50) red=true
-            if(Color.blue(pixel)>200 && Color.red(pixel)<50) blue=true
+            if(Color.red(pixel)>200 && Color.blue(pixel)<50) { red=true; if(redY<0) {redY=y;redX=x} }
+            if(Color.blue(pixel)>200 && Color.red(pixel)<50) { blue=true; if(blueY<0) {blueY=y;blueX=x} }
         }
+        assertEquals("Proofs must occupy the same row",redY,blueY); assertTrue(redX < blueX)
         png.recycle();assertTrue("Payment image missing",red);assertTrue("Delivery image missing",blue)
         val intent=singleDeliveryShareIntent(app,file)
         assertEquals("image/png",intent.type);assertEquals(Intent.ACTION_SEND,intent.action)
@@ -105,6 +108,26 @@ class OrderProofAndReportTest {
         assertEquals("Helen Unit #10-288",customerAddress(loaded.stops[0]))
         assertNotNull(OrderProofStore(app).file(loaded.stops[0].order!!.proofFileId))
         assertEquals("OtherCustomer",loaded.stops[1].order!!.customerName)
+    }
+    @Test fun businessWhatsAppUsesExactPhoneWithoutContextAndHandlesMissingApp() {
+        val intent=customerWhatsAppIntent("9152 5714",WhatsAppChoice.BUSINESS)
+        assertEquals("com.whatsapp.w4b",intent.`package`)
+        assertEquals("https://wa.me/6591525714",intent.data.toString())
+        assertNull(intent.extras); assertNull(intent.data!!.query)
+        assertFalse(openCustomerWhatsApp(app,"9152 5714",WhatsAppChoice.BUSINESS))
+        assertEquals("WhatsApp Business is not installed.",ShadowToast.getTextOfLatestToast())
+    }
+    @Test fun whatsappDefaultPersistsAndAskEveryTimeRestoresChooser() {
+        val prefs=WhatsAppPreferences(app)
+        assertNull(prefs.default)
+        prefs.updateDefault(WhatsAppChoice.BUSINESS)
+        assertEquals(WhatsAppChoice.BUSINESS,WhatsAppPreferences(app).default)
+        customerWhatsAppIntent("91525714",WhatsAppChoice.PERSONAL) // Just once has no preference mutation.
+        assertEquals(WhatsAppChoice.BUSINESS,prefs.default)
+        assertFalse(openCustomerWhatsApp(app,"91525714",prefs.default!!))
+        assertEquals(WhatsAppChoice.BUSINESS,WhatsAppPreferences(app).default)
+        prefs.updateDefault(null)
+        assertNull(WhatsAppPreferences(app).default)
     }
     @Test fun whatsappTargetsExactPhoneAndNeverPrefillsMessageAndMissingAppIsSafe() {
         val intent=customerWhatsAppIntent("+65 8383 6087")

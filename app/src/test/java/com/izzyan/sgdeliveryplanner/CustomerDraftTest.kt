@@ -36,6 +36,25 @@ class CustomerDraftTest {
         assertEquals("",reloaded.input);assertTrue(reloaded.draftOrders.isEmpty());assertSame(route,reloaded.route)
         assertNull(app.getSharedPreferences("settings",0).getString("draftCustomerOrders",null))
     }
+    @Test fun deliveredPreviewTargetsSavedCustomerBeforeAdvancingWithoutRequiringProofs() = kotlinx.coroutines.runBlocking {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        val vm=model("delivery")
+        val base=schedule(listOf(Place("650417",1.3,103.8,"","","First"),Place("650331",1.31,103.81,"","","Next")),List(3){Leg(0.0,0.0,0.0)},LocalDateTime.of(2026,10,10,10,0),8,"Normal",emptyList())
+        vm.route=base
+        vm.progress("DELIVERED")
+        kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
+        assertEquals(base.stops[0].orderId,vm.deliveryReportOrderId)
+        assertEquals("DELIVERED",vm.route!!.stops[0].status)
+        assertNotNull(vm.route!!.stops[0].completedAt)
+        assertEquals(1,vm.route!!.current)
+        val repository=Repository(app)
+        val saved=repository.decode(repository.dao.route(base.id)!!)
+        assertEquals(vm.route!!.stops[0],saved.stops[0])
+        vm.deliveryReportOrderId=null
+        vm.progress("SKIPPED")
+        kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
+        assertNull(vm.deliveryReportOrderId)
+    }
     @Test fun manualPostalEntryAndFiftyOrderCapacityRemainSupported() {
         val vm=model("one")
         vm.input="650417\n650417\n650331"

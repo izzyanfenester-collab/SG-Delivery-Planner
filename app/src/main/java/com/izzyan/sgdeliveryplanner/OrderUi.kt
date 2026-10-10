@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,20 +68,39 @@ import kotlinx.coroutines.withContext
     }
 }
 
-@Composable fun CustomerDetails(stop: Stop, paymentLabel: String = "Payment Status") {
+@Composable fun CustomerDetails(vm: PlannerViewModel, stop: Stop) {
     val order=stop.order ?: return
     val context=LocalContext.current
-    Text("Customer",style=MaterialTheme.typography.labelLarge); Text(order.customerName ?: "—",style=MaterialTheme.typography.titleMedium)
-    Text("Phone",style=MaterialTheme.typography.labelLarge)
-    Row(verticalAlignment=Alignment.CenterVertically) {
-        Text(displayCustomerPhone(order.phoneNumber),Modifier.weight(1f))
-        if(normalizeCustomerPhone(order.phoneNumber)!=null) IconButton(onClick={openCustomerWhatsApp(context,order.phoneNumber!!)},modifier=Modifier.size(48.dp)) {
-            Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_customer_whatsapp),"Open customer's WhatsApp",tint=Color(0xFF25D366),modifier=Modifier.size(30.dp))
+    var choosing by remember(stop.orderId) { mutableStateOf(false) }
+    var selected by remember(stop.orderId) { mutableStateOf(WhatsAppChoice.PERSONAL) }
+    Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+        Text("Customer : ${order.customerName ?: "—"}")
+        Row(verticalAlignment=Alignment.CenterVertically) {
+            Text("Phone : ${displayCustomerPhone(order.phoneNumber)}",Modifier.weight(1f))
+            if(normalizeCustomerPhone(order.phoneNumber)!=null) IconButton(onClick={
+                val choice=vm.whatsappPreferences.default
+                if(choice==null || !openCustomerWhatsApp(context,order.phoneNumber!!,choice)) {selected=choice ?: WhatsAppChoice.PERSONAL; choosing=true}
+            },modifier=Modifier.size(48.dp)) {
+                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_customer_whatsapp),"Open customer's WhatsApp",tint=Color(0xFF25D366),modifier=Modifier.size(30.dp))
+            }
         }
+        Text("Address : ${customerAddress(stop)}")
+        Text("Parcel Price : ${orderPrice(order)}")
+        Text("Payment Mode : ${orderPayment(order)}")
     }
-    Text("Address",style=MaterialTheme.typography.labelLarge); Text(customerAddress(stop))
-    Text("Parcel Price",style=MaterialTheme.typography.labelLarge); Text(orderPrice(order))
-    Text(paymentLabel,style=MaterialTheme.typography.labelLarge); Text(orderPayment(order))
+    if(choosing) AlertDialog(onDismissRequest={choosing=false},title={Text("Choose WhatsApp")},text={
+        Column {
+            WhatsAppChoice.entries.forEach { choice ->
+                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).selectable(selected==choice,role=androidx.compose.ui.semantics.Role.RadioButton,onClick={selected=choice}),verticalAlignment=Alignment.CenterVertically) {
+                    RadioButton(selected==choice,null); Text(choice.label)
+                }
+            }
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick={if(openCustomerWhatsApp(context,order.phoneNumber!!,selected)) choosing=false},modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Just once")}
+                Button(onClick={vm.whatsappPreferences.updateDefault(selected); if(openCustomerWhatsApp(context,order.phoneNumber!!,selected)) choosing=false},modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Set default")}
+            }
+        }
+    },confirmButton={},dismissButton={TextButton(onClick={choosing=false}) {Text("Cancel")}})
 }
 
 @Composable fun OrderProofSection(vm: PlannerViewModel, plan: Plan, stop: Stop, kind: ProofKind) {
@@ -92,10 +112,10 @@ import kotlinx.coroutines.withContext
     var viewing by remember { mutableStateOf(false) }
     var bitmap by remember(id) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(id) { bitmap=withContext(Dispatchers.IO) { val store=OrderProofStore(context); store.file(id)?.let { store.decode(it,256) } } }
-    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement=Arrangement.spacedBy(3.dp)) {
         Text(title,style=MaterialTheme.typography.titleMedium)
         if(id==null) Text("No proof yet") else {
-            bitmap?.let { photo -> Image(photo.asImageBitmap(),title,Modifier.fillMaxWidth().height(140.dp).clipForProof().clickable { viewing=true },contentScale=ContentScale.Crop) }
+            bitmap?.let { photo -> Image(photo.asImageBitmap(),title,Modifier.fillMaxWidth().height(100.dp).clipForProof().clickable { viewing=true },contentScale=ContentScale.Crop) }
             Text(if(kind==ProofKind.PAYMENT) "✓ Payment Proof Uploaded" else "✓ Proof Uploaded")
             timestamp?.let { Text(proofTime(it),style=MaterialTheme.typography.bodySmall) }
         }
@@ -127,4 +147,39 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
         catch(_: Exception) {android.widget.Toast.makeText(context,"Delivery report could not be shared. Please try again.",android.widget.Toast.LENGTH_LONG).show()}
         finally {sharing=false}
     }},enabled=enabled&&!sharing,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Text(if(sharing) "Preparing report…" else "Share Report")}
+}
+
+@Composable fun DeliveryReportPreviewHost(vm: PlannerViewModel) {
+    val target = vm.deliveryReportOrderId ?: return
+    val plan = vm.route ?: return
+    val index = plan.stops.indexOfFirst { it.orderId == target }
+    if(index < 0) return
+    val stop=plan.stops[index]
+    val context=LocalContext.current
+    var file by remember(stop) {mutableStateOf<java.io.File?>(null)}
+    var bitmap by remember(stop) {mutableStateOf<Bitmap?>(null)}
+    var error by remember(stop) {mutableStateOf(false)}
+    LaunchedEffect(stop) {
+        try {
+            val result=withContext(Dispatchers.IO) {
+                val image=generateSingleDeliveryReport(context,stop,index)
+                image to android.graphics.BitmapFactory.decodeFile(image.absolutePath)
+            }
+            file=result.first; bitmap=result.second
+        } catch(e: kotlinx.coroutines.CancellationException) {throw e}
+        catch(_: Exception) {error=true}
+    }
+    Dialog(onDismissRequest={vm.deliveryReportOrderId=null},properties=DialogProperties(usePlatformDefaultWidth=false)) {
+        Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
+            Text("Delivery Report",color=PremiumGold,style=MaterialTheme.typography.headlineSmall)
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                bitmap?.let { Image(it.asImageBitmap(),"Delivery Report for stop ${index+1}",Modifier.fillMaxWidth(),contentScale=ContentScale.FillWidth) }
+                    ?: Text(if(error) "Report could not be prepared. Close and try Share Report again." else "Preparing report…",color=Color.White)
+            }
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick={vm.deliveryReportOrderId=null},modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Close")}
+                Button(onClick={file?.let {runCatching {context.startActivity(Intent.createChooser(singleDeliveryShareIntent(context,it),"Share Delivery Report"))}.onFailure {android.widget.Toast.makeText(context,"Delivery report could not be shared. Please try again.",android.widget.Toast.LENGTH_LONG).show()}}},enabled=file!=null,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
+            }
+        }
+    }
 }

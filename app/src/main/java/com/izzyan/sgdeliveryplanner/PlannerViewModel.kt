@@ -17,6 +17,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     private val prefs = app.getSharedPreferences("settings", 0)
     private val locationSettings = StartLocationSettings(app)
     internal val navigationPreferences = NavigationPreferences(app)
+    internal val whatsappPreferences = WhatsAppPreferences(app)
+    var deliveryReportOrderId by mutableStateOf<String?>(null)
     private val navigation = ScreenHistory()
     private var currentScreen by mutableStateOf("Home")
     private val singapore = ZoneId.of("Asia/Singapore")
@@ -267,6 +269,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 repo.save(updated)
                 route = updated
                 if (updated.reviewedFinishedAt != null) screen = "Summary"
+                if (action == "DELIVERED") deliveryReportOrderId = planned.stops[planned.current].orderId
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not save your delivery progress. Please try again.") }
             finally { busy = false }

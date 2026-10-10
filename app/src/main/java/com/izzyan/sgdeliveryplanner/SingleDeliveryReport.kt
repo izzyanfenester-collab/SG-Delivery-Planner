@@ -16,12 +16,13 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String = buildString {
-    appendLine("Runner Route Planning\nDelivery Report\n")
-    appendLine("Stop ${index+1} · ${stop.place.postal}\n${normalizedStatus(stop.status).replace('_',' ')}")
-    appendLine("Customer\n${stop.order?.customerName ?: "—"}\n")
-    appendLine("Phone\n${displayCustomerPhone(stop.order?.phoneNumber)}\n")
-    appendLine("Address\n${customerAddress(stop)}\n")
-    appendLine("Parcel Price\n${orderPrice(stop.order)}\nPayment Status\n${orderPayment(stop.order)}\n")
+    appendLine("Delivery Report")
+    appendLine("Stop ${index+1} · ${stop.place.postal} · ${normalizedStatus(stop.status).replace('_',' ')}")
+    appendLine("Customer : ${stop.order?.customerName ?: "—"}")
+    appendLine("Phone : ${displayCustomerPhone(stop.order?.phoneNumber)}")
+    appendLine("Address : ${customerAddress(stop)}")
+    appendLine("Parcel Price : ${orderPrice(stop.order)}")
+    appendLine("Payment Mode : ${orderPayment(stop.order)}")
     appendLine("Planned arrival: ${time(stop.arrival)}")
     appendLine("Updated ETA: ${stop.etaArrival?.let(::time) ?: "—"}")
     appendLine("Actual / Delivered at: ${stop.completedAt?.let(::time) ?: "—"}")
@@ -32,32 +33,46 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
 
 /** Unattached dedicated report view: never captures any screen, other cards or system chrome. */
 private class SingleDeliveryReportView(context: Context, text: String, private val payment: Bitmap?, private val delivery: Bitmap?) : View(context) {
-    private val ink = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(7,23,45); textSize = 32f }
+    private val ink = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(232,240,255); textSize = 32f }
+    private val gold = Color.rgb(231,190,91)
     private val styled = android.text.SpannableString(text).apply {
-        val statusEnd = text.indexOf("Customer")
-        if (statusEnd > 0) { setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,statusEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); setSpan(android.text.style.AbsoluteSizeSpan(42),0,statusEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        val titleEnd=text.indexOf('\n')
+        setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        setSpan(android.text.style.AbsoluteSizeSpan(48),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        setSpan(android.text.style.ForegroundColorSpan(gold),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val statusEnd=text.indexOf("Customer")
+        setSpan(android.text.style.StyleSpan(Typeface.BOLD),titleEnd,statusEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
-    private val layout = StaticLayout.Builder.obtain(styled,0,styled.length,ink,1000).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(8f,1f).build()
-    private fun photoHeight(bitmap: Bitmap?) = if (bitmap == null) 80 else (1000f*bitmap.height/bitmap.width).coerceAtMost(1000f).toInt()
-    val reportHeight = layout.height + photoHeight(payment) + photoHeight(delivery) + 300
+    private val layout=StaticLayout.Builder.obtain(styled,0,styled.length,ink,960).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(4f,1f).build()
+    private val both=payment!=null && delivery!=null
+    private val imageWidth=if(both) 468f else 960f
+    private fun photoHeight(bitmap: Bitmap?)=if(bitmap==null) 64f else (imageWidth*bitmap.height/bitmap.width).coerceAtMost(900f)
+    private val proofHeight=maxOf(photoHeight(payment),photoHeight(delivery))
+    val reportHeight=layout.height+proofHeight.toInt()+240
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.WHITE)
-        canvas.save(); canvas.translate(40f,40f); layout.draw(canvas); canvas.restore()
-        var y = layout.height + 90f
-        fun proof(label: String, bitmap: Bitmap?, missing: String) {
-            ink.typeface = Typeface.DEFAULT_BOLD; canvas.drawText(label,40f,y,ink); y += 25f
-            ink.typeface = Typeface.DEFAULT
-            if (bitmap == null) { canvas.drawText(missing,40f,y+35f,ink); y += 80f }
+        canvas.drawColor(Color.rgb(7,23,45))
+        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(16,39,68)}
+        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
+        panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
+        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
+        canvas.save(); canvas.translate(60f,56f); layout.draw(canvas); canvas.restore()
+        val y=layout.height+116f
+        fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
+            ink.color=gold; ink.textSize=30f; ink.typeface=Typeface.DEFAULT_BOLD
+            canvas.drawText(label,x,y,ink)
+            ink.color=Color.rgb(232,240,255); ink.typeface=Typeface.DEFAULT
+            if(bitmap==null) canvas.drawText("No proof uploaded",x,y+50f,ink)
             else {
-                val height = photoHeight(bitmap).toFloat()
-                val width = height*bitmap.width/bitmap.height
-                canvas.drawBitmap(bitmap,null,RectF(40f+(1000-width)/2,y,40f+(1000+width)/2,y+height),Paint(Paint.FILTER_BITMAP_FLAG))
-                y += height
+                val height=photoHeight(bitmap); val actualWidth=height*bitmap.width/bitmap.height
+                canvas.drawBitmap(bitmap,null,RectF(x+(width-actualWidth)/2,y+24f,x+(width+actualWidth)/2,y+24f+height),Paint(Paint.FILTER_BITMAP_FLAG))
             }
-            y += 60f
         }
-        proof("Proof of Payment",payment,"No payment proof uploaded")
-        proof("Proof of Delivery",delivery,"No delivery proof uploaded")
+        if(both) {
+            proof("Proof of Payment",payment,60f,468f)
+            proof("Proof of Delivery",delivery,552f,468f)
+        } else if(payment!=null) proof("Proof of Payment",payment,60f,960f)
+        else if(delivery!=null) proof("Proof of Delivery",delivery,60f,960f)
+        else { proof("Proof of Payment",null,60f,468f); proof("Proof of Delivery",null,552f,468f) }
     }
 }
 fun generateSingleDeliveryReport(context: Context, stop: Stop, index: Int): File {
