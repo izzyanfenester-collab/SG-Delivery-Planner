@@ -49,7 +49,7 @@ class Repository(context:Context) {
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place = oneMap.resolve(postal)
- suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,progress:(String)->Unit):Plan = coroutineScope {
+ suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),progress:(String)->Unit):Plan = coroutineScope {
   checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
   checkPlanning(location.isValid()) { "Choose a valid Start & End location before planning." }
@@ -104,6 +104,7 @@ class Repository(context:Context) {
   val route=api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
   checkPlanning(route.get("code")?.asString == "Ok") { "The route map is unavailable. Please try planning the route again." }
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
-  schedule(order.map { places[it] },legs,start,service,mode,geometry,location).also { save(it) }
+  val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location)
+  (if (orders.isEmpty()) scheduled else expandCustomerOrders(scheduled, orders)).also { save(it) }
  }
 }
