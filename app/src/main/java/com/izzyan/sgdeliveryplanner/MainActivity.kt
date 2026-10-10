@@ -567,6 +567,10 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.proofFileId != null) "✓ Proof of Delivery" else "Proof of Delivery")}
+                    OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.paymentProofFileId != null) "✓ Proof of Payment" else "Proof of Payment")}
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PrimaryAction("Navigate", {
                         val choice = vm.navigationPreferences.default
                         showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
@@ -578,12 +582,8 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     PrimaryAction("Skipped", { vm.progress("SKIP") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73), minHeight = 56.dp)
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.paymentProofFileId != null) "✓ Proof of Payment" else "Proof of Payment")}
-                OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.proofFileId != null) "✓ Proof of Delivery" else "Proof of Delivery")}
-            }
-            if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
+            if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }

@@ -29,14 +29,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: String): String {
+    val text=runCatching {
+        val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip=clipboard.primaryClip
+        if(clip!=null && clip.itemCount>0) clip.getItemAt(0).text?.toString()?.takeIf {it.isNotBlank()} else null
+    }.getOrNull()
+    if(text!=null) return text
+    android.widget.Toast.makeText(context,"No WhatsApp order text found in clipboard.",android.widget.Toast.LENGTH_LONG).show()
+    return currentText
+}
+
 @Composable fun CustomerImportDialog(vm: PlannerViewModel) {
+    val context=LocalContext.current
     var raw by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<OrderImport?>(null) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     val capacity = (50-vm.ordersBeforeImport().size).coerceAtLeast(0)
     AlertDialog(onDismissRequest = { vm.importOrdersDialog = false }, title = { Text("WhatsApp Import") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (parsed == null) OutlinedTextField(raw,{raw=it},label={Text("Paste full WhatsApp orders")},placeholder={Text("English / Malay / emoji templates supported")},modifier=Modifier.fillMaxWidth().height(240.dp))
+            if (parsed == null) {
+                OutlinedTextField(raw,{raw=it},label={Text("Paste full WhatsApp orders")},placeholder={Text("English / Malay / emoji templates supported")},modifier=Modifier.fillMaxWidth().height(240.dp))
+                Button(onClick={raw=pasteWhatsAppOrders(context,raw)},enabled=!vm.busy,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) {Text("IMPORT")}
+            }
             else {
                 val result = parsed!!
                 Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${result.orders.size-result.orders.map { it.postalCode }.distinct().size}\nFailed: ${result.failed}")
