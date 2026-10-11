@@ -9,7 +9,8 @@ data class CustomerOrder(
     val customerName: String? = null, val phoneNumber: String? = null, val fullAddress: String? = null,
     val parcelPrice: java.math.BigDecimal? = null, val paymentStatus: String? = null,
     val paymentProofFileId: String? = null, val paymentProofUploadedAt: String? = null,
-    val proofFileId: String? = null, val proofUploadedAt: String? = null
+    val proofFileId: String? = null, val proofUploadedAt: String? = null,
+    val originalOrderText: String? = null
 )
 data class OrderImport(val orders: List<CustomerOrder>, val failed: Int)
 
@@ -49,14 +50,17 @@ private fun orderHeading(line: String): Boolean {
 }
 fun parseCustomerOrders(raw: String): OrderImport {
     if(raw.isBlank()) return OrderImport(emptyList(),0)
-    val blocks=mutableListOf<List<String>>()
+    val blocks=mutableListOf<Pair<List<String>,String>>()
+    var originalBody=StringBuilder()
     var lines=mutableListOf<String>()
     var seen=mutableSetOf<OrderField>()
     fun flush() {
-        if(lines.any {it.isNotBlank()}) blocks.add(lines.toList())
-        lines=mutableListOf();seen=mutableSetOf()
+        if(lines.any {it.isNotBlank()}) blocks.add(lines.toList() to originalBody.toString())
+        lines=mutableListOf();seen=mutableSetOf();originalBody=StringBuilder()
     }
-    raw.replace("\r\n","\n").replace('\r','\n').lineSequence().forEach { original ->
+    Regex("([^\\r\\n]*)(\\r\\n|\\r|\\n|$)").findAll(raw).filter {it.range.first < raw.length}.forEach { source ->
+        val original=source.groupValues[1]
+        val ending=source.groupValues[2]
         val header=chatHeader.matchEntire(original) ?: plainChatHeader.matchEntire(original)
         if(header!=null) flush()
         val line=header?.groupValues?.get(1) ?: original
@@ -65,11 +69,12 @@ fun parseCustomerOrders(raw: String): OrderImport {
         if((orderHeading(line) && seen.isNotEmpty()) ||
             (primary && (field in seen || (OrderField.ADDRESS in seen && field != OrderField.ADDRESS)))) flush()
         lines.add(line)
+        if(header==null || line.isNotEmpty()) originalBody.append(line).append(ending)
         field?.let {seen.add(it)}
     }
     flush()
     var failed=0
-    val orders=blocks.mapNotNull { block ->
+    val orders=blocks.mapNotNull { (block,body) ->
         val fields=mutableMapOf<OrderField,String>()
         var current: OrderField?=null
         val value=StringBuilder()
@@ -96,7 +101,7 @@ fun parseCustomerOrders(raw: String): OrderImport {
             val total=fields[OrderField.PRICE].orEmpty()
             val amount=Regex("(?i)^(?:\\$[ \t]*|SGD[ \t]*)?([0-9]+(?:\\.[0-9]{1,2})?)(?![0-9.])").find(total)?.groupValues?.get(1)
             CustomerOrder(postalCode=postal,customerName=fields[OrderField.NAME]?.lines()?.firstOrNull {it.isNotBlank()},
-                phoneNumber=normalizeCustomerPhone(phone),fullAddress=address,
+                phoneNumber=normalizeCustomerPhone(phone),fullAddress=address,originalOrderText=body,
                 parcelPrice=amount?.let {normalizedCurrency(it)?.toBigDecimal()},
                 paymentStatus=Regex("(?i)\\b(COD|PAYNOW)\\b").find(total)?.value?.uppercase(java.util.Locale.ENGLISH))
         }

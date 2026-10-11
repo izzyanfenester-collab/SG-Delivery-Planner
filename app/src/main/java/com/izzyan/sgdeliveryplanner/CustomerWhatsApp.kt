@@ -19,18 +19,28 @@ class WhatsAppPreferences(context: Context) {
         prefs.edit().apply { if (choice == null) remove("default") else putString("default", choice.name) }.apply()
     }
 }
-fun customerWhatsAppIntent(phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL): Intent {
+fun customerWhatsAppIntent(phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL, message: String? = null): Intent {
     val normalized = requireNotNull(normalizeCustomerPhone(phone))
-    return Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/${normalized.removePrefix("+")}"))
+    return Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/${normalized.removePrefix("+")}").buildUpon().apply {if(message!=null) appendQueryParameter("text",message)}.build())
         .setPackage(choice.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
-fun openCustomerWhatsApp(context: Context, phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL): Boolean {
+fun openCustomerWhatsApp(context: Context, phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL, message: String? = null): Boolean {
     if (normalizeCustomerPhone(phone) == null) { Toast.makeText(context,"Customer phone number unavailable.",Toast.LENGTH_LONG).show(); return false }
     try {
-        val intent = customerWhatsAppIntent(phone,choice)
+        val intent = customerWhatsAppIntent(phone,choice,message)
         if (intent.resolveActivity(context.packageManager) != null) { context.startActivity(intent); return true }
     } catch (_: android.content.ActivityNotFoundException) { }
     catch (_: SecurityException) { }
     Toast.makeText(context,"${choice.label} is not installed.",Toast.LENGTH_LONG).show()
     return false
+}
+
+/** Only this stop's saved order can supply a draft; legacy data never invents items. */
+fun customerOrderMessage(stop: Stop): String = stop.order?.originalOrderText?.takeIf {it.isNotBlank()} ?: buildString {
+    appendLine("Customer: ${stop.order?.customerName ?: "—"}")
+    appendLine("Phone: ${displayCustomerPhone(stop.order?.phoneNumber)}")
+    appendLine("Address: ${customerAddress(stop)}")
+    appendLine("Postal code: ${stop.place.postal}")
+    appendLine("Parcel Price: ${orderPrice(stop.order)}")
+    append("Payment Mode: ${orderPayment(stop.order)}")
 }
