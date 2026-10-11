@@ -17,12 +17,12 @@ import java.util.UUID
 
 fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String = buildString {
     appendLine("Delivery Report")
-    appendLine("Stop ${index+1} · ${stop.place.postal} · ${normalizedStatus(stop.status).replace('_',' ')}")
+    appendLine("Stop ${index+1} · ${stop.place.postal}")
     appendLine("Customer : ${stop.order?.customerName ?: "—"}")
     appendLine("Phone : ${displayCustomerPhone(stop.order?.phoneNumber)}")
     appendLine("Address : ${customerAddress(stop)}")
     appendLine("Parcel Price : ${orderPrice(stop.order)}")
-    appendLine("Payment Mode : ${orderPayment(stop.order)}")
+    appendLine("Payment Mode : ${paymentModeBadge(stop.order)?.label ?: "—"}")
     appendLine("Planned arrival: ${time(stop.arrival)}")
     appendLine("Updated ETA: ${stop.etaArrival?.let(::time) ?: "—"}")
     appendLine("Actual / Delivered at: ${stop.completedAt?.let(::time) ?: "—"}")
@@ -31,8 +31,25 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
     appendLine("Report generated: $generated (Singapore)")
 }
 
+/** Draw real rounded capsules within the Android text layout of the shared PNG preview/export. */
+private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : android.text.style.ReplacementSpan() {
+    private val horizontalPadding = 20f
+    private fun labelPaint(paint: Paint) = Paint(paint).apply { typeface = Typeface.DEFAULT_BOLD }
+    override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int =
+        kotlin.math.ceil(labelPaint(paint).measureText(badge.label) + 2 * horizontalPadding).toInt()
+
+    override fun draw(canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float,
+                      top: Int, y: Int, bottom: Int, paint: Paint) {
+        val width = getSize(paint, text, start, end, null).toFloat()
+        val capsule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = badge.backgroundArgb }
+        canvas.drawRoundRect(RectF(x, top + 2f, x + width, bottom - 2f), 24f, 24f, capsule)
+        val lettering = labelPaint(paint).apply { color = badge.foregroundArgb; isAntiAlias = true }
+        canvas.drawText(badge.label, x + horizontalPadding, y.toFloat(), lettering)
+    }
+}
+
 /** Unattached dedicated report view: never captures any screen, other cards or system chrome. */
-private class SingleDeliveryReportView(context: Context, text: String, private val payment: Bitmap?, private val delivery: Bitmap?) : View(context) {
+private class SingleDeliveryReportView(context: Context, text: String, private val status: DeliveryBadgeStyle, private val paymentMode: DeliveryBadgeStyle?, private val payment: Bitmap?, private val delivery: Bitmap?) : View(context) {
     private val ink = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(232,240,255); textSize = 32f }
     private val gold = Color.rgb(231,190,91)
     private val styled = android.text.SpannableString(text).apply {
@@ -42,6 +59,12 @@ private class SingleDeliveryReportView(context: Context, text: String, private v
         setSpan(android.text.style.ForegroundColorSpan(gold),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         val statusEnd=text.indexOf("Customer")
         setSpan(android.text.style.StyleSpan(Typeface.BOLD),titleEnd,statusEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        paymentMode?.let { badge ->
+            val paymentLabelStart = text.indexOf("Payment Mode : ").takeIf { it >= 0 }
+                ?.plus("Payment Mode : ".length)
+            if (paymentLabelStart != null && text.regionMatches(paymentLabelStart, badge.label, 0, badge.label.length))
+                setSpan(PaymentCapsuleSpan(badge),paymentLabelStart,paymentLabelStart+badge.label.length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
     private val layout=StaticLayout.Builder.obtain(styled,0,styled.length,ink,960).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(4f,1f).build()
     private val both=payment!=null && delivery!=null
@@ -56,6 +79,13 @@ private class SingleDeliveryReportView(context: Context, text: String, private v
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
         canvas.save(); canvas.translate(60f,56f); layout.draw(canvas); canvas.restore()
+        // Display delivery status at the top right of BOTH preview and exported report PNG.
+        val statusText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.foregroundArgb; textSize = 31f; typeface = Typeface.DEFAULT_BOLD }
+        val width = statusText.measureText(status.label) + 52f
+        val left = 1030f - width
+        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.backgroundArgb }
+        canvas.drawRoundRect(RectF(left,55f,1030f,113f),29f,29f,background)
+        canvas.drawText(status.label,left+26f,94f,statusText)
         val y=layout.height+116f
         fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
             ink.color=gold; ink.textSize=30f; ink.typeface=Typeface.DEFAULT_BOLD
@@ -81,7 +111,7 @@ fun generateSingleDeliveryReport(context: Context, stop: Stop, index: Int): File
     val delivery = store.file(stop.order?.proofFileId)?.let { store.decode(it,1024) }
     try {
         val generated = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a",java.util.Locale.ENGLISH))
-        val report = SingleDeliveryReportView(context,singleDeliveryReportText(stop,index,generated),payment,delivery)
+        val report = SingleDeliveryReportView(context,singleDeliveryReportText(stop,index,generated),reportStatusBadge(stop.status),paymentModeBadge(stop.order),payment,delivery)
         require(report.reportHeight in 1..16000) { "Report is too long to render safely." }
         val bitmap = Bitmap.createBitmap(1080,report.reportHeight,Bitmap.Config.ARGB_8888)
         val directory = File(context.cacheDir,"delivery_reports").apply { mkdirs() }
