@@ -33,7 +33,7 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
 
 /** Draw real rounded capsules within the Android text layout of the shared PNG preview/export. */
 private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : android.text.style.ReplacementSpan() {
-    private val horizontalPadding = 20f
+    private val horizontalPadding = 40f
     private fun labelPaint(paint: Paint) = Paint(paint).apply { typeface = Typeface.DEFAULT_BOLD }
     override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int =
         kotlin.math.ceil(labelPaint(paint).measureText(badge.label) + 2 * horizontalPadding).toInt()
@@ -42,67 +42,115 @@ private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : androi
                       top: Int, y: Int, bottom: Int, paint: Paint) {
         val width = getSize(paint, text, start, end, null).toFloat()
         val capsule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = badge.backgroundArgb }
-        canvas.drawRoundRect(RectF(x, top + 2f, x + width, bottom - 2f), 24f, 24f, capsule)
+        canvas.drawRoundRect(RectF(x, top + 2f, x + width, bottom - 2f), 36f, 36f, capsule)
         val lettering = labelPaint(paint).apply { color = badge.foregroundArgb; isAntiAlias = true }
         canvas.drawText(badge.label, x + horizontalPadding, y.toFloat(), lettering)
     }
 }
 
-/** Unattached dedicated report view: never captures any screen, other cards or system chrome. */
-private class SingleDeliveryReportView(context: Context, text: String, private val status: DeliveryBadgeStyle, private val paymentMode: DeliveryBadgeStyle?, private val payment: Bitmap?, private val delivery: Bitmap?) : View(context) {
-    private val ink = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(232,240,255); textSize = 32f }
+/** Unattached dedicated report view; the very same bitmap is previewed and shared. */
+private class SingleDeliveryReportView(
+    context: Context,
+    text: String,
+    private val status: DeliveryBadgeStyle,
+    private val paymentMode: DeliveryBadgeStyle?,
+    private val payment: Bitmap?,
+    private val delivery: Bitmap?
+) : View(context) {
+    // These report-only text sizes are exactly 2x the previous 32/48/31/30 px.
+    private val bodyTextSize = 64f
+    private val titleTextSize = 96f
+    private val statusTextSize = 62f
+    private val proofTextSize = 60f
+    private val inkColor = Color.rgb(232,240,255)
     private val gold = Color.rgb(231,190,91)
-    private val styled = android.text.SpannableString(text).apply {
-        val titleEnd=text.indexOf('\n')
-        setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        setSpan(android.text.style.AbsoluteSizeSpan(48),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        setSpan(android.text.style.ForegroundColorSpan(gold),0,titleEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        val statusEnd=text.indexOf("Customer")
-        setSpan(android.text.style.StyleSpan(Typeface.BOLD),titleEnd,statusEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    private val ink = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = inkColor; textSize = bodyTextSize }
+    private val bodyText = text.substringAfter('\n')
+    private val styled = android.text.SpannableString(bodyText).apply {
+        // Only the customer data lives here: reserve a separate, non-overlapping status header.
+        val stopLineEnd = bodyText.indexOf('\n').takeIf { it >= 0 } ?: bodyText.length
+        setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, stopLineEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         paymentMode?.let { badge ->
-            val paymentLabelStart = text.indexOf("Payment Mode : ").takeIf { it >= 0 }
+            val labelStart = bodyText.indexOf("Payment Mode : ").takeIf { it >= 0 }
                 ?.plus("Payment Mode : ".length)
-            if (paymentLabelStart != null && text.regionMatches(paymentLabelStart, badge.label, 0, badge.label.length))
-                setSpan(PaymentCapsuleSpan(badge),paymentLabelStart,paymentLabelStart+badge.label.length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-    }
-    private val layout=StaticLayout.Builder.obtain(styled,0,styled.length,ink,960).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(4f,1f).build()
-    private val both=payment!=null && delivery!=null
-    private val imageWidth=if(both) 468f else 960f
-    private fun photoHeight(bitmap: Bitmap?)=if(bitmap==null) 64f else (imageWidth*bitmap.height/bitmap.width).coerceAtMost(900f)
-    private val proofHeight=maxOf(photoHeight(payment),photoHeight(delivery))
-    val reportHeight=layout.height+proofHeight.toInt()+240
-    override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.rgb(7,23,45))
-        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(16,39,68)}
-        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
-        panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
-        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
-        canvas.save(); canvas.translate(60f,56f); layout.draw(canvas); canvas.restore()
-        // Display delivery status at the top right of BOTH preview and exported report PNG.
-        val statusText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.foregroundArgb; textSize = 31f; typeface = Typeface.DEFAULT_BOLD }
-        val width = statusText.measureText(status.label) + 52f
-        val left = 1030f - width
-        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.backgroundArgb }
-        canvas.drawRoundRect(RectF(left,55f,1030f,113f),29f,29f,background)
-        canvas.drawText(status.label,left+26f,94f,statusText)
-        val y=layout.height+116f
-        fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
-            ink.color=gold; ink.textSize=30f; ink.typeface=Typeface.DEFAULT_BOLD
-            canvas.drawText(label,x,y,ink)
-            ink.color=Color.rgb(232,240,255); ink.typeface=Typeface.DEFAULT
-            if(bitmap==null) canvas.drawText("No proof uploaded",x,y+50f,ink)
-            else {
-                val height=photoHeight(bitmap); val actualWidth=height*bitmap.width/bitmap.height
-                canvas.drawBitmap(bitmap,null,RectF(x+(width-actualWidth)/2,y+24f,x+(width+actualWidth)/2,y+24f+height),Paint(Paint.FILTER_BITMAP_FLAG))
+            if (labelStart != null && bodyText.regionMatches(labelStart, badge.label, 0, badge.label.length)) {
+                setSpan(
+                    PaymentCapsuleSpan(badge), labelStart, labelStart + badge.label.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
             }
         }
-        if(both) {
+    }
+    private val layout = StaticLayout.Builder.obtain(styled,0,styled.length,ink,960)
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(10f,1f).build()
+
+    private val bodyTop = 296f
+    private val showTwoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
+    private val imageWidth = if (showTwoColumns) 468f else 960f
+    private fun photoHeight(bitmap: Bitmap?): Float = if (bitmap == null) 64f
+        else (imageWidth * bitmap.height / bitmap.width).coerceAtMost(900f)
+    private val proofY = bodyTop + layout.height + 64f
+    private val photoOffset = if (showTwoColumns) 165f else 108f
+    private val proofHeight = maxOf(photoHeight(payment), photoHeight(delivery))
+    val reportHeight = (proofY + photoOffset + proofHeight + 100f).toInt()
+
+    override fun onDraw(canvas: Canvas) {
+        canvas.drawColor(Color.rgb(7,23,45))
+        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,39,68) }
+        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
+        panel.color = gold; panel.style = Paint.Style.STROKE; panel.strokeWidth = 2f
+        canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
+
+        // Report title: 48 -> 96 px. Status: 31 -> 62 px, with a doubled capsule.
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = gold; textSize = titleTextSize; typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText("Delivery Report",60f,136f,titlePaint)
+        val statusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = status.foregroundArgb; textSize = statusTextSize; typeface = Typeface.DEFAULT_BOLD
+        }
+        val capsuleWidth = statusPaint.measureText(status.label) + 104f
+        val capsuleLeft = 1030f - capsuleWidth
+        val capsuleBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.backgroundArgb }
+        canvas.drawRoundRect(RectF(capsuleLeft,166f,1030f,274f),54f,54f,capsuleBg)
+        canvas.drawText(status.label,capsuleLeft+52f,240f,statusPaint)
+
+        canvas.save()
+        canvas.translate(60f,bodyTop)
+        layout.draw(canvas)
+        canvas.restore()
+
+        fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
+            val caption = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = gold; textSize = proofTextSize; typeface = Typeface.DEFAULT_BOLD
+            }
+            // 60 px proof headings fit 2-column images by wrapping caption text, not shrinking.
+            if (showTwoColumns) {
+                canvas.drawText("Proof of",x,proofY+54f,caption)
+                canvas.drawText(label.removePrefix("Proof of "),x,proofY+121f,caption)
+            } else {
+                canvas.drawText(label,x,proofY+60f,caption)
+            }
+            val imageTop = proofY + photoOffset
+            if (bitmap == null) {
+                caption.color = inkColor; caption.typeface = Typeface.DEFAULT
+                canvas.drawText("No proof",x,imageTop+58f,caption)
+                canvas.drawText("uploaded",x,imageTop+123f,caption)
+            } else {
+                val height = photoHeight(bitmap)
+                val actualWidth = height * bitmap.width / bitmap.height
+                canvas.drawBitmap(
+                    bitmap, null,
+                    RectF(x+(width-actualWidth)/2,imageTop,x+(width+actualWidth)/2,imageTop+height),
+                    Paint(Paint.FILTER_BITMAP_FLAG)
+                )
+            }
+        }
+        if (showTwoColumns) {
             proof("Proof of Payment",payment,60f,468f)
             proof("Proof of Delivery",delivery,552f,468f)
-        } else if(payment!=null) proof("Proof of Payment",payment,60f,960f)
-        else if(delivery!=null) proof("Proof of Delivery",delivery,60f,960f)
-        else { proof("Proof of Payment",null,60f,468f); proof("Proof of Delivery",null,552f,468f) }
+        } else if (payment != null) proof("Proof of Payment",payment,60f,960f)
+        else proof("Proof of Delivery",delivery,60f,960f)
     }
 }
 fun generateSingleDeliveryReport(context: Context, stop: Stop, index: Int): File {
