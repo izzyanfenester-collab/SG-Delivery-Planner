@@ -79,8 +79,8 @@ class OrderProofAndReportTest {
         val delivery=store.import(Uri.fromFile(image(Color.BLUE)),ProofKind.DELIVERY)
         val stop=plan().stops[0].copy(status="DELIVERED",completedAt="2026-10-10T10:30:00",order=plan().stops[0].order!!.copy(paymentProofFileId=payment,proofFileId=delivery))
         val text=singleDeliveryReportText(stop,0,"10 Oct 2026, 10:35 AM")
-        assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertTrue(text.contains("Payment Mode : COD")); assertFalse(text.contains("\n\n"));
-        assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertTrue(text.contains("COD"));assertTrue(text.contains("DELIVERED"))
+        assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertTrue(text.contains("Payment Mode : Cash On Delivery")); assertFalse(text.contains("\n\n"));
+        assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertTrue(text.contains("Cash On Delivery"));assertFalse(text.contains(" · DELIVERED"))
         assertFalse(text.contains("OtherCustomer"));assertFalse(text.contains("+65 8198"));assertFalse(text.contains("Other address"));assertFalse(text.contains("$99.00"))
         val file=generateSingleDeliveryReport(app,stop,0)
         val png=BitmapFactory.decodeFile(file.path)
@@ -99,6 +99,36 @@ class OrderProofAndReportTest {
         assertNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM));assertNotNull(intent.clipData)
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
         assertTrue(file.name.endsWith(".png"))
+    }
+    @Test fun reportPngHasExactPaymentAndStatusCapsuleColorsForDeliveredAndHold() {
+        val base = plan().stops[0]
+        fun report(mode: String, status: String, expectedPayment: Int, expectedStatus: Int): Bitmap {
+            val stop = base.copy(
+                status = status,
+                holdReason = if (status == "ON_HOLD") "Customer not home | No answer" else null,
+                order = base.order!!.copy(paymentStatus = mode)
+            )
+            return BitmapFactory.decodeFile(generateSingleDeliveryReport(app, stop, 0).absolutePath)
+        }
+        fun countPixels(bitmap: Bitmap, color: Int, left: Int, top: Int, right: Int, bottom: Int): Int {
+            var count = 0
+            for (y in top until minOf(bottom, bitmap.height) step 2)
+                for (x in left until minOf(right, bitmap.width) step 2)
+                    if (bitmap.getPixel(x,y) == color) count++
+            return count
+        }
+        val delivered = report("PAYNOW","DELIVERED",Color.rgb(153,0,204),Color.rgb(78,167,46))
+        assertTrue("Delivered green capsule missing top-right",countPixels(delivered,Color.rgb(78,167,46),760,50,1032,116)>100)
+        assertTrue("PayNow purple capsule missing in PNG",countPixels(delivered,Color.rgb(153,0,204),50,150,1010,650)>50)
+        delivered.recycle()
+        val held = report("COD","ON_HOLD",Color.rgb(255,192,0),Color.rgb(233,113,50))
+        assertTrue("On Hold orange capsule missing top-right",countPixels(held,Color.rgb(233,113,50),760,50,1032,116)>100)
+        assertTrue("COD yellow capsule missing in PNG",countPixels(held,Color.rgb(255,192,0),50,150,1010,650)>50)
+        held.recycle()
+        assertEquals("PayNow",paymentModeBadge(base.order!!.copy(paymentStatus="PAYNOW"))!!.label)
+        assertEquals("Cash On Delivery",paymentModeBadge(base.order!!.copy(paymentStatus="COD"))!!.label)
+        assertEquals("Delivered",reportStatusBadge("DELIVERED").label)
+        assertEquals("On Hold",reportStatusBadge("ON_HOLD").label)
     }
     @Test fun roomReopenRetainsCustomerBothProofsAndFilesAfterDelivered() = kotlinx.coroutines.runBlocking {
         val store=OrderProofStore(app)
