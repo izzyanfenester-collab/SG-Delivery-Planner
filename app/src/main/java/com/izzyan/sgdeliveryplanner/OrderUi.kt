@@ -149,6 +149,73 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     },confirmButton={},dismissButton={TextButton(onClick={choosing=false}) {Text("Cancel")}})
 }
 
+/** Route-only action: opens this customer's original order, already drafted in WhatsApp. */
+@Composable fun SendOrderMessageButton(vm: PlannerViewModel, order: CustomerOrder) {
+    val context = LocalContext.current
+    var choosing by remember(order.orderId) { mutableStateOf(false) }
+    var selected by remember(order.orderId) { mutableStateOf(WhatsAppChoice.PERSONAL) }
+    val draft = orderMessageDraft(order)
+    Button(
+        onClick = {
+            val phone = order.phoneNumber
+            when {
+                draft == null -> android.widget.Toast.makeText(context,
+                    "Original order text is unavailable. Re-import this WhatsApp order to include all items.",
+                    android.widget.Toast.LENGTH_LONG).show()
+                normalizeCustomerPhone(phone) == null -> android.widget.Toast.makeText(context,
+                    "Customer phone number unavailable.", android.widget.Toast.LENGTH_LONG).show()
+                else -> {
+                    val preferred = vm.whatsappPreferences.default
+                    if (preferred == null || !openCustomerWhatsApp(context,phone!!,preferred,draft)) {
+                        selected = preferred ?: WhatsAppChoice.PERSONAL
+                        choosing = true
+                    }
+                }
+            }
+        },
+        enabled = !vm.busy,
+        modifier = Modifier.heightIn(min = 44.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF156082), contentColor = Color.White)
+    ) { Text("Send message", style = MaterialTheme.typography.labelLarge) }
+
+    if (choosing) AlertDialog(
+        onDismissRequest = { choosing = false },
+        title = { Text("Choose WhatsApp") },
+        text = {
+            Column {
+                WhatsAppChoice.entries.forEach { choice ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                            .selectable(selected == choice, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = { selected = choice }),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected == choice, null)
+                        Text(choice.label)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            if (openCustomerWhatsApp(context, order.phoneNumber!!, selected, requireNotNull(draft))) choosing = false
+                        }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                    ) { Text("Just once") }
+                    Button(
+                        onClick = {
+                            if (openCustomerWhatsApp(context, order.phoneNumber!!, selected, requireNotNull(draft))) {
+                                vm.whatsappPreferences.updateDefault(selected)
+                                choosing = false
+                            }
+                        }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                    ) { Text("Set default") }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { choosing = false }) { Text("Cancel") } }
+    )
+}
+
 @Composable fun OrderProofSection(vm: PlannerViewModel, plan: Plan, stop: Stop, kind: ProofKind) {
     val order=stop.order
     val id=if(kind==ProofKind.PAYMENT) order?.paymentProofFileId else order?.proofFileId

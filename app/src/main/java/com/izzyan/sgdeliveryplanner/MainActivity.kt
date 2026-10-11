@@ -551,7 +551,10 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             val stop = p.stops[p.current]
             PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Stop ${p.current + 1} of ${p.stops.size}", color = PremiumGold, style = MaterialTheme.typography.titleLarge)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Stop ${p.current + 1} of ${p.stops.size}", Modifier.weight(1f), color = PremiumGold, style = MaterialTheme.typography.titleLarge)
+                        stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, it) }
+                    }
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
@@ -642,7 +645,13 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
                 Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 StatusBadge(stop.status)
             }
-            if (current) Text("Current delivery", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+            if (current || stop.order?.phoneNumber != null) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (current) Text("Current delivery", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+                    else Spacer(Modifier.weight(1f))
+                    stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, it) }
+                }
+            }
             if (stop.order == null) {
                 Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
                 Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)

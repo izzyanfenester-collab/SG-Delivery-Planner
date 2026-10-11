@@ -19,15 +19,23 @@ class WhatsAppPreferences(context: Context) {
         prefs.edit().apply { if (choice == null) remove("default") else putString("default", choice.name) }.apply()
     }
 }
-fun customerWhatsAppIntent(phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL): Intent {
+/** Do not synthesize missing order items: older saved routes need the WhatsApp order re-imported. */
+fun orderMessageDraft(order: CustomerOrder): String? =
+    order.originalMessage?.takeIf { it.isNotBlank() }?.trim()
+
+/** Only launches an editable WhatsApp draft. Never sends a message automatically. */
+fun customerWhatsAppIntent(phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL, draft: String? = null): Intent {
     val normalized = requireNotNull(normalizeCustomerPhone(phone))
-    return Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/${normalized.removePrefix("+")}"))
+    val link = Uri.Builder().scheme("https").authority("wa.me").appendPath(normalized.removePrefix("+")).apply {
+        if (!draft.isNullOrBlank()) appendQueryParameter("text", draft)
+    }.build()
+    return Intent(Intent.ACTION_VIEW,link)
         .setPackage(choice.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
-fun openCustomerWhatsApp(context: Context, phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL): Boolean {
+fun openCustomerWhatsApp(context: Context, phone: String, choice: WhatsAppChoice = WhatsAppChoice.PERSONAL, draft: String? = null): Boolean {
     if (normalizeCustomerPhone(phone) == null) { Toast.makeText(context,"Customer phone number unavailable.",Toast.LENGTH_LONG).show(); return false }
     try {
-        val intent = customerWhatsAppIntent(phone,choice)
+        val intent = customerWhatsAppIntent(phone,choice,draft)
         if (intent.resolveActivity(context.packageManager) != null) { context.startActivity(intent); return true }
     } catch (_: android.content.ActivityNotFoundException) { }
     catch (_: SecurityException) { }

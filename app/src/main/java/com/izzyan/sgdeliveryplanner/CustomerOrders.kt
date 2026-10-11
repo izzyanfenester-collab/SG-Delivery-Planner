@@ -9,7 +9,9 @@ data class CustomerOrder(
     val customerName: String? = null, val phoneNumber: String? = null, val fullAddress: String? = null,
     val parcelPrice: java.math.BigDecimal? = null, val paymentStatus: String? = null,
     val paymentProofFileId: String? = null, val paymentProofUploadedAt: String? = null,
-    val proofFileId: String? = null, val proofUploadedAt: String? = null
+    val proofFileId: String? = null, val proofUploadedAt: String? = null,
+    /** The exact imported WhatsApp order body, including ordered items; bound to orderId. */
+    val originalMessage: String? = null
 )
 data class OrderImport(val orders: List<CustomerOrder>, val failed: Int)
 
@@ -98,7 +100,8 @@ fun parseCustomerOrders(raw: String): OrderImport {
             CustomerOrder(postalCode=postal,customerName=fields[OrderField.NAME]?.lines()?.firstOrNull {it.isNotBlank()},
                 phoneNumber=normalizeCustomerPhone(phone),fullAddress=address,
                 parcelPrice=amount?.let {normalizedCurrency(it)?.toBigDecimal()},
-                paymentStatus=Regex("(?i)\\b(COD|PAYNOW)\\b").find(total)?.value?.uppercase(java.util.Locale.ENGLISH))
+                paymentStatus=Regex("(?i)\\b(COD|PAYNOW)\\b").find(total)?.value?.uppercase(java.util.Locale.ENGLISH),
+                originalMessage=block.joinToString("\n").trim().takeIf { it.isNotBlank() })
         }
     }
     return OrderImport(orders,failed)
