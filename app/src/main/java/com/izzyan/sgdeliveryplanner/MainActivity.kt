@@ -642,7 +642,13 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
                 Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 StatusBadge(stop.status)
             }
-            if (current) Text("Current delivery", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+            if (current || stop.order?.phoneNumber != null) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (current) Text("Current delivery", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+                    else Spacer(Modifier.weight(1f))
+                    stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, it) }
+                }
+            }
             if (stop.order == null) {
                 Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
                 Text("Block ${stop.place.block} • ${stop.place.area}", color = MaterialTheme.colorScheme.onSurfaceVariant)
