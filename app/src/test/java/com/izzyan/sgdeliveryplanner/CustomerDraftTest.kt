@@ -55,6 +55,27 @@ class CustomerDraftTest {
         kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
         assertNull(vm.deliveryReportOrderId)
     }
+    @Test fun confirmingHoldOpensPreviewForSavedOriginalOrderBeforeAdvancing() = kotlinx.coroutines.runBlocking {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        val vm = model("hold-preview")
+        val base = schedule(
+            listOf(Place("650417",1.3,103.8,"","","First"),Place("650331",1.31,103.81,"","","Next")),
+            List(3){Leg(0.0,0.0,0.0)},LocalDateTime.of(2026,10,11,10,0),8,"Normal",emptyList()
+        )
+        vm.route=base
+        vm.progress("ON_HOLD","Customer not home | No answer")
+        kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
+        assertEquals(base.stops[0].orderId,vm.deliveryReportOrderId)
+        assertEquals(1,vm.route!!.current)
+        assertEquals("ON_HOLD",vm.route!!.stops[0].status)
+        assertEquals("Customer not home | No answer",vm.route!!.stops[0].holdReason)
+        val saved=Repository(app).decode(Repository(app).dao.route(base.id)!!)
+        assertEquals(vm.route!!.stops[0],saved.stops[0])
+        vm.deliveryReportOrderId=null
+        vm.progress("SKIP")
+        kotlinx.coroutines.withTimeout(10000) { while(vm.busy) kotlinx.coroutines.delay(10) }
+        assertNull(vm.deliveryReportOrderId)
+    }
     @Test fun mixedExportImportNeverFeedsRawWordsIntoHomePostalValidation() {
         val vm=model("mixed")
         val raw=WhatsAppImportFixture.mixed
