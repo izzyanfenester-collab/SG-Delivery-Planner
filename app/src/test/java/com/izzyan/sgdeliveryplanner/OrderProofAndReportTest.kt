@@ -119,11 +119,11 @@ class OrderProofAndReportTest {
         }
         val delivered = report("PAYNOW","DELIVERED",Color.rgb(153,0,204),Color.rgb(78,167,46))
         assertTrue("Delivered green capsule missing top-right",countPixels(delivered,Color.rgb(78,167,46),760,50,1032,116)>100)
-        assertTrue("PayNow purple capsule missing in PNG",countPixels(delivered,Color.rgb(153,0,204),50,150,1010,650)>50)
+        assertTrue("PayNow purple capsule missing in PNG",countPixels(delivered,Color.rgb(153,0,204),50,295,1030,delivered.height)>50)
         delivered.recycle()
         val held = report("COD","ON_HOLD",Color.rgb(255,192,0),Color.rgb(233,113,50))
         assertTrue("On Hold orange capsule missing top-right",countPixels(held,Color.rgb(233,113,50),760,50,1032,116)>100)
-        assertTrue("COD yellow capsule missing in PNG",countPixels(held,Color.rgb(255,192,0),50,150,1010,650)>50)
+        assertTrue("COD yellow capsule missing in PNG",countPixels(held,Color.rgb(255,192,0),50,295,1030,held.height)>50)
         held.recycle()
         assertEquals("PayNow",paymentModeBadge(base.order!!.copy(paymentStatus="PAYNOW"))!!.label)
         assertEquals("Cash On Delivery",paymentModeBadge(base.order!!.copy(paymentStatus="COD"))!!.label)
