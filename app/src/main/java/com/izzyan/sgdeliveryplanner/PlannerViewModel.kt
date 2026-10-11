@@ -271,7 +271,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 repo.save(updated)
                 route = updated
                 if (updated.reviewedFinishedAt != null) screen = "Summary"
-                if (action == "DELIVERED") deliveryReportOrderId = planned.stops[planned.current].orderId
+                if (action == "DELIVERED" || action == "ON_HOLD") deliveryReportOrderId = planned.stops[planned.current].orderId
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not save your delivery progress. Please try again.") }
             finally { busy = false }
