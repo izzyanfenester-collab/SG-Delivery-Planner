@@ -121,11 +121,7 @@ fun App(vm: PlannerViewModel) {
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
-                        Text(
-                            stringResource(R.string.app_name), Modifier.weight(1f),
-                            color = Color.White, style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
+                        Spacer(Modifier.weight(1f))
                         if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
                             IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
                                 Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
@@ -133,19 +129,6 @@ fun App(vm: PlannerViewModel) {
                             ChatGptHeaderButton()
                         }
                     }
-                    Text(
-                        when (vm.screen) {
-                            "Home" -> "Singapore parcel delivery"
-                            "Route" -> "Your optimized route"
-                            "Delivery" -> "Delivery mode"
-                            "Map" -> "Route map"
-                            "History" -> "Saved delivery routes"
-                            "Summary" -> "Route summary"
-                            "LocationPicker" -> "Choose your Start & End location"
-                            else -> "Preferences"
-                        },
-                        color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyMedium
-                    )
                 }
             }
         },
