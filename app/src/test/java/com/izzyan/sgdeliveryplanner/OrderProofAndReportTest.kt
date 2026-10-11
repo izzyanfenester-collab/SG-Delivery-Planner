@@ -86,12 +86,12 @@ class OrderProofAndReportTest {
         val png=BitmapFactory.decodeFile(file.path)
         assertEquals(1080,png.width)
         // The shared PNG is the only report asset displayed by preview and shared through Android.
-        // Exactly 2x fonts, with enough vertical space for wrapped address and two aligned photos.
-        assertEquals(64f,DeliveryReportTypography.bodyPx)
-        assertEquals(96f,DeliveryReportTypography.titlePx)
-        assertEquals(60f,DeliveryReportTypography.proofPx)
-        assertEquals(62f,DeliveryReportTypography.statusPx)
-        assertTrue("Enlarged report must grow to avoid clipping its photos",png.height > 1900)
+        // Exactly 1.5x original report fonts, with wrapped address and two aligned proof images.
+        assertEquals(48f,DeliveryReportTypography.bodyPx)
+        assertEquals(72f,DeliveryReportTypography.titlePx)
+        assertEquals(45f,DeliveryReportTypography.proofPx)
+        assertEquals(46.5f,DeliveryReportTypography.statusPx)
+        assertTrue("Resized report must preserve space for both photos",png.height > 1600)
         var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
         assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
         for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {
@@ -126,13 +126,13 @@ class OrderProofAndReportTest {
         }
         val delivered = report("PAYNOW","DELIVERED",Color.rgb(153,0,204),Color.rgb(78,167,46))
         assertTrue("Delivered green capsule missing top-right",countPixels(delivered,Color.rgb(78,167,46),760,50,1032,116)>100)
-        assertTrue("2x Delivered badge must also fill lower part of capsule",
+        assertTrue("1.5x Delivered badge must fill its lower half",
             countPixels(delivered,Color.rgb(78,167,46),760,125,1032,168)>100)
         assertTrue("PayNow purple capsule missing in PNG",countPixels(delivered,Color.rgb(153,0,204),50,295,1030,delivered.height)>50)
         delivered.recycle()
         val held = report("COD","ON_HOLD",Color.rgb(255,192,0),Color.rgb(233,113,50))
         assertTrue("On Hold orange capsule missing top-right",countPixels(held,Color.rgb(233,113,50),760,50,1032,116)>100)
-        assertTrue("2x On Hold badge must also fill lower part of capsule",
+        assertTrue("1.5x On Hold badge must fill its lower half",
             countPixels(held,Color.rgb(233,113,50),760,125,1032,168)>100)
         assertTrue("COD yellow capsule missing in PNG",countPixels(held,Color.rgb(255,192,0),50,295,1030,held.height)>50)
         held.recycle()
