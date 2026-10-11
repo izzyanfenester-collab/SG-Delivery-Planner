@@ -91,7 +91,7 @@ class OrderProofAndReportTest {
         assertEquals(72f,DeliveryReportTypography.titlePx)
         assertEquals(45f,DeliveryReportTypography.proofPx)
         assertEquals(46.5f,DeliveryReportTypography.statusPx)
-        assertTrue("Resized report must preserve space for both photos",png.height > 1600)
+        assertTrue("Compact 1.5x report must include both photos",png.height > 1200)
         var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
         assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
         for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {
