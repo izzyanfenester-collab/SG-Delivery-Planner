@@ -31,22 +31,21 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
     appendLine("Report generated: $generated (Singapore)")
 }
 
-/** Scale every report text face by 2: main text 32 -> 64, title 48 -> 96,
- * proof labels 30 -> 60, status label 31 -> 62. The full-size PNG is shared
- * unchanged, so preview and WhatsApp Sharesheet have identical typography.
+/** Render at 1.5x the original report font sizes. Preview and shared PNG
+ * use this same rendered image; no alternate screenshot is generated.
  */
 internal object DeliveryReportTypography {
-    const val bodyPx = 64f
-    const val titlePx = 96f
-    const val proofPx = 60f
-    const val statusPx = 62f
+    const val bodyPx = 48f   // original 32
+    const val titlePx = 72f  // original 48
+    const val proofPx = 45f  // original 30
+    const val statusPx = 46.5f // original 31
 }
 
 /** True inline payment capsule; StaticLayout can move the whole span to the next
  * line when a large Cash On Delivery label won't fit after "Payment Mode : ".
  */
 private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : android.text.style.ReplacementSpan() {
-    private val horizontalPadding = 40f
+    private val horizontalPadding = 30f
     private fun labelPaint(paint: Paint) = Paint(paint).apply { typeface = Typeface.DEFAULT_BOLD }
 
     override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int =
@@ -91,17 +90,24 @@ private class SingleDeliveryReportView(
                 setSpan(PaymentCapsuleSpan(badge), start, start + badge.label.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
-    private val bodyStartY = 322f
+    private val bodyStartY = 265f
     private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, 960)
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(12f, 1f).build()
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(7f, 1f).build()
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
     private val imageWidth = if (twoColumns) 468f else 960f
     private fun photoHeight(bitmap: Bitmap?): Float =
-        if (bitmap == null) 160f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
+        if (bitmap == null) 100f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
     private val proofHeight = maxOf(photoHeight(payment), photoHeight(delivery))
-    private val proofStartY = bodyStartY + layout.height + 68f
-    private val headerHeight = if (twoColumns) 164f else 96f
-    val reportHeight = kotlin.math.ceil(proofStartY + headerHeight + proofHeight + 100f).toInt()
+    private val proofStartY = bodyStartY + layout.height + 55f
+    private val proofLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = gold; textSize = DeliveryReportTypography.proofPx; typeface = Typeface.DEFAULT_BOLD
+    }
+    private val wrapProofLabels = twoColumns && maxOf(
+        proofLabelPaint.measureText("Proof of Payment"),
+        proofLabelPaint.measureText("Proof of Delivery")
+    ) > imageWidth
+    private val headerHeight = if (wrapProofLabels) 120f else 75f
+    val reportHeight = kotlin.math.ceil(proofStartY + headerHeight + proofHeight + 90f).toInt()
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(Color.rgb(7, 23, 45))
@@ -110,47 +116,47 @@ private class SingleDeliveryReportView(
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
 
-        // Status capsule gets twice the previous text and padding, at top-right.
+        // 1.5x original status font and capsule, safely separated from the report title.
         val statusInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = status.foregroundArgb; textSize = DeliveryReportTypography.statusPx; typeface = Typeface.DEFAULT_BOLD
         }
-        val capsuleWidth = statusInk.measureText(status.label) + 104f
+        val capsuleWidth = statusInk.measureText(status.label) + 78f
         val right = 1030f
         val top = 55f
-        val bottom = 171f
+        val bottom = 142f
         val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.backgroundArgb }
-        canvas.drawRoundRect(RectF(right - capsuleWidth, top, right, bottom), 58f, 58f, bg)
+        canvas.drawRoundRect(RectF(right - capsuleWidth, top, right, bottom), 43.5f, 43.5f, bg)
         val fm = statusInk.fontMetrics
         val baseline = (top + bottom) / 2f - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(status.label, right - capsuleWidth + 52f, baseline, statusInk)
+        canvas.drawText(status.label, right - capsuleWidth + 39f, baseline, statusInk)
 
-        // Full 2x title on the following row so it cannot collide with the status.
-        canvas.drawText("Delivery Report", 60f, 275f, titleInk)
+        // Title in a separate row, with the requested 1.5x size.
+        canvas.drawText("Delivery Report", 60f, 218f, titleInk)
         canvas.save()
         canvas.translate(60f, bodyStartY)
         layout.draw(canvas)
         canvas.restore()
 
         fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
-            val proofInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = gold; textSize = DeliveryReportTypography.proofPx; typeface = Typeface.DEFAULT_BOLD
-            }
-            // At double font size the full label cannot fit a 468px photo column.
-            // Split in two lines without shrinking text or moving either image.
-            if (twoColumns) {
-                canvas.drawText("Proof of", x, proofStartY + 60f, proofInk)
+            // Keep both proof labels on one line at 1.5x whenever they fit.
+            if (wrapProofLabels) {
+                canvas.drawText("Proof of", x, proofStartY + 48f, proofLabelPaint)
                 canvas.drawText(if (label.endsWith("Payment")) "Payment" else "Delivery",
-                    x, proofStartY + 128f, proofInk)
+                    x, proofStartY + 98f, proofLabelPaint)
             } else {
-                canvas.drawText(label, x, proofStartY + 60f, proofInk)
+                canvas.drawText(label, x, proofStartY + 52f, proofLabelPaint)
             }
             val photoY = proofStartY + headerHeight
             if (bitmap == null) {
                 val missingInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = white; textSize = DeliveryReportTypography.proofPx
                 }
-                canvas.drawText("No proof", x, photoY + 62f, missingInk)
-                canvas.drawText("uploaded", x, photoY + 130f, missingInk)
+                if (missingInk.measureText("No proof uploaded") <= width) {
+                    canvas.drawText("No proof uploaded", x, photoY + 56f, missingInk)
+                } else {
+                    canvas.drawText("No proof", x, photoY + 48f, missingInk)
+                    canvas.drawText("uploaded", x, photoY + 94f, missingInk)
+                }
             } else {
                 val height = photoHeight(bitmap)
                 val actualWidth = height * bitmap.width.toFloat() / bitmap.height.toFloat()
