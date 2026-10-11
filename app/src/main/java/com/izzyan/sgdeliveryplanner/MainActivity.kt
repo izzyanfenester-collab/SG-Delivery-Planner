@@ -632,7 +632,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
 }
 
 @Composable
-private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
+private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, showSendMessage: Boolean = false, onClick: () -> Unit) {
     PremiumCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) PremiumGold else null
@@ -642,6 +642,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
                 Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 StatusBadge(stop.status)
             }
+            if (showSendMessage) RouteSendMessageButton(vm,stop)
             if (current) Text("Current delivery", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
             if (stop.order == null) {
                 Text(stop.place.address, style = MaterialTheme.typography.bodyLarge)
@@ -717,7 +718,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
-        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
+        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current, showSendMessage = true) { if (!vm.busy) vm.revisit(index) } }
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
