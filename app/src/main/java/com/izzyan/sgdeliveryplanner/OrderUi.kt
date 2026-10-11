@@ -132,7 +132,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
         }
         Text("Address : ${customerAddress(stop)}")
         Text("Parcel Price : ${orderPrice(order)}")
-        Text("Payment Mode : ${orderPayment(order)}")
+        PaymentModeRow(order)
     }
     if(choosing) AlertDialog(onDismissRequest={choosing=false},title={Text("Choose WhatsApp")},text={
         Column {
