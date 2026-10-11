@@ -285,7 +285,7 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
     }
     Dialog(onDismissRequest={vm.deliveryReportOrderId=null},properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
-            Text("Delivery Report",color=PremiumGold,fontSize=48.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Bold,maxLines=2)
+            Text("Delivery Report",color=PremiumGold,fontSize=36.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Bold,maxLines=2)
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 bitmap?.let { Image(it.asImageBitmap(),"Delivery Report for stop ${index+1}",Modifier.fillMaxWidth(),contentScale=ContentScale.FillWidth) }
                     ?: Text(if(error) "Report could not be prepared. Close and try Share Report again." else "Preparing report…",color=Color.White)
