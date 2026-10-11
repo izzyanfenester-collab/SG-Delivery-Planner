@@ -89,7 +89,7 @@ class OrderProofAndReportTest {
         assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
         for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {
             val pixel=png.getPixel(x,y)
-            if(Color.red(pixel)>200 && Color.blue(pixel)<50) { red=true; if(redY<0) {redY=y;redX=x} }
+            if(Color.red(pixel)>200 && Color.green(pixel)<50 && Color.blue(pixel)<50) { red=true; if(redY<0) {redY=y;redX=x} }
             if(Color.blue(pixel)>200 && Color.red(pixel)<50) { blue=true; if(blueY<0) {blueY=y;blueX=x} }
         }
         assertEquals("Proofs must occupy the same row",redY,blueY); assertTrue(redX < blueX)
