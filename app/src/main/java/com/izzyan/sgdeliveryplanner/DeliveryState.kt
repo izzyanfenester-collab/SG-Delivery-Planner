@@ -10,6 +10,12 @@ import java.time.LocalDateTime
 
 private val holdReasons = setOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other")
 
+/** Accept one legacy reason or multiple selected reasons without adding a DB column. */
+fun normalizedHoldReasons(value: String?): String? =
+    value?.split('|')?.map { it.trim() }?.filter { it in holdReasons }?.distinct()
+        ?.takeIf { it.isNotEmpty() }?.joinToString(" | ")
+
+
 fun normalizedStatus(status: String): String = when (status) {
     "COMPLETED", "DELIVERED" -> "DELIVERED"
     "ON_HOLD", "ON HOLD" -> "ON_HOLD"
@@ -31,13 +37,13 @@ fun reviewStop(plan: Plan, action: String, now: String, holdReason: String? = nu
     }
     val original = plan.stops[plan.current]
     val alreadyReviewed = action == "NEXT" && original.reviewedAt != null
-    val reason = if (action == "NEXT") original.holdReason else holdReason?.takeIf { status == "ON_HOLD" && it in holdReasons }
+    val reason = if (action == "NEXT") original.holdReason else if (status == "ON_HOLD") normalizedHoldReasons(holdReason) else null
     val stops = plan.stops.toMutableList()
     stops[plan.current] = stops[plan.current].copy(
         status = status,
         completedAt = if (action == "NEXT") original.completedAt else now.takeIf { status == "DELIVERED" },
         holdReason = reason,
-        holdNote = if (action == "NEXT") original.holdNote else holdNote?.trim()?.take(160)?.takeIf { reason == "Other" && it.isNotEmpty() },
+        holdNote = if (action == "NEXT") original.holdNote else holdNote?.trim()?.take(160)?.takeIf { reason?.split(" | ")?.contains("Other") == true && it.isNotEmpty() },
         reviewedAt = if (alreadyReviewed) original.reviewedAt else now
     )
     val next = (plan.current + 1 until stops.size).firstOrNull { stops[it].reviewedAt == null }

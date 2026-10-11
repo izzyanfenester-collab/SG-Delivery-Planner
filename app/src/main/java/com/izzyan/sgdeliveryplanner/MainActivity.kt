@@ -121,11 +121,7 @@ fun App(vm: PlannerViewModel) {
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
-                        Text(
-                            stringResource(R.string.app_name), Modifier.weight(1f),
-                            color = Color.White, style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
+                        Spacer(Modifier.weight(1f))
                         if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
                             IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
                                 Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
@@ -133,19 +129,6 @@ fun App(vm: PlannerViewModel) {
                             ChatGptHeaderButton()
                         }
                     }
-                    Text(
-                        when (vm.screen) {
-                            "Home" -> "Singapore parcel delivery"
-                            "Route" -> "Your optimized route"
-                            "Delivery" -> "Delivery mode"
-                            "Map" -> "Route map"
-                            "History" -> "Saved delivery routes"
-                            "Summary" -> "Route summary"
-                            "LocationPicker" -> "Choose your Start & End location"
-                            else -> "Preferences"
-                        },
-                        color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyMedium
-                    )
                 }
             }
         },
@@ -595,24 +578,33 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
 
 @Composable
 private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> Unit, enabled: Boolean) {
-    var reason by remember { mutableStateOf<String?>(null) }
+    val options = listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other")
+    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var note by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Place delivery on hold") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("A reason is optional. You can revisit this stop later.")
-                listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other").forEach { option ->
+                Text("Select all reasons that apply (optional). You can revisit this stop later.")
+                options.forEach { option ->
+                    val checked = option in selected
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { reason = if (reason == option) null else option },
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable {
+                            selected = if (checked) selected - option else selected + option
+                        },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(reason == option, { reason = if (reason == option) null else option })
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { isChecked ->
+                                selected = if (isChecked) selected + option else selected - option
+                            }
+                        )
                         Text(option)
                     }
                 }
-                if (reason == "Other") {
+                if ("Other" in selected) {
                     OutlinedTextField(
                         note, { note = it.take(160) }, label = { Text("Optional note") },
                         supportingText = { Text("${note.length}/160") }, modifier = Modifier.fillMaxWidth(),
@@ -623,17 +615,19 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(reason, if (reason == "Other") note.trim().takeIf { it.isNotEmpty() } else null) },
-                enabled = enabled, modifier = Modifier.heightIn(min = 64.dp),
+                onClick = {
+                    val reasons = options.filter { it in selected }.joinToString(" | ").takeIf { it.isNotBlank() }
+                    onConfirm(reasons, if ("Other" in selected) note.trim().takeIf { it.isNotEmpty() } else null)
+                },
+                enabled = enabled, modifier = Modifier.heightIn(min = 56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PremiumAmber, contentColor = Color.White)
             ) { Text("Confirm hold") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 64.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 56.dp)) { Text("Cancel") }
         }
     )
 }
-
 @Composable
 private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
     PremiumCard(
