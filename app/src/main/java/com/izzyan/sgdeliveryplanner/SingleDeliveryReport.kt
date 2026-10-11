@@ -97,7 +97,7 @@ private class SingleDeliveryReportView(
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
     private val imageWidth = if (twoColumns) 468f else 960f
     private fun photoHeight(bitmap: Bitmap?): Float =
-        if (bitmap == null) 96f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
+        if (bitmap == null) 160f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
     private val proofHeight = maxOf(photoHeight(payment), photoHeight(delivery))
     private val proofStartY = bodyStartY + layout.height + 68f
     private val headerHeight = if (twoColumns) 164f else 96f
@@ -147,9 +147,10 @@ private class SingleDeliveryReportView(
             val photoY = proofStartY + headerHeight
             if (bitmap == null) {
                 val missingInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = white; textSize = 42f
+                    color = white; textSize = DeliveryReportTypography.proofPx
                 }
-                canvas.drawText("No proof", x, photoY + 54f, missingInk)
+                canvas.drawText("No proof", x, photoY + 62f, missingInk)
+                canvas.drawText("uploaded", x, photoY + 130f, missingInk)
             } else {
                 val height = photoHeight(bitmap)
                 val actualWidth = height * bitmap.width.toFloat() / bitmap.height.toFloat()
