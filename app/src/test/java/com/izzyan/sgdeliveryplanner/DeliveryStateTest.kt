@@ -84,6 +84,27 @@ class DeliveryStateTest {
         assertNull(decoded.stops.first().completedAt)
     }
 
+    @Test fun multiSelectHoldReasonsAndOtherNotePersistSafelyAcrossRestartAndRevisit() {
+        val reasons = "Customer not home | No answer | Other"
+        val held = reviewStop(plan(), "ON_HOLD", reviewTime, reasons, "Left message with security")
+        val restored = PlanJson.decode(PlanJson.encode(held))
+        assertEquals("ON_HOLD", restored.stops[0].status)
+        assertEquals(reasons, restored.stops[0].holdReason)
+        assertEquals("Left message with security", restored.stops[0].holdNote)
+        assertEquals(reasons,holdDetails(restored.stops[0])!!.substringBefore(" • "))
+        val revisited = reviewStop(restored.copy(current = 0), "NEXT", "2026-10-03T17:00")
+        assertEquals(reasons, revisited.stops[0].holdReason)
+        val delivered = reviewStop(restored.copy(current = 0), "DELIVERED", "2026-10-03T17:01")
+        assertNull(delivered.stops[0].holdReason)
+        assertNull(delivered.stops[0].holdNote)
+    }
+    @Test fun multiReasonValidationDropsUnknownAndPreventsOtherNotesWithoutOtherChoice() {
+        val held = reviewStop(plan(), "ON_HOLD", reviewTime, "No answer | Bad option | No answer | Payment issue", "hidden note")
+        assertEquals("No answer | Payment issue", held.stops[0].holdReason)
+        assertNull(held.stops[0].holdNote)
+        val blank = reviewStop(plan(), "ON_HOLD", reviewTime, "invalid | invalid")
+        assertNull(blank.stops[0].holdReason)
+    }
     @Test fun holdReasonIsOptionalAndManualNoteOnlyAppliesToOther() {
         val optional = reviewStop(plan(), "ON_HOLD", reviewTime)
         assertNull(optional.stops.first().holdReason)
