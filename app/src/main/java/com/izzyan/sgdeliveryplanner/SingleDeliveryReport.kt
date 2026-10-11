@@ -79,8 +79,8 @@ private class SingleDeliveryReportView(
     private val titleInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.titlePx; typeface = Typeface.DEFAULT_BOLD
     }
-    // The enlarged title and status require their own rows; they may otherwise overlap.
-    private val bodyText = text.substringAfter('\n')
+    // Keep the 1.5x title and status capsule aligned in the same top row.
+    private val bodyText = text.substringAfter('\n').trimEnd('\n', '\r')
     private val styled = android.text.SpannableString(bodyText).apply {
         val firstEnd = bodyText.indexOf('\n').takeIf { it >= 0 } ?: bodyText.length
         setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, firstEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -90,7 +90,7 @@ private class SingleDeliveryReportView(
                 setSpan(PaymentCapsuleSpan(badge), start, start + badge.label.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
-    private val bodyStartY = 265f
+    private val bodyStartY = 180f
     private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, 960)
         .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(7f, 1f).build()
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
@@ -98,7 +98,8 @@ private class SingleDeliveryReportView(
     private fun photoHeight(bitmap: Bitmap?): Float =
         if (bitmap == null) 100f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
     private val proofHeight = maxOf(photoHeight(payment), photoHeight(delivery))
-    private val proofStartY = bodyStartY + layout.height + 55f
+    // No extra blank vertical gap after the report-generated line.
+    private val proofStartY = bodyStartY + layout.height
     private val proofLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.proofPx; typeface = Typeface.DEFAULT_BOLD
     }
@@ -130,8 +131,8 @@ private class SingleDeliveryReportView(
         val baseline = (top + bottom) / 2f - (fm.ascent + fm.descent) / 2f
         canvas.drawText(status.label, right - capsuleWidth + 39f, baseline, statusInk)
 
-        // Title in a separate row, with the requested 1.5x size.
-        canvas.drawText("Delivery Report", 60f, 218f, titleInk)
+        // Title shares the top row with the right-aligned Delivered / On Hold capsule.
+        canvas.drawText("Delivery Report", 60f, 133f, titleInk)
         canvas.save()
         canvas.translate(60f, bodyStartY)
         layout.draw(canvas)
