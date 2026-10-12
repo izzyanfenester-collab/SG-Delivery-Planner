@@ -16,4 +16,6 @@ const b=c.parse('[31/07, 11:21 pm] Eyra: '+order('A','732189')+'\n[31/07, 11:22 
 assert.equal(b.stops.length,2);assert.equal(b.stops[1].postal,'650202');
 const d=c.parse('650202\n732189\n650202',next);assert.equal(d.stops.length,2);assert.equal(d.duplicates,1);
 const f=c.parse('👤 Nama: X\n📍 Alamat: nowhere\n💰 Total: $3',next);assert.equal(f.failed,1);
+const repeated=c.parse(order('A','732189')+'\n'+order('A','732189'),next);
+assert.equal(repeated.stops.length,1);assert.equal(repeated.duplicates,1);
 console.log('WhatsApp parser parity tests passed');
