@@ -23,22 +23,19 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
     appendLine("Address : ${customerAddress(stop)}")
     appendLine("Parcel Price : ${orderPrice(stop.order)}")
     appendLine("Payment Mode : ${paymentModeBadge(stop.order)?.label ?: "—"}")
-    appendLine("Planned arrival: ${time(stop.arrival)}")
-    appendLine("Updated ETA: ${stop.etaArrival?.let(::time) ?: "—"}")
-    appendLine("Actual / Delivered at: ${stop.completedAt?.let(::time) ?: "—"}")
-    appendLine("Distance from previous stop: ${km(stop.leg.km)}")
     holdDetails(stop)?.let { appendLine("On hold: $it") }
     appendLine("Report generated: $generated (Singapore)")
 }
 
-/** Render at 1.5x the original report font sizes. Preview and shared PNG
+/** Preview and shared PNG
  * use this same rendered image; no alternate screenshot is generated.
  */
 internal object DeliveryReportTypography {
     const val bodyPx = 48f   // original 32
-    const val titlePx = 72f  // original 48
     const val proofPx = 45f  // original 30
     const val statusPx = 46.5f // original 31
+    const val titlePx = statusPx
+    const val bodySp = 16 // 48px body at the report preview scale
 }
 
 /** True inline payment capsule; StaticLayout can move the whole span to the next
@@ -79,7 +76,7 @@ private class SingleDeliveryReportView(
     private val titleInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.titlePx; typeface = Typeface.DEFAULT_BOLD
     }
-    // Keep the 1.5x title and status capsule aligned in the same top row.
+    // Keep the compact title and status capsule aligned in the same top row.
     private val bodyText = text.substringAfter('\n').trimEnd('\n', '\r')
     private val styled = android.text.SpannableString(bodyText).apply {
         val firstEnd = bodyText.indexOf('\n').takeIf { it >= 0 } ?: bodyText.length
@@ -90,9 +87,10 @@ private class SingleDeliveryReportView(
                 setSpan(PaymentCapsuleSpan(badge), start, start + badge.label.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
-    private val bodyStartY = 180f
+    // Bring the Stop line directly below the one-line title (normal 1.0 line spacing).
+    private val bodyStartY = 132f
     private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, 960)
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(7f, 1f).build()
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0f, 1f).build()
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
     private val imageWidth = if (twoColumns) 468f else 960f
     private fun photoHeight(bitmap: Bitmap?): Float =
@@ -132,7 +130,7 @@ private class SingleDeliveryReportView(
         canvas.drawText(status.label, right - capsuleWidth + 39f, baseline, statusInk)
 
         // Title shares the top row with the right-aligned Delivered / On Hold capsule.
-        canvas.drawText("Delivery Report", 60f, 133f, titleInk)
+        canvas.drawText("Delivery Report", 60f, baseline, titleInk)
         canvas.save()
         canvas.translate(60f, bodyStartY)
         layout.draw(canvas)

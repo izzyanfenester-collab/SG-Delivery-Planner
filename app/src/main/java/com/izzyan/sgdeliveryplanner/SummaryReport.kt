@@ -132,7 +132,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                                 "On Hold" -> Color(0xFFFFC570)
                                 else -> Color.White
                             },
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 17.sp, lineHeight = 22.sp)
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = DeliveryReportTypography.bodySp.sp, lineHeight = 20.sp)
                         )
                     }
                 }

@@ -578,19 +578,21 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
 
 @Composable
 private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> Unit, enabled: Boolean) {
-    val options = listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other")
+    val options = listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Joy buyer", "Other")
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var note by remember { mutableStateOf("") }
+    val requiresManualReason = "Other" in selected
+    val canConfirmHold = enabled && (!requiresManualReason || note.isNotBlank())
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Place delivery on hold") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text("Select all reasons that apply (optional). You can revisit this stop later.")
                 options.forEach { option ->
                     val checked = option in selected
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable {
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
                             selected = if (checked) selected - option else selected + option
                         },
                         verticalAlignment = Alignment.CenterVertically
@@ -606,8 +608,10 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
                 }
                 if ("Other" in selected) {
                     OutlinedTextField(
-                        note, { note = it.take(160) }, label = { Text("Optional note") },
-                        supportingText = { Text("${note.length}/160") }, modifier = Modifier.fillMaxWidth(),
+                        note, { note = it.take(160) }, label = { Text("Reason (required)") },
+                        isError = note.isBlank(),
+                        supportingText = { Text(if (note.isBlank()) "Please enter a reason to confirm hold." else "${note.length}/160") },
+                        modifier = Modifier.fillMaxWidth(),
                         minLines = 2, maxLines = 3
                     )
                 }
@@ -619,7 +623,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
                     val reasons = options.filter { it in selected }.joinToString(" | ").takeIf { it.isNotBlank() }
                     onConfirm(reasons, if ("Other" in selected) note.trim().takeIf { it.isNotEmpty() } else null)
                 },
-                enabled = enabled, modifier = Modifier.heightIn(min = 56.dp),
+                enabled = canConfirmHold, modifier = Modifier.heightIn(min = 56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PremiumAmber, contentColor = Color.White)
             ) { Text("Confirm hold") }
         },
