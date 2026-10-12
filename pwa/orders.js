@@ -37,7 +37,7 @@ function splitOrders(raw){
   const line=header?header[1]:original;
   const field=label(line)?.field;
   const primary=['name','price','address'].includes(field);
-  if((heading(line)&&seen.size>0)||(primary&&(seen.has(field)||(seen.has('address')&&field!=='address'))))flush();
+  if((heading(line)&&seen.size>0)||(primary&&seen.has(field)))flush();
   lines.push(line);if(field)seen.add(field);
  }
  flush();return blocks;
