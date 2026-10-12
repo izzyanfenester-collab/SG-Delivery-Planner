@@ -277,7 +277,7 @@ struct RouteMapView: View {
                     }
                 }
                 Annotation("Start & End", coordinate: CLLocationCoordinate2D(
-                    latitude: 1.4464, longitude: 103.7696)) {
+                    latitude: route.depotLatitude ?? 1.4464, longitude: route.depotLongitude ?? 103.7696)) {
                     Image(systemName: "house.circle.fill").font(.title).foregroundStyle(.cyan)
                 }
             }
