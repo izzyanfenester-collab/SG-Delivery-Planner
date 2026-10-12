@@ -19,6 +19,12 @@ $('back').onclick=()=>navigate('home');
 $('settings').onclick=()=>{const v=prompt('Delivery time per stop (minutes):',state.settings.minutes);if(v===null)return;const n=Number(v);if(!Number.isInteger(n)||n<1||n>120)return toast('Enter 1–120 minutes');state.settings.minutes=n;persist();render()};
 const match=(s,re)=>s.match(re)?.[1]?.trim()||'';
 function parseOrders(text){
+ // Plain postal-code lists are not WhatsApp order records.
+ if(/^[\s\d,;]+$/.test(text)&&/\d{6}/.test(text)){
+  const tokens=text.match(/(?<!\d)\d{6}(?!\d)/g)||[],seen=new Set(),stops=[];let duplicates=0;
+  for(const postal of tokens){if(seen.has(postal)){duplicates++;continue}seen.add(postal);stops.push({id:id(),postal,name:'',phone:'',amount:'',payment:'Not specified',address:'',status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null})}
+  return {stops,duplicates,failed:0};
+ }
  const parts=text.split(/(?=\[\d{1,2}\/\d{1,2}[^\]]*\][^\n]*:)|(?=🔥\s*ORDER\b)/i).filter(s=>s.trim());
  const blocks=parts.length?parts:[text];const seen=new Set(),out=[];let duplicates=0;
  for(const block of blocks){
@@ -95,11 +101,13 @@ function bindHome(){
  $('deliveryDate').onchange=saveSettingsFromHome;$('startTime').onchange=saveSettingsFromHome;
  $('paste').onclick=async()=>{try{const t=await navigator.clipboard.readText();$('codes').value=t;update();toast('WhatsApp text imported')}catch{toast('Paste WhatsApp text into the box manually (press and hold).')}};
  $('clear').onclick=()=>{state.draft='';persist();render()};
- $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
+ $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(state.settings.start!=='Woodlands Checkpoint'||state.settings.address!=='21 Woodlands Crossing, Singapore 738203')return toast('Custom start location requires geocoding; select Woodlands Checkpoint for road optimization.');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
  const plan=await RoutingCore.plan(parsed.stops.map(s=>s.postal),{minutes:state.settings.minutes,date:state.settings.date,time:state.settings.time,onProgress:t=>{btn.textContent=t}});
  const queues=new Map();for(const order of parsed.stops){if(!queues.has(order.postal))queues.set(order.postal,[]);queues.get(order.postal).push(order)}
- const stops=plan.schedule.flatMap(item=>(queues.get(item.postal)||[]).map((order,i)=>({...order,place:item.place,arrival:item.arrival,leave:item.leave,legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0})));
- const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:plan.returnTime,optimized:true,trafficMode:plan.mode};
+ const stops=plan.schedule.flatMap(item=>(queues.get(item.postal)||[]).map((order,i)=>({...order,place:item.place,arrival:new Date(Date.parse(item.arrival)+i*state.settings.minutes*60000).toISOString(),leave:new Date(Date.parse(item.arrival)+(i+1)*state.settings.minutes*60000).toISOString(),legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0})));
+ const extraMinutes=stops.length-plan.schedule.length;
+ const adjustedReturn=new Date(Date.parse(plan.returnTime)+extraMinutes*state.settings.minutes*60000).toISOString();
+ const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:adjustedReturn,optimized:true,trafficMode:plan.mode};
  state.routes.unshift(r);state.current=r.id;selectedStop=0;persist();navigate('route');toast('Driving route optimized: '+stops.length+' orders / '+plan.totalKm.toFixed(1)+' km');
  }catch(e){toast(e.message);btn.disabled=false;btn.textContent='Optimize route'}};
 }
