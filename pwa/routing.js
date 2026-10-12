@@ -53,6 +53,16 @@ async function matrix(places,endpoint='https://router.project-osrm.org'){
   return {durations,distances};
  }catch(e){throw Error('Driving-route service unavailable: '+e.message)}finally{clearTimeout(timer)}
 }
+async function routeGeometry(places,endpoint='https://router.project-osrm.org'){
+ const coords=places.map(p=>p.lon+','+p.lat).join(';');
+ const url=endpoint.replace(/\/$/,'')+'/route/v1/driving/'+coords+'?overview=full&geometries=geojson&steps=false';
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
+ try{const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('HTTP '+response.status);
+ const json=await response.json(),line=json.routes?.[0]?.geometry?.coordinates;
+ if(json.code!=='Ok'||!Array.isArray(line)||line.length<2)throw Error('Route geometry unavailable');
+ return line.map(pair=>[pair[1],pair[0]]).filter(p=>p.every(Number.isFinite));
+ }finally{clearTimeout(timer)}
+}
 async function plan(postals,{onProgress=()=>{},start=DEPOT,minutes=8,date,time='10:00',mode='Normal Traffic'}={}){
  const unique=[...new Set(postals)];if(!unique.length||postals.length>50)throw Error('Enter 1–50 orders');
  if(!Number.isFinite(start.lat)||!Number.isFinite(start.lon))throw Error('Start location coordinates unavailable');
@@ -60,7 +70,7 @@ async function plan(postals,{onProgress=()=>{},start=DEPOT,minutes=8,date,time='
  for(let i=0;i<unique.length;i++){onProgress('OneMap '+(i+1)+' / '+unique.length);places.push(await resolvePostal(unique[i]))}
  onProgress('Calculating road driving matrix…');
  const {durations,distances}=await matrix(places);
- const order=optimize(durations),ordered=order.map(i=>places[i]);
+ const order=optimize(durations);
  const startDate=new Date((date||new Date().toLocaleDateString('en-CA'))+'T'+time+':00+08:00');
  if(Number.isNaN(startDate.getTime()))throw Error('Invalid date or time');
  let now=startDate.getTime(),totalMeters=0,previous=0;
@@ -72,7 +82,9 @@ async function plan(postals,{onProgress=()=>{},start=DEPOT,minutes=8,date,time='
  });
  const returnSeconds=durations[previous][0],returnKm=distances[previous][0]/1000;
  now+=(returnSeconds+trafficBuffer(returnKm,returnSeconds,mode))*1000;totalMeters+=distances[previous][0];
- return {schedule,returnTime:new Date(now).toISOString(),totalKm:totalMeters/1000,mode,optimized:true};
+ let geometry=null;
+ try{onProgress('Loading route map…');geometry=await routeGeometry([places[0],...order.map(i=>places[i]),places[0]])}catch(e){onProgress('Route map geometry unavailable; stop pins remain available')}
+ return {schedule,returnTime:new Date(now).toISOString(),totalKm:totalMeters/1000,mode,optimized:true,geometry};
 }
-return {DEPOT,optimize,tourCost,trafficBuffer,resolvePostal,matrix,plan};
+return {DEPOT,optimize,tourCost,trafficBuffer,resolvePostal,matrix,routeGeometry,plan};
 })();
