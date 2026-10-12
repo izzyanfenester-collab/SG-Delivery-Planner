@@ -35,7 +35,7 @@ function parseOrders(text){
   const amount=match(block,/(?:Total|Amount|Parcel Price|Price)\s*:\s*(?:S?\$|SGD\s*)?\s*(\d+(?:\.\d{1,2})?)/i);
   const payment=/\bPAYNOW\b/i.test(block)?'PayNow':/\bCOD\b|CASH ON DELIVERY/i.test(block)?'Cash On Delivery':'Not specified';
   const address=match(block,/(?:📍\s*)?(?:Alamat|Address)\s*:\s*([\s\S]*?)(?=\n\s*(?:📱|WhatsApp|Phone|🛒|Item|Total|💰|━━━━━━━━|$))/i).replace(/\n/g,' ').trim();
-  out.push({id:id(),postal,name,phone,amount,payment,address,status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null});
+  out.push({id:id(),postal,name,phone,amount,payment,address,originalMessage:block.trim(),status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null});
  }
  return {stops:out,duplicates,failed:Math.max(0,blocks.length-out.length-duplicates)};
 }
@@ -54,7 +54,7 @@ function home(){
  '<button class="btn outline-btn wide" style="margin-top:12px" id="paste">Import WhatsApp Orders</button>'+
  '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Duplicates removed</span></div></div>'+
  '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Optimize route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
- '<button class="btn outline-btn wide gold" style="margin-top:12px;border-color:var(--gold)" disabled>▤ &nbsp; Tax Declare (coming later)</button>'+
+ '<a class="btn outline-btn wide gold link-btn" style="margin-top:12px;border-color:var(--gold);display:block" href="https://m.customs.gov.sg/CustomsTravellerPortal/" target="_blank" rel="noopener noreferrer">▤ &nbsp; Tax Declare</a>'+
  '<p class="hint" style="margin-top:15px">Supports up to 50 unique stops. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
 }
 function routeView(){
@@ -80,7 +80,7 @@ function deliveryView(){
 function mapView(){
  const r=active();return '<h1>Delivery map</h1><p class="hint">Singapore map overview. The road route and delivery pins are not plotted yet.</p>'+
  '<iframe class="map-frame" title="OpenStreetMap Singapore" loading="lazy" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=103.60%2C1.22%2C104.10%2C1.48&amp;layer=mapnik"></iframe>'+
- '<p class="hint">Map requires internet. Select a stop below to open navigation in Google Maps.</p>'+
+ '<p class="hint">Map requires internet. Select a stop below to open navigation in Google Maps. Delivery markers and route polyline are not yet displayed.</p>'+
  (r?r.stops.map((s,i)=>'<div class="stop"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><button class="btn" data-mapstop="'+i+'">Navigate</button></div></div>').join(''):'<p class="muted">Create a delivery route first.</p>');
 }
 function historyView(){
@@ -101,8 +101,12 @@ function bindHome(){
  $('deliveryDate').onchange=saveSettingsFromHome;$('startTime').onchange=saveSettingsFromHome;
  $('paste').onclick=async()=>{try{const t=await navigator.clipboard.readText();$('codes').value=t;update();toast('WhatsApp text imported')}catch{toast('Paste WhatsApp text into the box manually (press and hold).')}};
  $('clear').onclick=()=>{state.draft='';persist();render()};
- $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(state.settings.start!=='Woodlands Checkpoint'||state.settings.address!=='21 Woodlands Crossing, Singapore 738203')return toast('Custom start location requires geocoding; select Woodlands Checkpoint for road optimization.');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
- const plan=await RoutingCore.plan(parsed.stops.map(s=>s.postal),{minutes:state.settings.minutes,date:state.settings.date,time:state.settings.time,onProgress:t=>{btn.textContent=t}});
+ $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
+ const custom=state.settings.start!=='Woodlands Checkpoint'||state.settings.address!=='21 Woodlands Crossing, Singapore 738203';
+ const startPostal=(state.settings.address.match(/(?<!\d)\d{6}(?!\d)/)||[])[0];
+ if(custom&&!startPostal)throw Error('Custom Start & End requires a Singapore 6-digit postal code in the address');
+ const start=custom?await RoutingCore.resolvePostal(startPostal):RoutingCore.DEPOT;
+ const plan=await RoutingCore.plan(parsed.stops.map(s=>s.postal),{start,minutes:state.settings.minutes,date:state.settings.date,time:state.settings.time,onProgress:t=>{btn.textContent=t}});
  const queues=new Map();for(const order of parsed.stops){if(!queues.has(order.postal))queues.set(order.postal,[]);queues.get(order.postal).push(order)}
  const stops=plan.schedule.flatMap(item=>(queues.get(item.postal)||[]).map((order,i)=>({...order,place:item.place,arrival:new Date(Date.parse(item.arrival)+i*state.settings.minutes*60000).toISOString(),leave:new Date(Date.parse(item.arrival)+(i+1)*state.settings.minutes*60000).toISOString(),legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0})));
  const extraMinutes=stops.length-plan.schedule.length;
@@ -118,7 +122,7 @@ function bindRoute(){const r=active();$('plan')?.addEventListener('click',()=>na
 }
 function bindDelivery(){const r=active();$('plan')?.addEventListener('click',()=>navigate('home'));if(!r||!r.stops.length)return;const s=r.stops[selectedStop];
  $('next').onclick=()=>{selectedStop++;render()};$('prev').onclick=()=>{selectedStop--;render()};$('nav').onclick=()=>googleNav(s);
- $('message').onclick=()=>{if(!s.phone)return toast('No customer phone number saved');const phone=s.phone.replace(/\D/g,'');window.open('https://wa.me/'+(phone.startsWith('65')?phone:'65'+phone)+'?text='+encodeURIComponent('Hello, your delivery is on the way.'),'_blank','noopener,noreferrer')};
+ $('message').onclick=()=>{if(!s.phone)return toast('No customer phone number saved');const phone=s.phone.replace(/\D/g,'');window.open('https://wa.me/'+(phone.startsWith('65')?phone:'65'+phone)+(s.originalMessage?'?text='+encodeURIComponent(s.originalMessage):''),'_blank','noopener,noreferrer')};
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{s.status=b.dataset.status;s.deliveredAt=s.status==='Delivered'?new Date().toISOString():null;persist();render();toast('Stop updated: '+s.status)});
  document.querySelectorAll('[data-proof]').forEach(b=>b.onclick=()=>{proofType=b.dataset.proof;$('proofFile').click()});
 }
