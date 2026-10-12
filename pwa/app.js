@@ -101,8 +101,11 @@ function bindHome(){
  }
  const last=plan.schedule.at(-1);
  const plannedReturn=Date.parse(plan.returnTime)+Math.max(0,stops.length-plan.schedule.length)*state.settings.minutes*60000;
- const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:new Date(plannedReturn).toISOString(),optimized:true,trafficMode:plan.mode,geometry:plan.geometry};
- state.routes.unshift(r);state.current=r.id;selectedStop=0;persist();navigate('route');toast('Driving route optimized: '+stops.length+' orders / '+plan.totalKm.toFixed(1)+' km');
+ const geometry=Array.isArray(plan.geometry)?plan.geometry.filter((_,i)=>i%Math.max(1,Math.ceil(plan.geometry.length/1200))===0||i===plan.geometry.length-1):null;
+ const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:new Date(plannedReturn).toISOString(),optimized:true,trafficMode:plan.mode,geometry,startPoint:start};
+ const previousCurrent=state.current;state.routes.unshift(r);state.current=r.id;selectedStop=0;
+ if(!persist()){state.routes.shift();state.current=previousCurrent;throw Error('Storage full. Export a backup or delete old proof photos before saving this route.')}
+ navigate('route');toast('Driving route optimized: '+stops.length+' orders / '+plan.totalKm.toFixed(1)+' km');
  }catch(e){toast(e.message);btn.disabled=false;btn.textContent='Optimize route'}};
 }
 function googleNav(s){window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.address||'Singapore '+s.postal),'_blank','noopener,noreferrer')}
@@ -142,8 +145,8 @@ function bindMap(){
  const map=L.map('deliveryMap',{zoomControl:true}).setView([1.3521,103.8198],11);
  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
  const bounds=[];
- const depot=r?.stops?.[0]?.place?(r.start==='Woodlands Checkpoint'?RoutingCore.DEPOT:null):null;
- if(depot){L.marker([depot.lat,depot.lon]).addTo(map).bindPopup('Woodlands Checkpoint');bounds.push([depot.lat,depot.lon])}
+ const depot=r?.startPoint||((r?.stops?.[0]?.place&&r.start==='Woodlands Checkpoint')?RoutingCore.DEPOT:null);
+ if(depot){L.marker([depot.lat,depot.lon]).addTo(map).bindPopup(safe(r.start||'Start / End'));bounds.push([depot.lat,depot.lon])}
  for(const [i,s] of (r?.stops||[]).entries()){
   if(!s.place||!Number.isFinite(s.place.lat)||!Number.isFinite(s.place.lon))continue;
   const point=[s.place.lat,s.place.lon];bounds.push(point);
