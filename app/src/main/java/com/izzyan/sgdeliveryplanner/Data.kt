@@ -28,6 +28,8 @@ private inline fun checkPlanning(condition: Boolean, message: () -> String) {
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun leg(l:CachedLeg)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun save(r:SavedRoute)
  @Query("SELECT * FROM routes ORDER BY created DESC") fun history(): Flow<List<SavedRoute>>
+ @Query("SELECT * FROM routes ORDER BY created DESC") suspend fun allHistoryForBackup(): List<SavedRoute>
+ @Insert(onConflict=OnConflictStrategy.IGNORE) suspend fun insertRestoredRoutes(rows: List<SavedRoute>): List<Long>
  @Query("DELETE FROM routes WHERE id IN (:ids)") suspend fun deleteRoutes(ids:List<String>)
  @Query("SELECT * FROM routes WHERE id=:id") suspend fun route(id:String): SavedRoute?
 }
