@@ -48,7 +48,7 @@ function deliveryView(){
  const r=active();if(!r)return '<div class="card"><h2>Your next delivery starts here</h2><p class="hint">Plan a route on Home or open a saved route from History.</p></div><button class="btn wide" id="plan">Plan a route</button>';
  selectedStop=Math.max(0,Math.min(selectedStop,r.stops.length-1));const s=r.stops[selectedStop];if(!s)return '<p>No stops.</p>';
  return '<div class="outline gold-border"><div class="stop-head"><h2 class="gold">Stop '+(selectedStop+1)+' of '+r.stops.length+'</h2><button class="btn cyan" id="message">Send message</button></div>'+
- '<div class="title-strong">'+safe(s.postal)+'</div><div class="delivery-info"><p>'+safe(s.address||'Singapore '+s.postal)+'</p><p>Customer: '+safe(s.name||'Not provided')+'</p><p>Phone: '+safe(s.phone||'Not provided')+'</p><p>Parcel Price: '+(s.amount?'$'+safe(s.amount):'Not provided')+'</p><p>Payment Mode: <span class="pill '+(s.payment==='PayNow'?'paynow':'cash')+'">'+safe(s.payment||'Not specified')+'</span></p><span class="pill '+safe(s.status.toLowerCase())+'">'+safe(s.status)+'</span></div><hr style="border-color:var(--line)"><p class="hint">Start time: '+timeText(r.time)+' • '+r.minutes+' minutes per stop (excluding driving)</p>'+
+ '<div class="title-strong">'+safe(s.postal)+'</div><div class="delivery-info"><p>'+safe(s.address||'Singapore '+s.postal)+'</p><p>Customer: '+safe(s.name||'Not provided')+'</p><p>Phone: '+safe(s.phone||'Not provided')+'</p><p>Parcel Price: '+(s.amount?'$'+safe(s.amount):'Not provided')+'</p><p>Payment Mode: <span class="pill '+(s.payment==='PayNow'?'paynow':'cash')+'">'+safe(s.payment||'Not specified')+'</span></p>'+(s.holdReason?'<p>Hold Reason: '+safe(s.holdReason)+(s.holdNote?' — '+safe(s.holdNote):'')+'</p>':'')+'<span class="pill '+safe(s.status.toLowerCase())+'">'+safe(s.status)+'</span></div><hr style="border-color:var(--line)"><p class="hint">Start time: '+timeText(r.time)+' • '+r.minutes+' minutes per stop (excluding driving)</p>'+
  (s.deliveredAt?'<p class="hint">Delivered: '+dateTime(s.deliveredAt)+'</p>':'')+'</div>'+
  '<div class="grid2"><button class="btn outline-btn" data-proof="delivery">Proof of Delivery '+(s.proofDelivery?'✓':'')+'</button><button class="btn outline-btn" data-proof="payment">Proof of Payment '+(s.proofPayment?'✓':'')+'</button></div>'+
  (s.proofDelivery?'<p><img class="photo" src="'+safe(s.proofDelivery)+'" alt="Proof of delivery"></p>':'')+
@@ -72,7 +72,7 @@ function historyView(){
 }
 function historyDetails(key){
  const r=state.routes.find(x=>x.id===key);if(!r)return '';
- return '<div class="outline"><h2>'+safe(r.date||'Route')+' — read only</h2>'+r.stops.map((s,i)=>'<details><summary>'+(i+1)+'. '+safe(s.postal)+' — '+safe(s.status)+'</summary><p class="hint">Customer: '+safe(s.name||'—')+'<br>Phone: '+safe(s.phone||'—')+'<br>Address: '+safe(s.address||'—')+'<br>Delivered: '+dateTime(s.deliveredAt)+'</p>'+(s.proofDelivery?'<img class="photo" src="'+safe(s.proofDelivery)+'" alt="Delivery proof">':'')+(s.proofPayment?'<img class="photo" src="'+safe(s.proofPayment)+'" alt="Payment proof">':'')+'</details>').join('')+'</div>';
+ return '<div class="outline"><h2>'+safe(r.date||'Route')+' — read only</h2>'+r.stops.map((s,i)=>'<details><summary>'+(i+1)+'. '+safe(s.postal)+' — '+safe(s.status)+'</summary><p class="hint">Customer: '+safe(s.name||'—')+'<br>Phone: '+safe(s.phone||'—')+'<br>Address: '+safe(s.address||'—')+'<br>Delivered: '+dateTime(s.deliveredAt)+(s.holdReason?'<br>Hold: '+safe(s.holdReason)+' '+safe(s.holdNote||''):'')+'</p>'+(s.proofDelivery?'<img class="photo" src="'+safe(s.proofDelivery)+'" alt="Delivery proof">':'')+(s.proofPayment?'<img class="photo" src="'+safe(s.proofPayment)+'" alt="Payment proof">':'')+'</details>').join('')+'</div>';
 }
 function bindHome(){
  const update=()=>{const x=parseOrders($('codes').value);$('validCount').textContent=x.stops.length;$('dupCount').textContent=x.duplicates;state.draft=$('codes').value;persist()};
@@ -113,7 +113,24 @@ function bindRoute(){const r=active();$('plan')?.addEventListener('click',()=>na
 function bindDelivery(){const r=active();$('plan')?.addEventListener('click',()=>navigate('home'));if(!r||!r.stops.length)return;const s=r.stops[selectedStop];
  $('next').onclick=()=>{selectedStop++;render()};$('prev').onclick=()=>{selectedStop--;render()};$('nav').onclick=()=>googleNav(s);
  $('message').onclick=()=>{if(!s.phone)return toast('No customer phone number saved');const phone=s.phone.replace(/\D/g,'');window.open('https://wa.me/'+(phone.startsWith('65')?phone:'65'+phone)+(s.originalMessage?'?text='+encodeURIComponent(s.originalMessage):''),'_blank','noopener,noreferrer')};
- document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{s.status=b.dataset.status;s.deliveredAt=s.status==='Delivered'?new Date().toISOString():null;persist();render();toast('Stop updated: '+s.status)});
+ document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{
+ if(s.status==='Delivered'&&b.dataset.status!=='Delivered')return toast('Delivered status is locked to preserve delivery records');
+ if(b.dataset.status==='Hold'){
+  const reason=prompt('Hold reason: Customer not home / No answer / Reschedule / Payment issue / Access issue / Joy buyer / Other','Customer not home');
+  if(reason===null)return;
+  const allowed=['Customer not home','No answer','Reschedule','Payment issue','Access issue','Joy buyer','Other'];
+  if(!allowed.includes(reason.trim()))return toast('Choose a valid hold reason');
+  let note='';if(reason.trim()==='Other'){note=prompt('Explain hold reason (required, max 160 characters)','');if(!note?.trim())return toast('A note is required for Other')}
+  s.holdReason=reason.trim();s.holdNote=note.slice(0,160);
+ }else{s.holdReason=null;s.holdNote=null}
+ s.status=b.dataset.status;
+ if(s.status==='Delivered'&&!s.deliveredAt)s.deliveredAt=new Date().toISOString();
+ s.reviewedAt=new Date().toISOString();
+ if(!persist())return;
+ const next=r.stops.findIndex((x,i)=>i>selectedStop&&!x.reviewedAt);
+ if(next>=0)selectedStop=next;
+ render();toast('Stop updated: '+s.status)
+});
  document.querySelectorAll('[data-proof]').forEach(b=>b.onclick=()=>{proofType=b.dataset.proof;$('proofFile').click()});
 }
 function bindMap(){
