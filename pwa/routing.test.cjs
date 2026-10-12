@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');
+const context=vm.createContext({});vm.runInContext(fs.readFileSync('pwa/routing.js','utf8')+';globalThis.testCore=RoutingCore;',context);
+const r=context.testCore;
+const matrix=[[0,10,2,8],[3,0,2,4],[2,3,0,1],[1,5,3,0]];
+const result=Array.from(r.optimize(matrix));
+assert.equal(result.length,3);assert.deepEqual(result.slice().sort(),[1,2,3]);
+assert.ok(r.tourCost(result,matrix)<=r.tourCost([1,2,3],matrix));
+assert.equal(r.trafficBuffer(1,0),0);
+assert.ok(r.trafficBuffer(2,180,'Heavy Traffic')>r.trafficBuffer(2,180,'Light Traffic'));
+assert.throws(()=>r.optimize([[0,NaN],[1,0]]));
+console.log('Routing core tests passed');
