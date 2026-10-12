@@ -18,27 +18,7 @@ document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',
 $('back').onclick=()=>navigate('home');
 $('settings').onclick=()=>{const v=prompt('Delivery time per stop (minutes):',state.settings.minutes);if(v===null)return;const n=Number(v);if(!Number.isInteger(n)||n<1||n>120)return toast('Enter 1–120 minutes');state.settings.minutes=n;persist();render()};
 const match=(s,re)=>s.match(re)?.[1]?.trim()||'';
-function parseOrders(text){
- // Plain postal-code lists are not WhatsApp order records.
- if(/^[\s\d,;]+$/.test(text)&&/\d{6}/.test(text)){
-  const tokens=text.match(/(?<!\d)\d{6}(?!\d)/g)||[],seen=new Set(),stops=[];let duplicates=0;
-  for(const postal of tokens){if(seen.has(postal)){duplicates++;continue}seen.add(postal);stops.push({id:id(),postal,name:'',phone:'',amount:'',payment:'Not specified',address:'',status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null})}
-  return {stops,duplicates,failed:0};
- }
- const parts=text.split(/(?=\[\d{1,2}\/\d{1,2}[^\]]*\][^\n]*:)|(?=🔥\s*ORDER\b)/i).filter(s=>s.trim());
- const blocks=parts.length?parts:[text];const seen=new Set(),out=[];let duplicates=0;
- for(const block of blocks){
-  const postal=(block.match(/(?<!\d)\d{6}(?!\d)/g)||[]).find(x=>x!=='000000');if(!postal)continue;
-  const signature=block.trim().replace(/\s+/g,' ').toLowerCase();if(seen.has(signature)){duplicates++;continue}seen.add(signature);
-  const name=match(block,/(?:👤\s*)?(?:Nama|Customer|Name)\s*:\s*([^\n\r]+)/i);
-  const phone=match(block,/(?:Phone|WhatsApp|Tel|Mobile)\s*:\s*(?:https?:\/\/wa\.me\/)?(\+?65[\s-]?\d{4}[\s-]?\d{4}|\d{8})/i)||match(block,/(?:wa\.me\/)(\+?65\d{8})/i);
-  const amount=match(block,/(?:Total|Amount|Parcel Price|Price)\s*:\s*(?:S?\$|SGD\s*)?\s*(\d+(?:\.\d{1,2})?)/i);
-  const payment=/\bPAYNOW\b/i.test(block)?'PayNow':/\bCOD\b|CASH ON DELIVERY/i.test(block)?'Cash On Delivery':'Not specified';
-  const address=match(block,/(?:📍\s*)?(?:Alamat|Address)\s*:\s*([\s\S]*?)(?=\n\s*(?:📱|WhatsApp|Phone|🛒|Item|Total|💰|━━━━━━━━|$))/i).replace(/\n/g,' ').trim();
-  out.push({id:id(),postal,name,phone,amount,payment,address,originalMessage:block.trim(),status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null});
- }
- return {stops:out,duplicates,failed:Math.max(0,blocks.length-out.length-duplicates)};
-}
+function parseOrders(text){return OrdersCore.parse(text,id)}
 function saveSettingsFromHome(){
  const start=$('startName')?.value?.trim(),address=$('startAddress')?.value?.trim(),date=$('deliveryDate')?.value,time=$('startTime')?.value;
  if(start)state.settings.start=start;if(address)state.settings.address=address;
@@ -52,10 +32,10 @@ function home(){
  '<div class="grid2"><div class="field-card"><label for="deliveryDate">Delivery Date</label><input type="date" id="deliveryDate" value="'+safe(s.date)+'"></div><div class="field-card"><label for="startTime">Start time</label><input type="time" id="startTime" value="'+safe(s.time)+'"></div></div>'+
  '<p class="hint" style="margin:18px 0">Delivery time per stop: '+s.minutes+' minutes</p><textarea id="codes" placeholder="Singapore postal codes or paste WhatsApp orders">'+safe(state.draft)+'</textarea>'+
  '<button class="btn outline-btn wide" style="margin-top:12px" id="paste">Import WhatsApp Orders</button>'+
- '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Duplicates removed</span></div></div>'+
+ '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Repeated manual codes</span></div></div>'+
  '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Optimize route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
  '<a class="btn outline-btn wide gold link-btn" style="margin-top:12px;border-color:var(--gold);display:block" href="https://m.customs.gov.sg/CustomsTravellerPortal/" target="_blank" rel="noopener noreferrer">▤ &nbsp; Tax Declare</a>'+
- '<p class="hint" style="margin-top:15px">Supports up to 50 unique stops. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
+ '<p class="hint" style="margin-top:15px">Supports up to 50 customer orders, including repeated postal codes. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
 }
 function routeView(){
  const r=active();if(!r)return '<div class="card"><h2>Your next delivery starts here</h2><p class="hint">Plan a route on Home or open a saved route from History.</p></div><button class="btn wide tall" id="plan">Plan a route</button>';
