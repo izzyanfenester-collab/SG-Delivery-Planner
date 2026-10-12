@@ -8,7 +8,7 @@ import java.math.RoundingMode
 import java.time.Duration
 import java.time.LocalDateTime
 
-private val holdReasons = setOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Other")
+private val holdReasons = setOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Joy buyer", "Other")
 
 /** Accept one legacy reason or multiple selected reasons without adding a DB column. */
 fun normalizedHoldReasons(value: String?): String? =
@@ -38,6 +38,10 @@ fun reviewStop(plan: Plan, action: String, now: String, holdReason: String? = nu
     val original = plan.stops[plan.current]
     val alreadyReviewed = action == "NEXT" && original.reviewedAt != null
     val reason = if (action == "NEXT") original.holdReason else if (status == "ON_HOLD") normalizedHoldReasons(holdReason) else null
+    // The Other choice always requires a written explanation for newly saved holds.
+    if (action == "ON_HOLD" && reason?.split(" | ")?.contains("Other") == true) {
+        require(!holdNote.isNullOrBlank()) { "Please enter a reason when Other is selected." }
+    }
     val stops = plan.stops.toMutableList()
     stops[plan.current] = stops[plan.current].copy(
         status = status,
