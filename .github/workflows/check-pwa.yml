@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check JavaScript syntax
         run: |
+          node --check pwa/orders.js
+          node pwa/orders.test.cjs
           node --check pwa/routing.js
           node --check pwa/app.js
           node --check pwa/sw.js
