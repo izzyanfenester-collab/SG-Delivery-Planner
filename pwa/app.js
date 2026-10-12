@@ -32,7 +32,7 @@ function home(){
  '<div class="grid2"><div class="field-card"><label for="deliveryDate">Delivery Date</label><input type="date" id="deliveryDate" value="'+safe(s.date)+'"></div><div class="field-card"><label for="startTime">Start time</label><input type="time" id="startTime" value="'+safe(s.time)+'"></div></div>'+
  '<p class="hint" style="margin:18px 0">Delivery time per stop: '+s.minutes+' minutes</p><textarea id="codes" placeholder="Singapore postal codes or paste WhatsApp orders">'+safe(state.draft)+'</textarea>'+
  '<button class="btn outline-btn wide" style="margin-top:12px" id="paste">Import WhatsApp Orders</button>'+
- '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Repeated manual codes</span></div></div>'+
+ '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Exact duplicates skipped</span></div></div>'+
  '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Optimize route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
  '<a class="btn outline-btn wide gold link-btn" style="margin-top:12px;border-color:var(--gold);display:block" href="https://m.customs.gov.sg/CustomsTravellerPortal/" target="_blank" rel="noopener noreferrer">▤ &nbsp; Tax Declare</a>'+
  '<p class="hint" style="margin-top:15px">Supports up to 50 customer orders, including repeated postal codes. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
