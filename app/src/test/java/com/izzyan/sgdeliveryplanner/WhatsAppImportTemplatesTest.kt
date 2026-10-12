@@ -139,8 +139,8 @@ class WhatsAppImportTemplatesTest {
         val result=parseCustomerOrders(WhatsAppImportFixture.english + "\n\n" + """
             ORDER ERROR
             Name: Customer B
-            Address: Blk 77 Singapore 7321899
             Total: $60 (COD)
+            Address: Blk 77 Singapore 7321899
         """.trimIndent())
         assertEquals(1,result.orders.size)
         assertEquals(1,result.failed)
