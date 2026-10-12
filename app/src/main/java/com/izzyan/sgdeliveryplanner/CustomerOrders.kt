@@ -13,7 +13,19 @@ data class CustomerOrder(
     /** The exact imported WhatsApp order body, including ordered items; bound to orderId. */
     val originalMessage: String? = null
 )
-data class OrderImport(val orders: List<CustomerOrder>, val failed: Int)
+/** A rejected WhatsApp block, retained for the runner to inspect or correct. */
+data class FailedCustomerOrder(
+    val customerName: String?,
+    val address: String?,
+    val suspectedPostal: String?,
+    val reason: String,
+    val originalMessage: String
+)
+data class OrderImport(
+    val orders: List<CustomerOrder>,
+    val failed: Int,
+    val failedOrders: List<FailedCustomerOrder> = emptyList()
+)
 
 fun normalizeCustomerPhone(raw: String?): String? {
     val digits = raw?.replace(Regex("[^0-9]"), "") ?: return null
@@ -71,6 +83,7 @@ fun parseCustomerOrders(raw: String): OrderImport {
     }
     flush()
     var failed=0
+    val failedOrders=mutableListOf<FailedCustomerOrder>()
     val orders=blocks.mapNotNull { block ->
         val fields=mutableMapOf<OrderField,String>()
         var current: OrderField?=null
@@ -90,7 +103,25 @@ fun parseCustomerOrders(raw: String): OrderImport {
             Regex("(?i)(?:\\bSingapore|\\bS['’]pore|\\bSG|\\bS)[ \t]*([0-9]{6})(?![0-9])").find(it)?.groupValues?.get(1)
                 ?: Regex("(?<!\\d)[0-9]{6}(?!\\d)").find(it)?.value
         }
-        if(postal==null) {failed++;null}
+        if(postal==null) {
+            failed++
+            // Show the closest postal-like value, but never treat it as a valid postcode.
+            val suspected=searchable?.let {
+                Regex("(?<!\\d)[0-9]{4,8}(?!\\d)").find(it)?.value
+            }
+            failedOrders.add(FailedCustomerOrder(
+                customerName=fields[OrderField.NAME]?.lines()?.firstOrNull { it.isNotBlank() },
+                address=address,
+                suspectedPostal=suspected,
+                reason=when {
+                    address==null -> "Address field is missing or empty"
+                    suspected!=null -> "Postal code '$suspected' is not a valid 6-digit Singapore postal code"
+                    else -> "No 6-digit Singapore postal code found in the address"
+                },
+                originalMessage=block.joinToString("\n").trim()
+            ))
+            null
+        }
         else {
             val phoneField=fields[OrderField.PHONE].orEmpty()
             val phone=Regex("(?i)wa\\.me/\\+?([0-9]+)").find(phoneField)?.groupValues?.get(1)
@@ -104,7 +135,7 @@ fun parseCustomerOrders(raw: String): OrderImport {
                 originalMessage=block.joinToString("\n").trim().takeIf { it.isNotBlank() })
         }
     }
-    return OrderImport(orders,failed)
+    return OrderImport(orders,failed,failedOrders)
 }
 fun orderPrice(order: CustomerOrder?) = order?.parcelPrice?.let { "$${it.setScale(2).toPlainString()}" } ?: "—"
 fun orderPayment(order: CustomerOrder?) = when (order?.paymentStatus) { "COD" -> "COD"; "PAYNOW" -> "PayNow"; else -> "—" }
