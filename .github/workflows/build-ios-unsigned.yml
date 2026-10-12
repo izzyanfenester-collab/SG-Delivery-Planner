@@ -1,0 +1,34 @@
+name: Build SG Delivery iOS (unsigned)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios-unsigned.yml'
+jobs:
+  ios:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build iPhone app without signing
+        working-directory: ios
+        run: |
+          xcodebuild -project SGDelivery.xcodeproj -scheme SGDelivery -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/SGDeliveryBuild" CODE_SIGNING_ALLOWED=NO build
+      - name: Create unsigned IPA archive
+        run: |
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          cp -R "$RUNNER_TEMP/SGDeliveryBuild/Build/Products/Debug-iphoneos/SGDelivery.app" "$RUNNER_TEMP/package/Payload/"
+          cd "$RUNNER_TEMP/package"
+          zip -qry "$GITHUB_WORKSPACE/SG-Delivery-iOS-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SG-Delivery-iOS-unsigned-IPA
+          path: SG-Delivery-iOS-unsigned.ipa
+          retention-days: 30
