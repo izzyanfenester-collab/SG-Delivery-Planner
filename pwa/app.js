@@ -23,7 +23,7 @@ function parseOrders(text){
  const blocks=parts.length?parts:[text];const seen=new Set(),out=[];let duplicates=0;
  for(const block of blocks){
   const postal=(block.match(/(?<!\d)\d{6}(?!\d)/g)||[]).find(x=>x!=='000000');if(!postal)continue;
-  if(seen.has(postal)){duplicates++;continue}seen.add(postal);
+  const signature=block.trim().replace(/\s+/g,' ').toLowerCase();if(seen.has(signature)){duplicates++;continue}seen.add(signature);
   const name=match(block,/(?:👤\s*)?(?:Nama|Customer|Name)\s*:\s*([^\n\r]+)/i);
   const phone=match(block,/(?:Phone|WhatsApp|Tel|Mobile)\s*:\s*(?:https?:\/\/wa\.me\/)?(\+?65[\s-]?\d{4}[\s-]?\d{4}|\d{8})/i)||match(block,/(?:wa\.me\/)(\+?65\d{8})/i);
   const amount=match(block,/(?:Total|Amount|Parcel Price|Price)\s*:\s*(?:S?\$|SGD\s*)?\s*(\d+(?:\.\d{1,2})?)/i);
@@ -47,15 +47,15 @@ function home(){
  '<p class="hint" style="margin:18px 0">Delivery time per stop: '+s.minutes+' minutes</p><textarea id="codes" placeholder="Singapore postal codes or paste WhatsApp orders">'+safe(state.draft)+'</textarea>'+
  '<button class="btn outline-btn wide" style="margin-top:12px" id="paste">Import WhatsApp Orders</button>'+
  '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Duplicates removed</span></div></div>'+
- '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Create route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
+ '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Optimize route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
  '<button class="btn outline-btn wide gold" style="margin-top:12px;border-color:var(--gold)" disabled>▤ &nbsp; Tax Declare (coming later)</button>'+
- '<p class="hint" style="margin-top:15px">Supports up to 50 unique stops. V2 currently uses import order; real road-based optimization and driving ETA are not yet available.</p>';
+ '<p class="hint" style="margin-top:15px">Supports up to 50 unique stops. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
 }
 function routeView(){
  const r=active();if(!r)return '<div class="card"><h2>Your next delivery starts here</h2><p class="hint">Plan a route on Home or open a saved route from History.</p></div><button class="btn wide tall" id="plan">Plan a route</button>';
  const done=r.stops.filter(s=>s.status==='Delivered').length;
  return '<h1>Route overview</h1><p class="hint">'+safe(r.date)+' • '+timeText(r.time)+' • '+r.stops.length+' delivery stops • '+done+' delivered</p>'+
- '<div class="card"><h2>'+safe(r.start)+'</h2><p class="muted">'+safe(r.address)+'</p><p class="hint">Stop order is editable manually. Drive-time ETA and distance are not calculated in this version.</p><div class="grid2"><div class="stat"><strong>'+r.stops.length+'</strong><span>Stops</span></div><div class="stat"><strong>'+(r.stops.length*r.minutes)+'</strong><span>Stop-service minutes (excludes driving)</span></div></div></div>'+
+ '<div class="card"><h2>'+safe(r.start)+'</h2><p class="muted">'+safe(r.address)+'</p><p class="hint">'+(r.optimized?'Road-based planning estimates, not live traffic. Return: '+dateTime(r.returnTime)+' • '+r.totalKm.toFixed(1)+' km':'Manual order — no road ETA')+'</p><div class="grid2"><div class="stat"><strong>'+r.stops.length+'</strong><span>Stops</span></div><div class="stat"><strong>'+(r.stops.length*r.minutes)+'</strong><span>Stop-service minutes (excludes driving)</span></div></div></div>'+
  r.stops.map((s,i)=>'<div class="outline"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><span class="pill '+safe(s.status.toLowerCase())+'">'+safe(s.status)+'</span></div><p class="hint">'+safe(s.address||s.name||'Singapore')+'</p><div class="grid2"><button class="btn outline-btn" data-move="'+i+'" data-dir="-1" '+(i===0?'disabled':'')+'>↑ Earlier</button><button class="btn outline-btn" data-move="'+i+'" data-dir="1" '+(i===r.stops.length-1?'disabled':'')+'>↓ Later</button></div><div class="space"></div><button class="btn wide" data-openstop="'+i+'">Open delivery</button></div>').join('');
 }
 function deliveryView(){
@@ -95,7 +95,13 @@ function bindHome(){
  $('deliveryDate').onchange=saveSettingsFromHome;$('startTime').onchange=saveSettingsFromHome;
  $('paste').onclick=async()=>{try{const t=await navigator.clipboard.readText();$('codes').value=t;update();toast('WhatsApp text imported')}catch{toast('Paste WhatsApp text into the box manually (press and hold).')}};
  $('clear').onclick=()=>{state.draft='';persist();render()};
- $('optimize').onclick=()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(parsed.stops.length>50)return toast('Maximum 50 unique stops');const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops:parsed.stops};state.routes.unshift(r);state.current=r.id;selectedStop=0;persist();navigate('route');toast('Route created in input order. Road optimization not available yet.')};
+ $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
+ const plan=await RoutingCore.plan(parsed.stops.map(s=>s.postal),{minutes:state.settings.minutes,date:state.settings.date,time:state.settings.time,onProgress:t=>{btn.textContent=t}});
+ const queues=new Map();for(const order of parsed.stops){if(!queues.has(order.postal))queues.set(order.postal,[]);queues.get(order.postal).push(order)}
+ const stops=plan.schedule.flatMap(item=>(queues.get(item.postal)||[]).map((order,i)=>({...order,place:item.place,arrival:item.arrival,leave:item.leave,legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0})));
+ const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:plan.returnTime,optimized:true,trafficMode:plan.mode};
+ state.routes.unshift(r);state.current=r.id;selectedStop=0;persist();navigate('route');toast('Driving route optimized: '+stops.length+' orders / '+plan.totalKm.toFixed(1)+' km');
+ }catch(e){toast(e.message);btn.disabled=false;btn.textContent='Optimize route'}};
 }
 function googleNav(s){window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.address||'Singapore '+s.postal),'_blank','noopener,noreferrer')}
 function bindRoute(){const r=active();$('plan')?.addEventListener('click',()=>navigate('home'));if(!r)return;
