@@ -15,6 +15,7 @@ jobs:
           node --check pwa/routing.js
           node --check pwa/app.js
           node --check pwa/sw.js
+          node pwa/routing.test.cjs
       - name: Verify PWA assets and navigation
         run: |
           test -s pwa/index.html
