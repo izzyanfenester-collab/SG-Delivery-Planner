@@ -35,6 +35,8 @@ struct DeliveryRoute: Identifiable, Codable {
     var startTime: Date
     var startName: String = "Woodlands Checkpoint"
     var startPostal: String = "738203"
+    var depotLatitude: Double?
+    var depotLongitude: Double?
     var minutesPerStop: Int = 8
     var orders: [DeliveryOrder]
     var totalKm: Double?
