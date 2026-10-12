@@ -79,7 +79,7 @@ function deliveryView(){
 }
 function mapView(){
  const r=active();return '<h1>Delivery map</h1><p class="hint">Singapore map overview. The road route and delivery pins are not plotted yet.</p>'+
- '<iframe class="map-frame" title="OpenStreetMap Singapore" loading="lazy" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=103.60%2C1.22%2C104.10%2C1.48&amp;layer=mapnik"></iframe>'+
+ '<div id="deliveryMap" class="map-frame" role="region" aria-label="Singapore delivery map"></div>'+
  '<p class="hint">Map requires internet. Select a stop below to open navigation in Google Maps. Delivery markers and route polyline are not yet displayed.</p>'+
  (r?r.stops.map((s,i)=>'<div class="stop"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><button class="btn" data-mapstop="'+i+'">Navigate</button></div></div>').join(''):'<p class="muted">Create a delivery route first.</p>');
 }
@@ -126,7 +126,22 @@ function bindDelivery(){const r=active();$('plan')?.addEventListener('click',()=
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{s.status=b.dataset.status;s.deliveredAt=s.status==='Delivered'?new Date().toISOString():null;persist();render();toast('Stop updated: '+s.status)});
  document.querySelectorAll('[data-proof]').forEach(b=>b.onclick=()=>{proofType=b.dataset.proof;$('proofFile').click()});
 }
-function bindMap(){const r=active();if(!r)return;document.querySelectorAll('[data-mapstop]').forEach(b=>b.onclick=()=>googleNav(r.stops[Number(b.dataset.mapstop)]))}
+function bindMap(){
+ const r=active();document.querySelectorAll('[data-mapstop]').forEach(b=>b.onclick=()=>googleNav(r.stops[Number(b.dataset.mapstop)]));
+ if(!globalThis.L){$('deliveryMap').textContent='Map tiles unavailable. Use Navigate to open Google Maps.';return}
+ const map=L.map('deliveryMap',{zoomControl:true}).setView([1.3521,103.8198],11);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
+ const bounds=[];
+ const depot=r?.stops?.[0]?.place?{lat:1.4464,lon:103.7696}:null;
+ if(depot){L.marker([depot.lat,depot.lon]).addTo(map).bindPopup('Woodlands Checkpoint');bounds.push([depot.lat,depot.lon])}
+ for(const [i,s] of (r?.stops||[]).entries()){
+  if(!s.place||!Number.isFinite(s.place.lat)||!Number.isFinite(s.place.lon))continue;
+  const point=[s.place.lat,s.place.lon];bounds.push(point);
+  L.marker(point).addTo(map).bindPopup((i+1)+'. '+safe(s.postal)+' — '+safe(s.status));
+ }
+ if(bounds.length>1)map.fitBounds(bounds,{padding:[25,25]});
+ setTimeout(()=>map.invalidateSize(),150);
+}
 function downloadBackup(){const blob=new Blob([JSON.stringify({version:2,...state},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG-Delivery-Backup-'+today()+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
 function bindHistory(){$('backup').onclick=downloadBackup;$('restore').onclick=()=>$('restoreFile').click();document.querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{selectedHistory=selectedHistory===b.dataset.history?null:b.dataset.history;render()})}
 $('restoreFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const s=JSON.parse(await file.text());if(!Array.isArray(s.routes)||s.routes.some(r=>!Array.isArray(r.stops)))throw Error('Invalid backup');if(!confirm('Replace all existing routes and history with this backup?'))return;state={...defaults(),...s,settings:{...defaults().settings,...s.settings}};persist();render();toast('Backup restored')}catch(err){toast('Restore failed: '+err.message)}e.target.value=''});
