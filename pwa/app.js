@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const id=()=>globalThis.crypto?.randomUUID?.()||String(Date.now())+Math.random().toString(36).slice(2);
 const today=()=>new Date().toLocaleDateString('en-CA');
-const dateTime=t=>t?new Date(t).toLocaleString('en-SG'):'—';
+const dateTime=t=>t?new Date(t).toLocaleString('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
 const timeText=t=>{if(!t)return '—';const [h,m]=t.split(':').map(Number);return new Date(2020,0,1,h,m).toLocaleTimeString('en-SG',{hour:'numeric',minute:'2-digit'})};
 let tab='home',selectedStop=0,selectedHistory=null,proofType='delivery',noticeTimer;
 const defaults=()=>({routes:[],current:null,settings:{start:'Woodlands Checkpoint',address:'21 Woodlands Crossing, Singapore 738203',minutes:8,date:today(),time:'10:00'},draft:''});
@@ -39,10 +39,10 @@ function home(){
 }
 function routeView(){
  const r=active();if(!r)return '<div class="card"><h2>Your next delivery starts here</h2><p class="hint">Plan a route on Home or open a saved route from History.</p></div><button class="btn wide tall" id="plan">Plan a route</button>';
- const done=r.stops.filter(s=>s.status==='Delivered').length;
- return '<h1>Route overview</h1><p class="hint">'+safe(r.date)+' • '+timeText(r.time)+' • '+r.stops.length+' delivery stops • '+done+' delivered</p>'+
+ const stats=DeliveryCore.counts(r.stops),done=stats.delivered;
+ return '<h1>Route overview</h1><p class="hint">'+safe(r.date)+' • '+timeText(r.time)+' • '+r.stops.length+' delivery stops • '+done+' delivered • '+stats.hold+' hold • '+stats.skipped+' skipped</p>'+
  '<div class="card"><h2>'+safe(r.start)+'</h2><p class="muted">'+safe(r.address)+'</p><p class="hint">'+(r.optimized?'Road-based planning estimates, not live traffic. Return: '+dateTime(r.returnTime)+' • '+r.totalKm.toFixed(1)+' km':'Manual order — no road ETA')+'</p><div class="grid2"><div class="stat"><strong>'+r.stops.length+'</strong><span>Stops</span></div><div class="stat"><strong>'+(r.stops.length*r.minutes)+'</strong><span>Stop-service minutes (excludes driving)</span></div></div></div>'+
- r.stops.map((s,i)=>'<div class="outline"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><span class="pill '+safe(s.status.toLowerCase())+'">'+safe(s.status)+'</span></div><p class="hint">'+safe(s.address||s.name||'Singapore')+'</p><div class="grid2"><button class="btn outline-btn" data-move="'+i+'" data-dir="-1" '+(i===0?'disabled':'')+'>↑ Earlier</button><button class="btn outline-btn" data-move="'+i+'" data-dir="1" '+(i===r.stops.length-1?'disabled':'')+'>↓ Later</button></div><div class="space"></div><button class="btn wide" data-openstop="'+i+'">Open delivery</button></div>').join('');
+ r.stops.map((s,i)=>'<div class="outline"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><span class="pill '+safe(s.status.toLowerCase())+'">'+safe(s.status)+'</span></div><p class="hint">'+safe(s.address||s.name||'Singapore')+'</p><div class="grid2"><button class="btn outline-btn" data-move="'+i+'" data-dir="-1" '+(r.optimized||i===0?'disabled':'')+'>↑ Earlier</button><button class="btn outline-btn" data-move="'+i+'" data-dir="1" '+(r.optimized||i===r.stops.length-1?'disabled':'')+'>↓ Later</button></div><div class="space"></div><button class="btn wide" data-openstop="'+i+'">Open delivery</button></div>').join('');
 }
 function deliveryView(){
  const r=active();if(!r)return '<div class="card"><h2>Your next delivery starts here</h2><p class="hint">Plan a route on Home or open a saved route from History.</p></div><button class="btn wide" id="plan">Plan a route</button>';
@@ -114,23 +114,26 @@ function bindDelivery(){const r=active();$('plan')?.addEventListener('click',()=
  $('next').onclick=()=>{selectedStop++;render()};$('prev').onclick=()=>{selectedStop--;render()};$('nav').onclick=()=>googleNav(s);
  $('message').onclick=()=>{if(!s.phone)return toast('No customer phone number saved');const phone=s.phone.replace(/\D/g,'');window.open('https://wa.me/'+(phone.startsWith('65')?phone:'65'+phone)+(s.originalMessage?'?text='+encodeURIComponent(s.originalMessage):''),'_blank','noopener,noreferrer')};
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{
- if(s.status==='Delivered'&&b.dataset.status!=='Delivered')return toast('Delivered status is locked to preserve delivery records');
- if(b.dataset.status==='Hold'){
-  const reason=prompt('Hold reason: Customer not home / No answer / Reschedule / Payment issue / Access issue / Joy buyer / Other','Customer not home');
-  if(reason===null)return;
-  const allowed=['Customer not home','No answer','Reschedule','Payment issue','Access issue','Joy buyer','Other'];
-  if(!allowed.includes(reason.trim()))return toast('Choose a valid hold reason');
-  let note='';if(reason.trim()==='Other'){note=prompt('Explain hold reason (required, max 160 characters)','');if(!note?.trim())return toast('A note is required for Other')}
-  s.holdReason=reason.trim();s.holdNote=note.slice(0,160);
- }else{s.holdReason=null;s.holdNote=null}
- s.status=b.dataset.status;
- if(s.status==='Delivered'&&!s.deliveredAt)s.deliveredAt=new Date().toISOString();
- s.reviewedAt=new Date().toISOString();
- if(!persist())return;
- const next=r.stops.findIndex((x,i)=>i>selectedStop&&!x.reviewedAt);
- if(next>=0)selectedStop=next;
- render();toast('Stop updated: '+s.status)
-});
+  let reason='',note='';
+  if(b.dataset.status==='Hold'){
+   reason=prompt('Hold reason: '+DeliveryCore.REASONS.join(' / '),'Customer not home');
+   if(reason===null)return;
+   reason=reason.trim();
+   if(reason==='Other'){note=prompt('Explain hold reason (required, max 160 characters)','');if(note===null)return}
+  }
+  try{
+   const updated=DeliveryCore.update(s,b.dataset.status,new Date().toISOString(),reason,note);
+   const old=r.stops[selectedStop];r.stops[selectedStop]=updated;
+   if(b.dataset.status==='Delivered'){
+    const revised=DeliveryCore.recalculate(r.stops,r.returnTime,r.minutes,r.trafficMode);
+    r.stops=revised.stops;
+   }
+   if(!persist()){r.stops[selectedStop]=old;return}
+   const next=DeliveryCore.nextUnreviewed(r.stops,selectedStop);
+   if(next>=0)selectedStop=next;
+   render();toast('Stop updated: '+updated.status);
+  }catch(e){toast(e.message)}
+ });
  document.querySelectorAll('[data-proof]').forEach(b=>b.onclick=()=>{proofType=b.dataset.proof;$('proofFile').click()});
 }
 function bindMap(){
