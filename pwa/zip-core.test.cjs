@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const context=vm.createContext({TextEncoder,TextDecoder,Uint8Array,Uint32Array,DataView});
+vm.runInContext(fs.readFileSync('pwa/zip-core.js','utf8')+';globalThis.Z=ZipCore;',context);
+const Z=context.Z;
+const entries=[['manifest.json','{"format":"sg-delivery-pwa","version":3}'],['routes.json','{"routes":[{"id":"1","proofDelivery":"data:image/jpeg;base64,ABCD"}]}']];
+const packed=Z.pack(entries),files=Z.unpack(packed);
+assert.equal(Z.text(files.get('manifest.json')),entries[0][1]);
+assert.equal(Z.text(files.get('routes.json')),entries[1][1]);
+assert.equal(packed[0],0x50);assert.equal(packed[1],0x4b);
+const corrupt=new Uint8Array(packed);corrupt[45]^=0x01;
+assert.throws(()=>Z.unpack(corrupt),/checksum/i);
+assert.throws(()=>Z.pack([['../bad','a']]),/Invalid ZIP entry/);
+assert.throws(()=>Z.pack([['a','a'],['a','b']]),/Invalid ZIP entry/);
+assert.throws(()=>Z.unpack(new Uint8Array([1,2,3])),/missing or too large/);
+console.log('ZIP backup tests passed');
