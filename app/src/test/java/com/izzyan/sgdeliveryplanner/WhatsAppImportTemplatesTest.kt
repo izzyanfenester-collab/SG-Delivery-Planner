@@ -127,7 +127,7 @@ class WhatsAppImportTemplatesTest {
     }
 
     @Test fun rejectedOrderWithMissingAddressIsReportedAndDoesNotStealOtherNumbers() {
-        val result=parseCustomerOrders("Nama: Missing Address\\nTotal: $65 (COD)\\nWhatsApp: https://wa.me/+6584253239\\nItem: 732189")
+        val result=parseCustomerOrders("Nama: Missing Address\nTotal: $65 (COD)\nWhatsApp: https://wa.me/+6584253239\nItem: 732189")
         assertEquals(1,result.failed)
         assertTrue(result.orders.isEmpty())
         assertNull(result.failedOrders.single().address)
@@ -136,7 +136,7 @@ class WhatsAppImportTemplatesTest {
     }
 
     @Test fun validAndInvalidOrdersAreBothIdentifiableForRunnerReview() {
-        val result=parseCustomerOrders(WhatsAppImportFixture.english + "\\n\\n" + """
+        val result=parseCustomerOrders(WhatsAppImportFixture.english + "\n\n" + """
             ORDER ERROR
             Name: Customer B
             Address: Blk 77 Singapore 7321899
