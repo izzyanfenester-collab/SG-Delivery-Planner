@@ -65,8 +65,8 @@ function mapView(){
 }
 function historyView(){
  return '<h1>Route history</h1><p class="hint">Tap a date to view customer details and proof photos without changing today’s route.</p>'+
- '<div class="grid2"><button class="btn light" id="backup">Backup All History</button><button class="btn outline-btn" id="restore">Restore Backup</button></div><button class="btn outline-btn wide" style="margin-top:10px" id="exportCsv">Export Delivery Report (Excel CSV)</button>'+
- '<p class="hint">Backups contain customer addresses, phone numbers and proof photos. Keep them private: JSON backups are not encrypted.</p><p class="gold">Select history</p>'+
+ '<div class="grid2"><button class="btn light" id="backup">Backup ZIP + Photos</button><button class="btn outline-btn" id="restore">Restore ZIP / JSON</button></div><button class="btn outline-btn wide" style="margin-top:10px" id="backupJson">Legacy JSON Backup</button><button class="btn outline-btn wide" style="margin-top:10px" id="exportCsv">Export Delivery Report (Excel CSV)</button>'+
+ '<p class="hint">Backups include customer addresses, phone numbers and proof photos. ZIP and JSON are NOT encrypted. PWA ZIP is not directly compatible with Android native backup.</p><p class="gold">Select history</p>'+
  (state.routes.length?state.routes.map(r=>'<button class="card history-item" data-history="'+safe(r.id)+'"><h2>'+safe(r.date||r.created.slice(0,10))+'</h2><div class="history-line"><span>Total Parcel</span><strong>'+r.stops.length+'</strong></div><div class="history-line"><span>Success Rate</span><strong>'+((r.stops.filter(s=>s.status==='Delivered').length/Math.max(1,r.stops.length))*100).toFixed(1)+'%</strong></div><div class="history-line"><span>Total Distance</span><strong>Not available</strong></div><div class="history-line"><span>Finish Time</span><strong>Not calculated</strong></div></button>').join(''):'<p class="muted">No saved history.</p>')+
  (selectedHistory?historyDetails(selectedHistory):'');
 }
@@ -157,6 +157,36 @@ function bindMap(){
  setTimeout(()=>map.invalidateSize(),150);
 }
 function downloadBackup(){const blob=new Blob([JSON.stringify({version:2,...state},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG-Delivery-Backup-'+today()+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+function downloadZipBackup(){
+ try{
+  const payload=JSON.stringify({version:3,...state});
+  const photoCount=state.routes.reduce((n,r)=>n+r.stops.reduce((k,s)=>k+(s.proofDelivery?1:0)+(s.proofPayment?1:0),0),0);
+  const manifest={format:'sg-delivery-pwa',version:3,routeCount:state.routes.length,photoCount,exportedAt:new Date().toISOString(),note:'PWA-specific ZIP; photos embedded as data URIs in routes.json; not Android-native ZIP'};
+  const bytes=ZipCore.pack([['manifest.json',JSON.stringify(manifest)],['routes.json',payload]]);
+  const blob=new Blob([bytes],{type:'application/zip'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='SG-Delivery-PWA-Backup-'+today()+'.zip';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast('ZIP backup created: '+state.routes.length+' routes, '+photoCount+' photos');
+ }catch(e){toast('ZIP backup failed: '+e.message)}
+}
+function parseBackupObject(value){
+ if(!value||!Array.isArray(value.routes)||value.routes.length>2000||value.routes.some(r=>!r||typeof r.id!=='string'||!Array.isArray(r.stops)||r.stops.length>50))throw Error('Invalid backup routes');
+ if(value.routes.some(r=>r.stops.some(s=>!s||typeof s.postal!=='string'||!/^[0-9]{6}$/.test(s.postal))))throw Error('Invalid delivery records');
+ if(value.settings!==undefined&&(!value.settings||typeof value.settings!=='object'||Array.isArray(value.settings)))throw Error('Invalid settings');
+ return {...defaults(),...value,settings:{...defaults().settings,...value.settings}};
+}
+async function readBackup(file){
+ if(file.size>60*1024*1024)throw Error('Backup larger than 60 MB');
+ if(file.name.toLowerCase().endsWith('.zip')){
+  const files=ZipCore.unpack(new Uint8Array(await file.arrayBuffer()));
+  if(files.size!==2||!files.has('manifest.json')||!files.has('routes.json'))throw Error('Not a supported PWA backup ZIP');
+  const manifest=JSON.parse(ZipCore.text(files.get('manifest.json')));
+  if(manifest.format!=='sg-delivery-pwa'||manifest.version!==3)throw Error('Unsupported backup ZIP format');
+  const value=parseBackupObject(JSON.parse(ZipCore.text(files.get('routes.json'))));
+  if(manifest.routeCount!==value.routes.length)throw Error('Backup route count mismatch');
+  return value;
+ }
+ return parseBackupObject(JSON.parse(await file.text()));
+}
 function exportDeliveryCsv(){
  const rows=[['Route ID','Delivery Date','Start','Stop','Postal','Customer','Phone','Address','Amount SGD','Payment','Status','Planned Arrival (SGT)','Planned Departure (SGT)','Delivered At','Route KM','Return ETA (SGT)']];
  for(const r of state.routes)for(const [i,stop] of r.stops.entries())rows.push([r.id,r.date,r.start,i+1,stop.postal,stop.name||'',stop.phone||'',stop.address||'',stop.amount||'',stop.payment||'',stop.status||'',stop.arrival?new Date(stop.arrival).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'',stop.leave?new Date(stop.leave).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'',stop.deliveredAt||'',r.totalKm??'',r.returnTime?new Date(r.returnTime).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'']);
@@ -165,8 +195,8 @@ function exportDeliveryCsv(){
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');
  a.href=url;a.download='SG-Delivery-Report-'+today()+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
-function bindHistory(){$('exportCsv').onclick=exportDeliveryCsv;$('backup').onclick=downloadBackup;$('restore').onclick=()=>$('restoreFile').click();document.querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{selectedHistory=selectedHistory===b.dataset.history?null:b.dataset.history;render()})}
-$('restoreFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const s=JSON.parse(await file.text());if(!Array.isArray(s.routes)||s.routes.some(r=>!Array.isArray(r.stops)))throw Error('Invalid backup');if(!confirm('Replace all existing routes and history with this backup?'))return;state={...defaults(),...s,settings:{...defaults().settings,...s.settings}};persist();render();toast('Backup restored')}catch(err){toast('Restore failed: '+err.message)}e.target.value=''});
+function bindHistory(){$('exportCsv').onclick=exportDeliveryCsv;$('backup').onclick=downloadZipBackup;$('backupJson').onclick=downloadBackup;$('restore').onclick=()=>$('restoreFile').click();document.querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{selectedHistory=selectedHistory===b.dataset.history?null:b.dataset.history;render()})}
+$('restoreFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const restored=await readBackup(file);if(!confirm('Replace ALL existing routes, photos and history with this backup? Export a ZIP backup first if you need the current records.'))return;const previous=state;state=restored;if(!persist()){state=previous;throw Error('Not enough iPhone storage to restore this backup')}selectedHistory=null;selectedStop=0;render();toast('Backup restored: '+state.routes.length+' routes')}catch(err){toast('Restore failed: '+err.message)}e.target.value=''});
 async function loadProofImage(file){
  if(typeof createImageBitmap==='function'){try{return await createImageBitmap(file)}catch(e){console.warn('ImageBitmap fallback',e)}}
  const url=URL.createObjectURL(file);
