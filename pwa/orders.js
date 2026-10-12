@@ -51,9 +51,12 @@ function parse(raw,makeId=()=>Math.random().toString(36).slice(2)){
    stops.push({id:makeId(),postal,name:'',phone:'',amount:'',payment:'Not specified',address:'',originalMessage:'',status:'Pending',deliveredAt:null,proofDelivery:null,proofPayment:null})}
   return {stops,duplicates,failed:0};
  }
- const blocks=splitOrders(raw),stops=[];let failed=0,duplicates=0;
+ const blocks=splitOrders(raw),stops=[];let failed=0,duplicates=0;const seenMessages=new Set();
  // Preserve identical messages if they are distinct WhatsApp orders; each has its own ID.
  for(const lines of blocks){
+  const message=lines.join('\n').trim();
+  if(seenMessages.has(message)){duplicates++;continue}
+  seenMessages.add(message);
   const fields=new Map();let current=null,value=[];
   const save=()=>{if(current&&!fields.has(current))fields.set(current,value.join('\n').trim());value=[]};
   for(const line of lines){
