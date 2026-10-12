@@ -178,8 +178,8 @@ struct DeliveryDetailView: View {
     let orderID: UUID
     @State private var holdReason = "Customer not home"
     @State private var holdNote = ""
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var photoPayment = false
+    @State private var deliveryPhoto: PhotosPickerItem?
+    @State private var paymentPhoto: PhotosPickerItem?
 
     private var order: DeliveryOrder? {
         store.active?.orders.first(where: { $0.id == orderID })
@@ -210,21 +210,21 @@ struct DeliveryDetailView: View {
                         }
                     }
                 }
-                Section("Proof Photos") {
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("Add Proof of Delivery", systemImage: "camera")
-                    }.simultaneousGesture(TapGesture().onEnded { photoPayment = false })
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("Add Proof of Payment", systemImage: "creditcard")
-                    }.simultaneousGesture(TapGesture().onEnded { photoPayment = true })
-                    if let data = order.proofDelivery.flatMap(Data.init(base64Encoded:)),
+                Section {
+                    PhotosPicker("Add Proof of Delivery", selection: $deliveryPhoto, matching: .images)
+                    PhotosPicker("Add Proof of Payment", selection: $paymentPhoto, matching: .images)
+                    if let encoded = order.proofDelivery,
+                       let data = Data(base64Encoded: encoded),
                        let image = UIImage(data: data) {
                         Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
                     }
-                    if let data = order.proofPayment.flatMap(Data.init(base64Encoded:)),
+                    if let encoded = order.proofPayment,
+                       let data = Data(base64Encoded: encoded),
                        let image = UIImage(data: data) {
                         Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
                     }
+                } header: {
+                    Text("Proof Photos")
                 }
                 Section("Review Delivery") {
                     if order.status == .delivered {
@@ -244,19 +244,23 @@ struct DeliveryDetailView: View {
             }
         }
         .navigationTitle(order?.postal ?? "Delivery")
-        .onChange(of: selectedPhoto) { _,newValue in
-            guard let newValue else { return }
-            Task {
-                do {
-                    if let data = try await newValue.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data),
-                       let compressed = image.jpegData(compressionQuality: 0.45) {
-                        store.saveProof(orderID: orderID, data: compressed, payment: photoPayment)
-                    }
-                } catch { store.errorMessage = "Could not load proof photo" }
-                selectedPhoto = nil
-            }
+        .onChange(of: deliveryPhoto) { _,newValue in
+            if let newValue { Task { await importPhoto(newValue, payment: false); deliveryPhoto = nil } }
         }
+        .onChange(of: paymentPhoto) { _,newValue in
+            if let newValue { Task { await importPhoto(newValue, payment: true); paymentPhoto = nil } }
+        }
+
+    }
+    private func importPhoto(_ photo: PhotosPickerItem, payment: Bool) async {
+        do {
+            guard let data = try await photo.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data),
+                  let compressed = image.jpegData(compressionQuality: 0.45) else {
+                store.errorMessage = "Unsupported image"; return
+            }
+            store.saveProof(orderID: orderID, data: compressed, payment: payment)
+        } catch { store.errorMessage = "Could not load proof photo" }
     }
 }
 
