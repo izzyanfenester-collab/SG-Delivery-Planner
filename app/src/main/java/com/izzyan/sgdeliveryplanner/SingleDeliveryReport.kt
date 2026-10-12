@@ -87,7 +87,8 @@ private class SingleDeliveryReportView(
                 setSpan(PaymentCapsuleSpan(badge), start, start + badge.label.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
-    private val bodyStartY = 180f
+    // Bring the Stop line directly below the one-line title (normal 1.0 line spacing).
+    private val bodyStartY = 132f
     private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, 960)
         .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0f, 1f).build()
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
