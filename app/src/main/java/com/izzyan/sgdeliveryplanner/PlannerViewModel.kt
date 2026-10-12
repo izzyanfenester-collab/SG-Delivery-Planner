@@ -110,6 +110,37 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     var rateNotice by mutableStateOf("")
         private set
     val history = repo.dao.history()
+    var backupNotice by mutableStateOf("")
+
+    fun exportHistory(destination: android.net.Uri) {
+        if (busy) return
+        busy = true
+        backupNotice = "Preparing private backup..."
+        viewModelScope.launch {
+            try {
+                val result = HistoryBackup(getApplication(), repo.dao).export(destination)
+                backupNotice = "Backup saved: "+result.routes+" routes, "+result.photos+" proof photos."+
+                    (if(result.missing>0) " Warning: "+result.missing+" older proof photos are missing." else "")
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { backupNotice = "Backup failed: "+(e.message ?: "Could not save ZIP.") }
+            finally { busy = false }
+        }
+    }
+
+    fun restoreHistory(source: android.net.Uri) {
+        if (busy) return
+        busy = true
+        backupNotice = "Checking and restoring backup..."
+        viewModelScope.launch {
+            try {
+                val result = HistoryBackup(getApplication(), repo.dao).restore(source)
+                backupNotice = "Restore complete: "+result.restored+" new routes, "+
+                    result.skipped+" existing routes unchanged, "+result.photos+" proof photos added."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { backupNotice = "Restore failed: "+(e.message ?: "Invalid backup.") }
+            finally { busy = false }
+        }
+    }
 
     fun refreshExchangeRate() {
         if (rateBusy) return
