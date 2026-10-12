@@ -103,4 +103,50 @@ class WhatsAppImportTemplatesTest {
         assertEquals(100,result.orders.size);assertEquals(100,result.orders.map {it.orderId}.distinct().size);assertEquals(1,result.failed)
         assertEquals(3,result.orders.map {it.postalCode}.distinct().size)
     }
+    @Test fun rejectedOrderExplainsMissingPostalAndRetainsCustomerAddressAndOriginalMessage() {
+        val input = """
+            🔥 ORDER KAIN 🔥
+            Nama: Samaniah
+            Total: $55 (COD)
+            Alamat:
+            Blk 77 Jurong West Street 1
+            Singapore 47015
+            WhatsApp: https://wa.me/+6584253239
+            Item: Red
+        """.trimIndent()
+        val result=parseCustomerOrders(input)
+        assertEquals(1,result.failed)
+        assertTrue(result.orders.isEmpty())
+        assertEquals(1,result.failedOrders.size)
+        val failure=result.failedOrders.single()
+        assertEquals("Samaniah",failure.customerName)
+        assertEquals("47015",failure.suspectedPostal)
+        assertTrue(failure.reason.contains("not a valid 6-digit"))
+        assertTrue(failure.address!!.contains("Blk 77"))
+        assertTrue(failure.originalMessage.contains("Item: Red"))
+    }
+
+    @Test fun rejectedOrderWithMissingAddressIsReportedAndDoesNotStealOtherNumbers() {
+        val result=parseCustomerOrders("Nama: Missing Address\\nTotal: $65 (COD)\\nWhatsApp: https://wa.me/+6584253239\\nItem: 732189")
+        assertEquals(1,result.failed)
+        assertTrue(result.orders.isEmpty())
+        assertNull(result.failedOrders.single().address)
+        assertNull(result.failedOrders.single().suspectedPostal)
+        assertTrue(result.failedOrders.single().reason.contains("Address field"))
+    }
+
+    @Test fun validAndInvalidOrdersAreBothIdentifiableForRunnerReview() {
+        val result=parseCustomerOrders(WhatsAppImportFixture.english + "\\n\\n" + """
+            ORDER ERROR
+            Name: Customer B
+            Address: Blk 77 Singapore 7321899
+            Total: $60 (COD)
+        """.trimIndent())
+        assertEquals(1,result.orders.size)
+        assertEquals(1,result.failed)
+        assertEquals("750512",result.orders.single().postalCode)
+        assertEquals("Customer B",result.failedOrders.single().customerName)
+        assertEquals("7321899",result.failedOrders.single().suspectedPostal)
+    }
+
 }
