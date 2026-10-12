@@ -849,6 +849,13 @@ fun History(vm: PlannerViewModel) {
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     var confirmIds by remember { mutableStateOf<Set<String>?>(null) }
+    // Viewing a saved route NEVER updates vm.route, active ID or status.
+    var opened by remember { mutableStateOf<SavedRoute?>(null) }
+    opened?.let { record ->
+        runCatching { vm.repo.decode(record) }.getOrNull()?.let { savedPlan ->
+            HistoryViewOnly(savedPlan) { opened = null }
+        }
+    }
     fun toggle(id: String) { selected = if (id in selected) selected - id else selected + id }
     confirmIds?.let { ids ->
         AlertDialog(onDismissRequest = { confirmIds = null }, title = { Text("Delete selected history?") },
@@ -863,7 +870,8 @@ fun History(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            PageTitle("Route history", "Tap to open details. Select records to delete them.")
+            PageTitle("Route history", "Tap a date to view customer details and proof photos without changing today's route.")
+            HistoryBackupActions(vm)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { selecting = !selecting; selected = emptyList() }, enabled = !vm.busy) {
                     Text(if (selecting) "Cancel selection" else "Select history")
@@ -880,7 +888,7 @@ fun History(vm: PlannerViewModel) {
             val p = runCatching { vm.repo.decode(record) }.getOrNull()
             PremiumCard(Modifier.fillMaxWidth().combinedClickable(
                 enabled = !vm.busy,
-                onClick = { if (selecting) toggle(record.id) else vm.open(record) },
+                onClick = { if (selecting) toggle(record.id) else opened = record },
                 onLongClick = { selecting = true; toggle(record.id) }
             )) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
