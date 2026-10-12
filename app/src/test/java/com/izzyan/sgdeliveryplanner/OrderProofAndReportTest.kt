@@ -82,16 +82,18 @@ class OrderProofAndReportTest {
         assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertTrue(text.contains("Payment Mode : Cash On Delivery")); assertFalse(text.contains("\n\n"));
         assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertTrue(text.contains("Cash On Delivery"));assertFalse(text.contains(" · DELIVERED"))
         assertFalse(text.contains("OtherCustomer"));assertFalse(text.contains("+65 8198"));assertFalse(text.contains("Other address"));assertFalse(text.contains("$99.00"))
+        for (removed in listOf("Planned arrival", "Updated ETA", "Actual / Delivered", "Distance from previous stop"))
+            assertFalse("Removed report field: $removed", text.contains(removed))
         val file=generateSingleDeliveryReport(app,stop,0)
         val png=BitmapFactory.decodeFile(file.path)
         assertEquals(1080,png.width)
         // The shared PNG is the only report asset displayed by preview and shared through Android.
-        // Exactly 1.5x original report fonts, with wrapped address and two aligned proof images.
+        // Compact title, unchanged body fonts, wrapped address and two aligned proof images.
         assertEquals(48f,DeliveryReportTypography.bodyPx)
-        assertEquals(72f,DeliveryReportTypography.titlePx)
+        assertEquals(DeliveryReportTypography.statusPx,DeliveryReportTypography.titlePx)
         assertEquals(45f,DeliveryReportTypography.proofPx)
         assertEquals(46.5f,DeliveryReportTypography.statusPx)
-        assertTrue("Compact 1.5x report must include both photos",png.height > 1200)
+        assertTrue("Compact 1.5x report must include both photos",png.height > 1000)
         var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
         assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
         for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {

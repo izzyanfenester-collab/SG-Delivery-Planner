@@ -17,15 +17,16 @@ import java.util.UUID
 fun generateSummaryReportImage(context: Context, plan: Plan): File {
     val text=buildSummaryReport(plan)
     val gold=Color.rgb(231,190,91)
-    val ink=TextPaint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(232,240,255);textSize=34f}
+    // Match the 1080px Delivery Report body; 72px preserves the preview's 24sp title hierarchy.
+    val ink=TextPaint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(232,240,255);textSize=DeliveryReportTypography.bodyPx}
     val styled=SpannableString(text).apply {
         val titleEnd=text.indexOf('\n')
         setSpan(StyleSpan(Typeface.BOLD),0,titleEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        setSpan(AbsoluteSizeSpan(48),0,titleEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        setSpan(AbsoluteSizeSpan(72),0,titleEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         setSpan(ForegroundColorSpan(gold),0,titleEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
     val layout=StaticLayout.Builder.obtain(styled,0,styled.length,ink,960)
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(6f,1f).build()
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0f,1f).build()
     val height=layout.height+112
     require(height in 1..16000) {"Summary is too long to render safely."}
     val bitmap=Bitmap.createBitmap(1080,height,Bitmap.Config.ARGB_8888)
