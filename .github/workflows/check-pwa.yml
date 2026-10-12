@@ -1,0 +1,24 @@
+name: Check SG Delivery PWA
+on:
+  pull_request:
+    paths:
+      - 'pwa/**'
+      - '.github/workflows/check-pwa.yml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check pwa/app.js
+          node --check pwa/sw.js
+      - name: Verify PWA assets and navigation
+        run: |
+          test -s pwa/index.html
+          test -s pwa/manifest.webmanifest
+          test -s pwa/style.css
+          test -s pwa/icon.svg
+          grep -q 'data-tab="history"' pwa/index.html
+          grep -q 'app.js' pwa/index.html
