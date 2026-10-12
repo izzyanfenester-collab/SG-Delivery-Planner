@@ -78,9 +78,9 @@ function deliveryView(){
  '<button class="btn outline-btn wide" style="margin-top:12px" id="prev" '+(selectedStop===0?'disabled':'')+'>← Previous stop</button>';
 }
 function mapView(){
- const r=active();return '<h1>Delivery map</h1><p class="hint">Singapore map overview. The road route and delivery pins are not plotted yet.</p>'+
+ const r=active();return '<h1>Delivery map</h1><p class="hint">Driving route and delivery stops (where routing data is available).</p>'+
  '<div id="deliveryMap" class="map-frame" role="region" aria-label="Singapore delivery map"></div>'+
- '<p class="hint">Map requires internet. Select a stop below to open navigation in Google Maps. Delivery markers and route polyline are not yet displayed.</p>'+
+ '<p class="hint">Map requires internet. Select a stop below to open navigation in Google Maps. Road polyline requires an online routing response.</p>'+
  (r?r.stops.map((s,i)=>'<div class="stop"><div class="stop-head"><strong>'+(i+1)+'. '+safe(s.postal)+'</strong><button class="btn" data-mapstop="'+i+'">Navigate</button></div></div>').join(''):'<p class="muted">Create a delivery route first.</p>');
 }
 function historyView(){
@@ -108,16 +108,26 @@ function bindHome(){
  const start=custom?await RoutingCore.resolvePostal(startPostal):RoutingCore.DEPOT;
  const plan=await RoutingCore.plan(parsed.stops.map(s=>s.postal),{start,minutes:state.settings.minutes,date:state.settings.date,time:state.settings.time,onProgress:t=>{btn.textContent=t}});
  const queues=new Map();for(const order of parsed.stops){if(!queues.has(order.postal))queues.set(order.postal,[]);queues.get(order.postal).push(order)}
- const stops=plan.schedule.flatMap(item=>(queues.get(item.postal)||[]).map((order,i)=>({...order,place:item.place,arrival:new Date(Date.parse(item.arrival)+i*state.settings.minutes*60000).toISOString(),leave:new Date(Date.parse(item.arrival)+(i+1)*state.settings.minutes*60000).toISOString(),legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0})));
- const extraMinutes=stops.length-plan.schedule.length;
- const adjustedReturn=new Date(Date.parse(plan.returnTime)+extraMinutes*state.settings.minutes*60000).toISOString();
- const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:adjustedReturn,optimized:true,trafficMode:plan.mode};
+ // Rebuild timestamps for EVERY order, including multiple customers at one postcode.
+ // Driving time is charged once for the first order at a shared location.
+ const stops=[];let clock=Date.parse(state.settings.date+'T'+state.settings.time+':00+08:00');
+ for(const item of plan.schedule){
+  const orders=queues.get(item.postal)||[];
+  clock+=(item.legSeconds+RoutingCore.trafficBuffer(item.legKm,item.legSeconds,plan.mode))*1000;
+  for(const [i,order] of orders.entries()){
+   const arrival=new Date(clock).toISOString();clock+=state.settings.minutes*60000;
+   stops.push({...order,place:item.place,arrival,leave:new Date(clock).toISOString(),legKm:i===0?item.legKm:0,legSeconds:i===0?item.legSeconds:0});
+  }
+ }
+ const last=plan.schedule.at(-1);
+ const plannedReturn=Date.parse(plan.returnTime)+Math.max(0,stops.length-plan.schedule.length)*state.settings.minutes*60000;
+ const r={id:id(),created:new Date().toISOString(),title:'Singapore Delivery',...state.settings,stops,totalKm:plan.totalKm,returnTime:new Date(plannedReturn).toISOString(),optimized:true,trafficMode:plan.mode,geometry:plan.geometry};
  state.routes.unshift(r);state.current=r.id;selectedStop=0;persist();navigate('route');toast('Driving route optimized: '+stops.length+' orders / '+plan.totalKm.toFixed(1)+' km');
  }catch(e){toast(e.message);btn.disabled=false;btn.textContent='Optimize route'}};
 }
 function googleNav(s){window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.address||'Singapore '+s.postal),'_blank','noopener,noreferrer')}
 function bindRoute(){const r=active();$('plan')?.addEventListener('click',()=>navigate('home'));if(!r)return;
- document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.move),j=i+Number(b.dataset.dir);if(j<0||j>=r.stops.length)return;[r.stops[i],r.stops[j]]=[r.stops[j],r.stops[i]];persist();render()});
+ document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.move),j=i+Number(b.dataset.dir);if(r.optimized)return toast('Optimized route is locked to preserve driving ETA. Re-optimize from Home to change order.');if(j<0||j>=r.stops.length)return;[r.stops[i],r.stops[j]]=[r.stops[j],r.stops[i]];persist();render()});
  document.querySelectorAll('[data-openstop]').forEach(b=>b.onclick=()=>{selectedStop=Number(b.dataset.openstop);navigate('delivery')});
 }
 function bindDelivery(){const r=active();$('plan')?.addEventListener('click',()=>navigate('home'));if(!r||!r.stops.length)return;const s=r.stops[selectedStop];
@@ -132,13 +142,14 @@ function bindMap(){
  const map=L.map('deliveryMap',{zoomControl:true}).setView([1.3521,103.8198],11);
  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
  const bounds=[];
- const depot=r?.stops?.[0]?.place?{lat:1.4464,lon:103.7696}:null;
+ const depot=r?.stops?.[0]?.place?(r.start==='Woodlands Checkpoint'?RoutingCore.DEPOT:null):null;
  if(depot){L.marker([depot.lat,depot.lon]).addTo(map).bindPopup('Woodlands Checkpoint');bounds.push([depot.lat,depot.lon])}
  for(const [i,s] of (r?.stops||[]).entries()){
   if(!s.place||!Number.isFinite(s.place.lat)||!Number.isFinite(s.place.lon))continue;
   const point=[s.place.lat,s.place.lon];bounds.push(point);
   L.marker(point).addTo(map).bindPopup((i+1)+'. '+safe(s.postal)+' — '+safe(s.status));
  }
+ if(Array.isArray(r?.geometry)&&r.geometry.length>1){L.polyline(r.geometry,{color:'#d99f3f',weight:5,opacity:.85}).addTo(map);bounds.push(...r.geometry.filter((_,i)=>i%Math.max(1,Math.floor(r.geometry.length/100))===0))}
  if(bounds.length>1)map.fitBounds(bounds,{padding:[25,25]});
  setTimeout(()=>map.invalidateSize(),150);
 }
