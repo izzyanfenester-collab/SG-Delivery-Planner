@@ -15,7 +15,7 @@ The existing Android application and the deployed V2 PWA are unchanged.
 
 ## Build and install using a free Apple ID
 
-**A Mac with Xcode is required to compile and sign an iPhone app.** A Windows PC alone cannot build this native Xcode project. An Apple Developer Program subscription is **not** required for personal device testing via Xcode.
+**A macOS/Xcode build environment is required to compile iOS code.** GitHub Actions provides a hosted macOS builder that can produce an **unsigned IPA**, even if your own computer runs Windows. The unsigned IPA **cannot** be installed directly on iPhone: it must be signed using a free Apple ID with an appropriate sideloading tool or Xcode on a Mac. No paid Apple Developer Program membership is required for personal testing, but free provisioning has limitations.
 
 1. On a Mac, install Xcode from the Mac App Store and launch it once.
 2. Install XcodeGen: `brew install xcodegen`.
@@ -29,6 +29,15 @@ The existing Android application and the deployed V2 PWA are unchanged.
 10. If required, approve the developer profile under iPhone Settings > General > VPN & Device Management.
 
 Free Personal Team provisioning is limited and generally expires after **7 days**. Rebuild/reinstall from Xcode as needed.
+
+## Windows-only testing path (experimental)
+
+1. Open GitHub Actions > **Build SG Delivery Native iOS Unsigned IPA** and run the workflow on branch `ios/v3-native-swiftui`, or use the PR build artifact once successful.
+2. Download artifact `SG-Delivery-V3-UNSIGNED-IPA` and unzip the GitHub artifact to obtain `SG-Delivery-V3-UNSIGNED.ipa`.
+3. A Windows sideloading tool capable of signing unsigned IPAs with a free Apple ID (for example Sideloadly) may be used to sign and install the app to a connected iPhone. Follow the tool vendor's official instructions and evaluate the security implications before entering Apple credentials. **This path has not been verified for this app.**
+4. Free-account app provisioning normally expires after seven days and may need periodic reinstalling/resigning.
+
+**Do not share Apple ID credentials, app-specific passwords, or two-factor authentication codes in GitHub, ChatGPT, or project files.**
 
 ## Not ready for production
 
