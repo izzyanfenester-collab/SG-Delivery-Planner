@@ -32,7 +32,7 @@ function home(){
  '<div class="grid2"><div class="field-card"><label for="deliveryDate">Delivery Date</label><input type="date" id="deliveryDate" value="'+safe(s.date)+'"></div><div class="field-card"><label for="startTime">Start time</label><input type="time" id="startTime" value="'+safe(s.time)+'"></div></div>'+
  '<p class="hint" style="margin:18px 0">Delivery time per stop: '+s.minutes+' minutes</p><textarea id="codes" placeholder="Singapore postal codes or paste WhatsApp orders">'+safe(state.draft)+'</textarea>'+
  '<button class="btn outline-btn wide" style="margin-top:12px" id="paste">Import WhatsApp Orders</button>'+
- '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="validCount">0</strong><span>Valid stops</span></div><div class="stat"><strong id="dupCount">0</strong><span>Exact duplicates skipped</span></div></div>'+
+ '<div class="stats" style="margin-top:12px"><div class="stat"><strong id="foundCount">0</strong><span>Found</span></div><div class="stat"><strong id="validCount">0</strong><span>Added</span></div><div class="stat"><strong id="dupCount">0</strong><span>Duplicate</span></div><div class="stat"><strong id="failedCount">0</strong><span>Failed</span></div></div>'+
  '<div class="grid2" style="margin-top:12px"><button class="btn" id="optimize">Optimize route</button><button class="btn outline-btn" id="clear">Clear postal code</button></div>'+
  '<a class="btn outline-btn wide gold link-btn" style="margin-top:12px;border-color:var(--gold);display:block" href="https://m.customs.gov.sg/CustomsTravellerPortal/" target="_blank" rel="noopener noreferrer">▤ &nbsp; Tax Declare</a>'+
  '<p class="hint" style="margin-top:15px">Supports up to 50 customer orders, including repeated postal codes. Optimization requires internet, OneMap and a road-routing service. If unavailable, the app will report an error rather than invent an ETA.</p>';
@@ -75,11 +75,11 @@ function historyDetails(key){
  return '<div class="outline"><h2>'+safe(r.date||'Route')+' — read only</h2>'+r.stops.map((s,i)=>'<details><summary>'+(i+1)+'. '+safe(s.postal)+' — '+safe(s.status)+'</summary><p class="hint">Customer: '+safe(s.name||'—')+'<br>Phone: '+safe(s.phone||'—')+'<br>Address: '+safe(s.address||'—')+'<br>Delivered: '+dateTime(s.deliveredAt)+(s.holdReason?'<br>Hold: '+safe(s.holdReason)+' '+safe(s.holdNote||''):'')+'</p>'+(s.proofDelivery?'<img class="photo" src="'+safe(s.proofDelivery)+'" alt="Delivery proof">':'')+(s.proofPayment?'<img class="photo" src="'+safe(s.proofPayment)+'" alt="Payment proof">':'')+'</details>').join('')+'</div>';
 }
 function bindHome(){
- const update=()=>{const x=parseOrders($('codes').value);$('validCount').textContent=x.stops.length;$('dupCount').textContent=x.duplicates;state.draft=$('codes').value;persist()};
+ const update=()=>{const x=parseOrders($('codes').value);$('foundCount').textContent=x.stops.length+x.duplicates+x.failed;$('validCount').textContent=x.stops.length;$('dupCount').textContent=x.duplicates;$('failedCount').textContent=x.failed;state.draft=$('codes').value;persist()};
  $('codes').addEventListener('input',update);update();
  $('saveStart')?.addEventListener('click',()=>{saveSettingsFromHome();render();toast('Start/End saved')});
  $('deliveryDate').onchange=saveSettingsFromHome;$('startTime').onchange=saveSettingsFromHome;
- $('paste').onclick=async()=>{try{const t=await navigator.clipboard.readText();$('codes').value=t;update();toast('WhatsApp text imported')}catch{toast('Paste WhatsApp text into the box manually (press and hold).')}};
+ $('paste').onclick=async()=>{try{const t=await navigator.clipboard.readText();$('codes').value=t;update();const x=parseOrders(t);toast('Found '+(x.stops.length+x.duplicates+x.failed)+' / Added '+x.stops.length+' / Duplicate '+x.duplicates+' / Failed '+x.failed)}catch{toast('Paste WhatsApp text into the box manually (press and hold).')}};
  $('clear').onclick=()=>{state.draft='';persist();render()};
  $('optimize').onclick=async()=>{saveSettingsFromHome();const parsed=parseOrders(state.draft);if(!parsed.stops.length)return toast('No valid Singapore postal codes found');if(parsed.stops.length>50)return toast('Maximum 50 delivery orders');const btn=$('optimize');btn.disabled=true;btn.textContent='Optimizing…';try{
  const custom=state.settings.start!=='Woodlands Checkpoint'||state.settings.address!=='21 Woodlands Crossing, Singapore 738203';
