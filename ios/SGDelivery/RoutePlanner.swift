@@ -156,7 +156,7 @@ enum RoutePlanner {
         totalMeters += distances[previous][0]
         return DeliveryRoute(date: date, startTime: time,
             startName: startPostal == "738203" ? "Woodlands Checkpoint" : "Custom Depot",
-            startPostal: startPostal, minutesPerStop: minutes,
+            startPostal: startPostal, depotLatitude: depot.lat, depotLongitude: depot.lon, minutesPerStop: minutes,
             orders: ordered, totalKm: totalMeters / 1000, returnETA: current, optimized: true)
     }
 }
