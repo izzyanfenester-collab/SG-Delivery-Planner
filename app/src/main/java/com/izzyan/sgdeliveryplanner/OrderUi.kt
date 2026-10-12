@@ -45,6 +45,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     val context=LocalContext.current
     var raw by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<OrderImport?>(null) }
+    var showFailed by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     val capacity = (50-vm.ordersBeforeImport().size).coerceAtLeast(0)
     AlertDialog(onDismissRequest = { vm.importOrdersDialog = false }, title = { Text("WhatsApp Import") }, text = {
@@ -55,19 +56,47 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
             }
             else {
                 val result = parsed!!
-                Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${result.orders.size-result.orders.map { it.postalCode }.distinct().size}\nFailed: ${result.failed}")
-                TextButton(onClick={selected=result.orders.map { it.orderId }.toSet()}) { Text("SELECT ALL") }
-                Text("$capacity spaces available. Each customer remains a separate parcel.",style=MaterialTheme.typography.bodySmall)
-                if (selected.size > capacity) Text("Select fewer orders to stay within 50 deliveries.",color=MaterialTheme.colorScheme.error)
-                LazyColumn(Modifier.heightIn(max=280.dp)) { items(result.orders,key={it.orderId}) { order ->
-                    Row(Modifier.fillMaxWidth().heightIn(min=52.dp).toggleable(order.orderId in selected,onValueChange={checked -> selected=if(checked) selected+order.orderId else selected-order.orderId}),verticalAlignment=Alignment.CenterVertically) {
-                        Checkbox(order.orderId in selected,null)
-                        Text("${order.postalCode} · ${order.customerName ?: "—"} · ${orderPrice(order)}")
+                if (showFailed) {
+                    Text("Failed orders: ${result.failed}",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.titleMedium)
+                    Text("These orders were NOT imported. Check the address or postal code in the original WhatsApp message, then correct and import again.",style=MaterialTheme.typography.bodySmall)
+                    LazyColumn(Modifier.heightIn(max=340.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                        items(result.failedOrders) { failure ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                    Text("Customer: ${failure.customerName ?: "Unknown — check original message"}",style=MaterialTheme.typography.titleSmall)
+                                    Text("Reason: ${failure.reason}",color=MaterialTheme.colorScheme.error)
+                                    failure.suspectedPostal?.let { Text("Possible incorrect postal: $it") }
+                                    Text("Address: ${failure.address ?: "Not found"}")
+                                    Text("Original WhatsApp order:",style=MaterialTheme.typography.labelMedium)
+                                    androidx.compose.foundation.text.selection.SelectionContainer {
+                                        Text(failure.originalMessage,style=MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
                     }
-                } }
+                    TextButton(onClick={showFailed=false}) { Text("BACK TO ORDERS") }
+                } else {
+                    Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${result.orders.size-result.orders.map { it.postalCode }.distinct().size}\nFailed: ${result.failed}")
+                    if (result.failed > 0) {
+                        Text("⚠ ${result.failed} order(s) could not be imported. Review the failed addresses before continuing.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick={showFailed=true},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {
+                            Text("VIEW FAILED ORDERS (${result.failed})")
+                        }
+                    }
+                    TextButton(onClick={selected=result.orders.map { it.orderId }.toSet()}) { Text("SELECT ALL") }
+                    Text("$capacity spaces available. Each customer remains a separate parcel.",style=MaterialTheme.typography.bodySmall)
+                    if (selected.size > capacity) Text("Select fewer orders to stay within 50 deliveries.",color=MaterialTheme.colorScheme.error)
+                    LazyColumn(Modifier.heightIn(max=280.dp)) { items(result.orders,key={it.orderId}) { order ->
+                        Row(Modifier.fillMaxWidth().heightIn(min=52.dp).toggleable(order.orderId in selected,onValueChange={checked -> selected=if(checked) selected+order.orderId else selected-order.orderId}),verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(order.orderId in selected,null)
+                            Text("${order.postalCode} · ${order.customerName ?: "—"} · ${orderPrice(order)}")
+                        }
+                    } }
+                }
             }
         }
-    },confirmButton={Button(onClick={if(parsed==null) { parsed=parseCustomerOrders(raw); raw=""; selected=parsed!!.orders.map { it.orderId }.toSet() } else vm.importOrders(parsed!!.orders.filter { it.orderId in selected },parsed!!.failed)},enabled=!vm.busy && (if(parsed==null) raw.isNotBlank() else selected.size in 1..capacity)) {Text(if(parsed==null) "PREVIEW" else "Use These Orders")}},dismissButton={TextButton(onClick={vm.importOrdersDialog=false}) {Text("CANCEL")}})
+    },confirmButton={Button(onClick={if(parsed==null) { parsed=parseCustomerOrders(raw); raw=""; selected=parsed!!.orders.map { it.orderId }.toSet() } else vm.importOrders(parsed!!.orders.filter { it.orderId in selected },parsed!!.failed)},enabled=!vm.busy && (if(parsed==null) raw.isNotBlank() else !showFailed && selected.size in 1..capacity)) {Text(if(parsed==null) "PREVIEW" else "Use These Orders")}},dismissButton={TextButton(onClick={vm.importOrdersDialog=false}) {Text("CANCEL")}})
 }
 
 @Composable fun ProofPickerHost(vm: PlannerViewModel) {
