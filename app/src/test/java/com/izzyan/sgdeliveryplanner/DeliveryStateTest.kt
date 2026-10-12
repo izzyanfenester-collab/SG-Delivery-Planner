@@ -105,6 +105,32 @@ class DeliveryStateTest {
         val blank = reviewStop(plan(), "ON_HOLD", reviewTime, "invalid | invalid")
         assertNull(blank.stops[0].holdReason)
     }
+    @Test fun joyBuyerIsARecognizedMultiSelectReasonAndSurvivesReopen() {
+        val reasons = "No answer | Joy buyer"
+        val held = reviewStop(plan(), "ON_HOLD", reviewTime, reasons)
+        val saved = PlanJson.decode(PlanJson.encode(held))
+        assertEquals(reasons, saved.stops.first().holdReason)
+        assertNull(saved.stops.first().holdNote)
+        assertEquals("ON_HOLD", saved.stops.first().status)
+        assertEquals(reasons, holdDetails(saved.stops.first()))
+    }
+
+    @Test fun otherRequiresNonBlankManualReasonEvenWhenChosenAlongsideAnotherReason() {
+        for (invalid in listOf(null, "", "   ", "\n  ")) {
+            try {
+                reviewStop(plan(), "ON_HOLD", reviewTime, "Joy buyer | Other", invalid)
+                fail("Other should block confirmation when manual reason is blank")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("Other"))
+            }
+        }
+        val stored = reviewStop(plan(), "ON_HOLD", reviewTime, "Joy buyer | Other", "  Customer requests delay  ")
+        assertEquals("Joy buyer | Other", stored.stops.first().holdReason)
+        assertEquals("Customer requests delay", stored.stops.first().holdNote)
+        val jsonRoundTrip = PlanJson.decode(PlanJson.encode(stored))
+        assertEquals(stored.stops.first().holdNote, jsonRoundTrip.stops.first().holdNote)
+    }
+
     @Test fun holdReasonIsOptionalAndManualNoteOnlyAppliesToOther() {
         val optional = reviewStop(plan(), "ON_HOLD", reviewTime)
         assertNull(optional.stops.first().holdReason)
