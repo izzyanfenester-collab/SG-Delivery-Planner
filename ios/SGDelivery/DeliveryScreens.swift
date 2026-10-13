@@ -392,7 +392,7 @@ struct HistoryView: View {
                         SGAction(title: "Restore Android ZIP / iOS JSON", filled: false) {
                             restoring = true
                         }
-                        Text("Android ZIP backup uses the SG Delivery history v1 format; iOS JSON remains available. Both contain unencrypted private customer data and photos. Restore keeps existing route IDs unchanged; backup before restoring.")
+                        Text("Android ZIP uses history v1 format and merges missing route IDs. iOS JSON restore REPLACES iOS history. Both include unencrypted private customer data and photos. Back up before restoring.")
                             .font(.caption).foregroundStyle(SGStyle.muted)
                     }
                 }
