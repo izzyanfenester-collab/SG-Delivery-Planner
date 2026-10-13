@@ -9,10 +9,14 @@ The existing Android application on `main` is unchanged. GitHub Pages/PWA remain
 - WhatsApp text import: name, address, Singapore phone, COD/PayNow, amount, postal; same-postal separate customers; exact message deduplication.
 - OneMap address lookup and OSRM road-matrix optimization (directed nearest-neighbour, 2-opt/swap); 8 minutes per customer by default; Singapore timezone.
 - Customer details; Android V1.4.2-style **Send message** launches a specific customer's editable WhatsApp draft with S$ parcel amount, genuine Updated ETA where available (otherwise planned ETA) through +10 minutes, and the exact imported order. Does not auto-send. Missing price/order/ETA/phone blocks inaccurate drafts; Apple/Google Maps handoff.
-- Delivery statuses, hold reason, delivery timestamps, proof images from Photos.
+- Delivery statuses, hold reasons and timestamps; native camera **and** Photos library support for proof-of-delivery and proof-of-payment, tied to parcel ID.
 - Local JSON persistence and JSON export/restore with embedded images.
 - MapKit stop pins and OSRM driving polyline when available; history, CSV export and iOS JSON backup.
 - Native navy / royal blue / gold UI modeled after Android V1.4.2, with WhatsApp failed-order editing and duplicate-postal review.
+- Foreground **MapKit GPS navigation** with directions, spoken cues, route refresh and ETA updates while the navigation screen is open (not background navigation; actual Singapore driving needs on-device testing).
+- Route finance report: Cash on Hand, delivered COD amount, SGD tax, SGD→MYR rate and converted tax. Excel export creates a **real two-worksheet XLSX** (not CSV renamed XLSX).
+- Android HistoryBackup **v1 ZIP** export/import, including original order data, delivery status, finances and proof JPEGs; missing ZIP photos are reported and Android import merges missing route IDs rather than overwriting existing iOS history.
+- Automated core regression tests and native iPhone **Simulator integration tests** for ZIP, XLSX, camera image conversion and GPS estimation.
 - For exact parity status, see [Android V1.4.2 parity tracker](ANDROID_V1_4_2_PARITY.md).
 
 ## Build and install using a free Apple ID
@@ -44,10 +48,10 @@ Free Personal Team provisioning is limited and generally expires after **7 days*
 ## Not ready for production
 
 - The public OneMap and OSRM services may reject or throttle iPhone traffic. Route planning must be tested with actual Singapore postal codes and up to 50 orders.
-- MapKit displays route geometry **when OSRM returns it**. Built-in turn-by-turn GPS navigation and actual-device routing tests are still missing.
-- Proof photos are embedded in local JSON and can exceed iOS app storage/backup limits; no Android-compatible ZIP import yet.
+- MapKit displays road geometry when OSRM returns it. In-app MapKit GPS/voice guidance is foreground-only and has no validated background-navigation or traffic-camera parity. Actual-device routing tests are still missing.
+- Proof photos are embedded in iOS JSON; Android ZIP import/export is now implemented but imported photos may be compressed to 1MB each. Full Android on-device ZIP interoperability must still be tested.
 - Traffic is an estimate, not live.
-- No iPhone hardware test has been performed yet. CI simulator compilation is necessary but not sufficient.
+- No real iPhone hardware test has been performed yet. CI simulator build + ZIP/XLSX/integration checks are necessary but not sufficient. See [physical iPhone QA checklist](DEVICE_QA_V1_4_2.md).
 - The iOS app requires iOS 17 or later.
 - Updated ETA on iOS is a **stored optional** value; no live GPS ETA updater is implemented. When absent, Send message clearly uses the planned ETA.
 
