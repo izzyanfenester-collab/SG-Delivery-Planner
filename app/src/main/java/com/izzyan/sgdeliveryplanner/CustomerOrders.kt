@@ -27,6 +27,55 @@ data class OrderImport(
     val failedOrders: List<FailedCustomerOrder> = emptyList()
 )
 
+
+/**
+ * Retry exactly ONE rejected WhatsApp order. All previously valid orders stay intact.
+ * Corrected orders receive a new parcel ID even when the postal matches another customer.
+ */
+data class FailedOrderRetryResult(
+    val updated: OrderImport? = null,
+    val addedOrder: CustomerOrder? = null,
+    val message: String
+)
+
+fun retryFailedCustomerOrder(
+    previous: OrderImport, failedIndex: Int, editedMessage: String
+): FailedOrderRetryResult {
+    if (failedIndex !in previous.failedOrders.indices)
+        return FailedOrderRetryResult(message = "The failed order is no longer available.")
+    if (editedMessage.isBlank())
+        return FailedOrderRetryResult(message = "Enter the corrected WhatsApp order text.")
+
+    val checked = parseCustomerOrders(editedMessage)
+    if (checked.failed == 0 && checked.orders.size == 1) {
+        val fixed = checked.orders.single()
+        if (previous.orders.any { it.originalMessage?.trim() == fixed.originalMessage?.trim() })
+            return FailedOrderRetryResult(message = "This exact order is already in the import list.")
+        val remaining = previous.failedOrders.toMutableList()
+        remaining.removeAt(failedIndex)
+        return FailedOrderRetryResult(
+            updated = previous.copy(
+                orders = previous.orders + fixed,
+                failed = remaining.size,
+                failedOrders = remaining
+            ),
+            addedOrder = fixed,
+            message = "Corrected order added successfully."
+        )
+    }
+    if (checked.failed == 1 && checked.orders.isEmpty() && checked.failedOrders.size == 1) {
+        val remaining = previous.failedOrders.toMutableList()
+        remaining[failedIndex] = checked.failedOrders.single()
+        return FailedOrderRetryResult(
+            updated = previous.copy(failed = remaining.size, failedOrders = remaining),
+            message = "Still failed: ${remaining[failedIndex].reason}"
+        )
+    }
+    return FailedOrderRetryResult(
+        message = "Edit only one customer order at a time. Keep its name, address and other details together."
+    )
+}
+
 fun normalizeCustomerPhone(raw: String?): String? {
     val digits = raw?.replace(Regex("[^0-9]"), "") ?: return null
     return when {
