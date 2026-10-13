@@ -8,12 +8,12 @@ The existing Android application on `main` is unchanged. GitHub Pages/PWA remain
 - Five native tabs: Home, Route, Delivery, Map, History.
 - WhatsApp text import: name, address, Singapore phone, COD/PayNow, amount, postal; same-postal separate customers; exact message deduplication.
 - OneMap address lookup and OSRM road-matrix optimization (directed nearest-neighbour, 2-opt/swap); 8 minutes per customer by default; Singapore timezone.
-- Customer details, WhatsApp draft (never auto-send), Google Maps handoff.
+- Customer details; Android V1.4.2-style **Send message** launches a specific customer's editable WhatsApp draft with S$ parcel amount, genuine Updated ETA where available (otherwise planned ETA) through +10 minutes, and the exact imported order. Does not auto-send. Missing price/order/ETA/phone blocks inaccurate drafts; Apple/Google Maps handoff.
 - Delivery statuses, hold reason, delivery timestamps, proof images from Photos.
 - Local JSON persistence and JSON export/restore with embedded images.
 - MapKit stop pins and OSRM driving polyline when available; history, CSV export and iOS JSON backup.
-- Native navy / royal blue / gold UI modeled after Android V1.4.1, with WhatsApp failed-order editing and duplicate-postal review.
-- For exact parity status, see [Android V1.4.1 parity tracker](ANDROID_V1_4_1_PARITY.md).
+- Native navy / royal blue / gold UI modeled after Android V1.4.2, with WhatsApp failed-order editing and duplicate-postal review.
+- For exact parity status, see [Android V1.4.2 parity tracker](ANDROID_V1_4_2_PARITY.md).
 
 ## Build and install using a free Apple ID
 
@@ -49,5 +49,6 @@ Free Personal Team provisioning is limited and generally expires after **7 days*
 - Traffic is an estimate, not live.
 - No iPhone hardware test has been performed yet. CI simulator compilation is necessary but not sufficient.
 - The iOS app requires iOS 17 or later.
+- Updated ETA on iOS is a **stored optional** value; no live GPS ETA updater is implemented. When absent, Send message clearly uses the planned ETA.
 
 Never rely on unverified ETA values for real delivery deadlines.
