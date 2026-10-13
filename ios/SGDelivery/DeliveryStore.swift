@@ -195,6 +195,48 @@ final class DeliveryStore: ObservableObject {
         if status == .delivered { routes[i].orders[j].deliveredAt = Date() }
     }
 
+    private var lastLiveETAPersist: [UUID: Date] = [:]
+
+    /// Called only while active GPS navigation is on screen. Never overwrites completed parcels.
+    func updateLiveETA(orderID: UUID, value: Date) {
+        guard value.timeIntervalSinceNow > -90 && value.timeIntervalSinceNow < 18_000,
+              let i = activeIndex, let j = routes[i].orders.firstIndex(where: { $0.id == orderID }),
+              routes[i].orders[j].status != .delivered else { return }
+        let previous = routes[i].orders[j].updatedArrival
+        let lastSave = lastLiveETAPersist[orderID] ?? .distantPast
+        guard previous == nil ||
+              (Date().timeIntervalSince(lastSave) >= 20 &&
+               abs(value.timeIntervalSince(previous!)) >= 15) else { return }
+
+        // Shift future untouched parcels by the change in target ETA, retaining service intervals.
+        let planned = routes[i].orders[j].arrival
+        let baseline = previous ?? planned
+        let delta = baseline.map { value.timeIntervalSince($0) } ?? 0
+        for k in j..<routes[i].orders.count {
+            guard routes[i].orders[k].status != .delivered else { continue }
+            if k == j { routes[i].orders[k].updatedArrival = value }
+            else if let expected = routes[i].orders[k].updatedArrival ?? routes[i].orders[k].arrival {
+                routes[i].orders[k].updatedArrival = expected.addingTimeInterval(delta)
+            }
+        }
+        lastLiveETAPersist[orderID] = Date()
+    }
+
+    func updateRouteFinance(cash: String, tax: String, rate: String, remark: String) -> String? {
+        guard let i = activeIndex else { return "Select a route before saving the report." }
+        guard let cashValue = MoneyCalculator.amount(cash),
+              let taxValue = MoneyCalculator.amount(tax),
+              let exchange = MoneyCalculator.positiveRate(rate) else {
+            return "Enter valid non-negative SGD cash/tax and a positive exchange rate."
+        }
+        routes[i].cashOnHand = MoneyCalculator.display(cashValue)
+        routes[i].tax = MoneyCalculator.display(taxValue)
+        routes[i].exchangeRate = MoneyCalculator.rateDisplay(exchange)
+        routes[i].remark = String(remark.prefix(500))
+        noticeMessage = "Delivery cash and tax saved."
+        return nil
+    }
+
     func saveProof(orderID: UUID, data: Data, payment: Bool) {
         guard data.count <= 1_000_000, let i = activeIndex,
               let j = routes[i].orders.firstIndex(where: { $0.id == orderID }) else {
