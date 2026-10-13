@@ -55,7 +55,11 @@ struct DeliveryReportSummary {
         [
             ("Date", SGFormat.date(route.date)),
             ("Start", SGFormat.date(route.startTime)),
-            ("Finish", route.returnETA.map(SGFormat.date) ?? "—"),
+            ("Finish (reviewed)", route.orders.allSatisfy({ $0.reviewedAt != nil }) &&
+                !route.orders.isEmpty ?
+                route.orders.compactMap(\.reviewedAt).max().map(SGFormat.date) ?? "—"
+                : "Not fully reviewed"),
+            ("Planned Return", route.returnETA.map(SGFormat.date) ?? "—"),
             ("Total Parcel", String(total)),
             ("Delivered", String(delivered)),
             ("On Hold", String(onHold)),
