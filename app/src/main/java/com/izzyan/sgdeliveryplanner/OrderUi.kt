@@ -419,24 +419,32 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
 }
 
 /** Route-only action: opens this customer's original order, already drafted in WhatsApp. */
-@Composable fun SendOrderMessageButton(vm: PlannerViewModel, order: CustomerOrder) {
+@Composable fun SendOrderMessageButton(vm: PlannerViewModel, stop: Stop) {
+    val order = stop.order ?: return
     val context = LocalContext.current
     var choosing by remember(order.orderId) { mutableStateOf(false) }
     var selected by remember(order.orderId) { mutableStateOf(WhatsAppChoice.PERSONAL) }
-    val draft = orderMessageDraft(order)
+    val draft = deliveryWhatsAppMessageDraft(stop)
     Button(
         onClick = {
             val phone = order.phoneNumber
             when {
                 draft == null -> android.widget.Toast.makeText(context,
-                    "Original order text is unavailable. Re-import this WhatsApp order to include all items.",
+                    "Message details are missing (original WhatsApp order, parcel price or ETA). Re-import or correct this order before messaging.",
                     android.widget.Toast.LENGTH_LONG).show()
                 normalizeCustomerPhone(phone) == null -> android.widget.Toast.makeText(context,
                     "Customer phone number unavailable.", android.widget.Toast.LENGTH_LONG).show()
                 else -> {
-                    val preferred = vm.whatsappPreferences.default
-                    if (preferred == null || !openCustomerWhatsApp(context,phone!!,preferred,draft)) {
-                        selected = preferred ?: WhatsAppChoice.PERSONAL
+                    // Open the customer's chat immediately; honour a saved WhatsApp/Business preference.
+                    // If no default is saved, try personal WhatsApp first and Business second.
+                    val preferred = vm.whatsappPreferences.default ?: WhatsAppChoice.PERSONAL
+                    val available = listOf(preferred, WhatsAppChoice.entries.first { it != preferred })
+                    val installed = available.firstOrNull { choice ->
+                        customerWhatsAppIntent(phone!!, choice, draft)
+                            .resolveActivity(context.packageManager) != null
+                    }
+                    if (installed == null || !openCustomerWhatsApp(context, phone!!, installed, draft)) {
+                        selected = preferred
                         choosing = true
                     }
                 }
