@@ -191,12 +191,14 @@ struct WhatsAppImportSheet: View {
                                 }
                             }
                         } else if mode == "Duplicates" {
-                            ForEach(Array(result.duplicatePostalGroups.enumerated()), id: \.offset) { _, group in
+                            ForEach(Array(result.duplicatePostalGroups.enumerated()), id: \.offset) { entry in
+                                let group = entry.element
                                 SGCard(color: SGStyle.cardAlt) {
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text("⚠ \(group.postal) — \(group.orders.count) customers")
                                             .foregroundStyle(SGStyle.gold).bold()
-                                        ForEach(Array(group.orders.enumerated()), id: \.element.id) { i,order in
+                                        ForEach(group.orders) { order in
+                                            let i = group.orders.firstIndex(where: { $0.id == order.id }) ?? 0
                                             Text("\(i+1). \(order.name.isEmpty ? "Unknown" : order.name) · $\(order.amount)")
                                                 .font(.caption).foregroundStyle(SGStyle.text)
                                         }
