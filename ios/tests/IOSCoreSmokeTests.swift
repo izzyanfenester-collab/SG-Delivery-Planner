@@ -137,6 +137,63 @@ struct IOSCoreSmokeTests {
             from: JSONSerialization.data(withJSONObject: oldJSON))
         check(older.updatedArrival == nil, "Older iOS backup remains compatible")
 
+        // Financial summaries and Android HistoryBackup v1 JSON round-trip.
+        check(MoneyCalculator.amount("75.00") != nil, "SGD amount accepted")
+        check(MoneyCalculator.amount("-7") == nil, "Negative amount rejected")
+        check(MoneyCalculator.positiveRate("3.60") != nil, "SGD/MYR rate accepted")
+        check(MoneyCalculator.positiveRate("0") == nil, "Zero exchange rate rejected")
+        check(MoneyCalculator.display(MoneyCalculator.taxMYR(tax: Decimal(15), rate: Decimal(string:"3.60")!)) == "54.00",
+              "Android SGD→MYR tax conversion")
+        var first = customerA
+        first.status = .delivered
+        first.deliveredAt = updated
+        first.reviewedAt = updated
+        first.proofDelivery = Data("sample-photo".utf8).base64EncodedString()
+        var second = customerB
+        second.status = .hold
+        second.holdReason = "Customer not home"
+        second.holdNote = "Please reschedule"
+        second.reviewedAt = planned
+        let route = DeliveryRoute(date: planned, startTime: planned,
+            orders: [first,second], totalKm: 15.2,
+            returnETA: planned.addingTimeInterval(6000),
+            optimized: true, cashOnHand: "75.00", tax: "15.00", exchangeRate: "3.60",
+            remark: "Two parcels")
+        let report = DeliveryReportSummary(route: route)
+        check(report.total == 2 && report.delivered == 1 && report.onHold == 1,
+              "Summary parcel status counts")
+        check(report.collectedCOD == Decimal(75), "COD only totals delivered COD orders")
+        check(report.printable.contains("Cash on Hand: SGD 75.00"), "Summary text includes cash")
+        let exported = try AndroidHistoryFormat.exportRows([route])
+        let androidRows = try JSONSerialization.jsonObject(with: exported.routesData) as! [[String: Any]]
+        check(androidRows.count == 1, "Android ZIP routes.json includes one SavedRoute")
+        check(androidRows[0]["id"] as? String == route.id.uuidString.lowercased(),
+              "Android SavedRoute ID matches")
+        let planJSON = (androidRows[0]["json"] as! String).data(using: .utf8)!
+        let planObject = try JSONSerialization.jsonObject(with: planJSON) as! [String: Any]
+        check(planObject["deliveryStateVersion"] as? Int == 2, "Android format version")
+        let recreated = try AndroidHistoryFormat.readRoutes(exported.routesData, photos: exported.photos)
+        check(recreated.count == 1, "Android archive importer route count")
+        check(recreated[0].orders.count == 2, "Android restores both same-postcode customers")
+        check(recreated[0].orders[0].id == first.id && recreated[0].orders[1].id == second.id,
+              "Order IDs preserved by Android import/export")
+        check(recreated[0].orders[0].originalMessage == first.originalMessage,
+              "Imported original WhatsApp text exactly preserved")
+        check(recreated[0].orders[0].proofDelivery == first.proofDelivery,
+              "Proof photo restored to matching parcel ID")
+        check(recreated[0].orders[1].status == .hold &&
+              recreated[0].orders[1].holdReason == "Customer not home",
+              "Android hold status and reason preserved")
+        check(recreated[0].exchangeRate == "3.60" && recreated[0].cashOnHand == "75.00",
+              "Android finance settings preserved")
+        check(AndroidHistoryFormat.fromLocal(AndroidHistoryFormat.local(planned)) != nil,
+              "Android Singapore local-date format round trips")
+        var corrupt = androidRows
+        corrupt[0]["id"] = UUID().uuidString
+        let corruptData = try JSONSerialization.data(withJSONObject: corrupt)
+        check((try? AndroidHistoryFormat.readRoutes(corruptData)) == nil,
+              "Mismatched Android route ID rejected safely")
+
         print("SG Delivery native iOS core smoke tests PASSED.")
     }
 }
