@@ -21,7 +21,7 @@ jobs:
         run: xcodegen generate
       - name: Test native iOS parser and route optimizer
         run: |
-          swiftc -parse-as-library ios/SGDelivery/Models.swift ios/SGDelivery/WhatsAppParser.swift ios/SGDelivery/RoutePlanner.swift ios/tests/IOSCoreSmokeTests.swift -o /tmp/sg-ios-smoke
+          swiftc -parse-as-library ios/SGDelivery/Models.swift ios/SGDelivery/WhatsAppParser.swift ios/SGDelivery/RoutePlanner.swift ios/SGDelivery/DeliveryWhatsApp.swift ios/tests/IOSCoreSmokeTests.swift -o /tmp/sg-ios-smoke
           /tmp/sg-ios-smoke
       - name: Build for iPhone Simulator without signing
         working-directory: ios
