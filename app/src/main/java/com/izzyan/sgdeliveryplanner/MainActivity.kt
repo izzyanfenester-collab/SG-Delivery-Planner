@@ -543,7 +543,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Stop ${p.current + 1} of ${p.stops.size}", Modifier.weight(1f), color = PremiumGold, style = MaterialTheme.typography.titleLarge)
-                        stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, it) }
+                        stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, stop) }
                     }
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -654,7 +654,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     if (current) Text("Current delivery", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
                     else Spacer(Modifier.weight(1f))
-                    stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, it) }
+                    stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, stop) }
                 }
             }
             if (stop.order == null) {
