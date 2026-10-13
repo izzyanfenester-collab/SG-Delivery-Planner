@@ -15,6 +15,8 @@ struct DeliveryOrder: Identifiable, Codable, Hashable {
     var holdReason: String?
     var holdNote: String?
     var arrival: Date?
+    // Nil until a genuine updated ETA is available; older saved JSON remains decodable.
+    var updatedArrival: Date?
     var leave: Date?
     var latitude: Double?
     var longitude: Double?
