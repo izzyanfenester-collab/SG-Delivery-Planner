@@ -126,6 +126,12 @@ struct DeliveryDetailView: View {
     @State private var deliveryPhoto: PhotosPickerItem?
     @State private var paymentPhoto: PhotosPickerItem?
     @State private var showNavigation = false
+    @State private var showingBuiltInNavigation = false
+    @State private var captureKind: ProofCaptureKind?
+
+    private enum ProofCaptureKind: String, Identifiable { case delivery, payment
+        var id: String { rawValue }
+    }
 
     private let holdReasons = ["Customer not home", "No answer", "Reschedule",
                                "Payment issue", "Access issue", "Joy buyer", "Other"]
@@ -152,10 +158,23 @@ struct DeliveryDetailView: View {
         .confirmationDialog("Choose Navigation", isPresented: $showNavigation,
                             titleVisibility: .visible) {
             if let order {
+                Button("Built-in GPS + Voice") { showingBuiltInNavigation = true }
                 Button("Apple Maps") { openNavigation(order, provider: "Apple Maps") }
                 Button("Google Maps") { openNavigation(order, provider: "Google Maps") }
                 Button("Cancel", role: .cancel) {}
             }
+        }
+        .fullScreenCover(isPresented: $showingBuiltInNavigation) {
+            NativeNavigationView(orderID: orderID).environmentObject(store)
+        }
+        .sheet(item: $captureKind) { kind in
+            ProofCameraPicker(onCapture: { image in
+                captureKind = nil
+                if let encoded = ProofImage.encode(image) {
+                    store.saveProof(orderID: orderID, data: encoded, payment: kind == .payment)
+                } else { store.errorMessage = "Could not process camera photo." }
+            }, onCancel: { captureKind = nil })
+                .ignoresSafeArea()
         }
         .onChange(of: deliveryPhoto) { _,next in
             if let next {
@@ -233,9 +252,15 @@ struct DeliveryDetailView: View {
         SGCard {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Proof Photos").font(.headline).foregroundStyle(SGStyle.gold)
+                Button { captureKind = .delivery } label: {
+                    Label("Take Proof of Delivery Photo", systemImage: "camera.fill")
+                }.foregroundStyle(SGStyle.gold)
                 PhotosPicker(selection: $deliveryPhoto, matching: .images) {
                     Label("Add Proof of Delivery", systemImage: "camera").foregroundStyle(SGStyle.blue)
                 }
+                Button { captureKind = .payment } label: {
+                    Label("Take Proof of Payment Photo", systemImage: "camera.fill")
+                }.foregroundStyle(SGStyle.gold)
                 PhotosPicker(selection: $paymentPhoto, matching: .images) {
                     Label("Add Proof of Payment", systemImage: "creditcard").foregroundStyle(SGStyle.blue)
                 }
@@ -319,12 +344,7 @@ struct DeliveryDetailView: View {
                   let image = UIImage(data: data) else {
                 store.errorMessage = "Unsupported photo format"; return
             }
-            let maxDimension = max(image.size.width, image.size.height)
-            let factor = min(1, 1200 / max(1, maxDimension))
-            let size = CGSize(width: image.size.width * factor, height: image.size.height * factor)
-            let renderer = UIGraphicsImageRenderer(size: size)
-            let small = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
-            guard let output = small.jpegData(compressionQuality: 0.42) else {
+            guard let output = ProofImage.encode(image) else {
                 store.errorMessage = "Could not compress proof photo"; return
             }
             store.saveProof(orderID: orderID, data: output, payment: payment)
