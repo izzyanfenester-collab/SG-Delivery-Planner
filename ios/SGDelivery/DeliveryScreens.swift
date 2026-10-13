@@ -438,7 +438,9 @@ struct HistoryView: View {
                 defer { url.stopAccessingSecurityScopedResource() }
                 if url.pathExtension.lowercased() == "zip" {
                     let result = try store.importAndroidBackup(from: url)
-                    store.noticeMessage = "Android ZIP restored: (result.restored) routes added; (result.skipped) existing routes skipped."
+                    store.noticeMessage = "Android ZIP restored: \(result.restored) routes added, \(result.skipped) existing routes skipped." +
+                        (result.missingProofs > 0 ?
+                         " WARNING: \(result.missingProofs) referenced proof photos were missing from the ZIP." : "")
                 } else {
                     try store.restoreJSON(Data(contentsOf: url))
                     store.noticeMessage = "iOS backup restored."
