@@ -135,95 +135,16 @@ struct DeliveryDetailView: View {
 
     var body: some View {
         ScrollView {
-            if let order {
-                VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 14) {
+                if let order {
                     SGHeading(title: "Customer delivery", subtitle: "Postal \(order.postal)")
-                    SGCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Customer details").font(.headline)
-                                    .foregroundStyle(SGStyle.gold)
-                                Spacer()
-                                SGStatus(status: order.status)
-                            }
-                            SGField(title: "Name", value: order.name)
-                            SGField(title: "Full address", value: order.address)
-                            SGField(title: "WhatsApp phone", value: order.phone)
-                            SGField(title: "Amount SGD", value: order.amount.isEmpty ? "—" : "$\(order.amount)")
-                            SGField(title: "Payment method", value: order.payment)
-                            if let eta = order.arrival { SGField(title: "ETA", value: SGFormat.date(eta)) }
-                            if let delivered = order.deliveredAt { SGField(title: "Delivered", value: SGFormat.date(delivered)) }
-                            if let reason = order.holdReason { SGField(title: "Hold reason", value: reason) }
-                        }
-                    }
-                    SGCard {
-                        VStack(spacing: 10) {
-                            SGAction(title: "Navigate", filled: false) { showNavigation = true }
-                            if !order.phone.isEmpty, let url = whatsappURL(order) {
-                                Link(destination: url) {
-                                    Text("Send WhatsApp Draft")
-                                        .foregroundStyle(SGStyle.navy)
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .frame(maxWidth: .infinity, minHeight: 53)
-                                        .background(SGStyle.blue, in: RoundedRectangle(cornerRadius: 18))
-                                }
-                            }
-                            Text("WhatsApp messages open as drafts only. Nothing is sent automatically.")
-                                .font(.caption2).foregroundStyle(SGStyle.muted)
-                        }
-                    }
-                    SGCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Proof Photos").font(.headline).foregroundStyle(SGStyle.gold)
-                            PhotosPicker(selection: $deliveryPhoto, matching: .images) {
-                                Label("Add Proof of Delivery", systemImage: "camera")
-                                    .foregroundStyle(SGStyle.blue)
-                            }
-                            PhotosPicker(selection: $paymentPhoto, matching: .images) {
-                                Label("Add Proof of Payment", systemImage: "creditcard")
-                                    .foregroundStyle(SGStyle.blue)
-                            }
-                            if let data = order.proofDelivery.flatMap(Data.init(base64Encoded:)),
-                               let image = UIImage(data: data) {
-                                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
-                            if let data = order.proofPayment.flatMap(Data.init(base64Encoded:)),
-                               let image = UIImage(data: data) {
-                                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
-                        }
-                    }
-                    SGCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Review Delivery").font(.headline).foregroundStyle(SGStyle.gold)
-                            if order.status == .delivered {
-                                Label("Delivered — record locked", systemImage: "checkmark.seal.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                SGAction(title: "Mark Delivered") {
-                                    store.review(orderID: orderID, status: .delivered)
-                                }
-                                Picker("Hold Reason", selection: $holdReason) {
-                                    ForEach(holdReasons, id: \.self) { Text($0) }
-                                }.pickerStyle(.menu)
-                                if holdReason == "Other" {
-                                    TextField("Explanation (required)", text: $holdNote)
-                                        .textFieldStyle(.roundedBorder)
-                                }
-                                SGAction(title: "On Hold", filled: false) {
-                                    store.review(orderID: orderID, status: .hold,
-                                                 reason: holdReason, note: holdNote)
-                                }
-                                SGAction(title: "Skipped", filled: false) {
-                                    store.review(orderID: orderID, status: .skipped)
-                                }
-                            }
-                        }
-                    }
-                }.padding(20)
+                    customerCard(order)
+                    contactCard(order)
+                    proofCard(order)
+                    reviewCard(order)
+                }
             }
+            .padding(20)
         }
         .background(SGStyle.navy)
         .navigationTitle(order?.postal ?? "Delivery")
@@ -244,6 +165,101 @@ struct DeliveryDetailView: View {
         .onChange(of: paymentPhoto) { _,next in
             if let next {
                 Task { await importPhoto(next, payment: true); paymentPhoto = nil }
+            }
+        }
+    }
+
+    private func customerCard(_ order: DeliveryOrder) -> some View {
+        SGCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Customer details").font(.headline).foregroundStyle(SGStyle.gold)
+                    Spacer()
+                    SGStatus(status: order.status)
+                }
+                SGField(title: "Name", value: order.name)
+                SGField(title: "Full address", value: order.address)
+                SGField(title: "WhatsApp phone", value: order.phone)
+                SGField(title: "Amount SGD", value: order.amount.isEmpty ? "—" : "$\(order.amount)")
+                SGField(title: "Payment method", value: order.payment)
+                if let eta = order.arrival { SGField(title: "ETA", value: SGFormat.date(eta)) }
+                if let delivered = order.deliveredAt { SGField(title: "Delivered", value: SGFormat.date(delivered)) }
+                if let reason = order.holdReason { SGField(title: "Hold reason", value: reason) }
+            }
+        }
+    }
+
+    private func contactCard(_ order: DeliveryOrder) -> some View {
+        SGCard {
+            VStack(spacing: 10) {
+                SGAction(title: "Navigate", filled: false) { showNavigation = true }
+                if !order.phone.isEmpty, let url = whatsappURL(order) {
+                    Link(destination: url) {
+                        Text("Send WhatsApp Draft")
+                            .foregroundStyle(SGStyle.navy)
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 53)
+                            .background(SGStyle.blue, in: RoundedRectangle(cornerRadius: 18))
+                    }
+                }
+                Text("WhatsApp messages open as drafts only. Nothing is sent automatically.")
+                    .font(.caption2).foregroundStyle(SGStyle.muted)
+            }
+        }
+    }
+
+    private func proofCard(_ order: DeliveryOrder) -> some View {
+        SGCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Proof Photos").font(.headline).foregroundStyle(SGStyle.gold)
+                PhotosPicker(selection: $deliveryPhoto, matching: .images) {
+                    Label("Add Proof of Delivery", systemImage: "camera").foregroundStyle(SGStyle.blue)
+                }
+                PhotosPicker(selection: $paymentPhoto, matching: .images) {
+                    Label("Add Proof of Payment", systemImage: "creditcard").foregroundStyle(SGStyle.blue)
+                }
+                if let encoded = order.proofDelivery,
+                   let data = Data(base64Encoded: encoded),
+                   let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                if let encoded = order.proofPayment,
+                   let data = Data(base64Encoded: encoded),
+                   let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
+    }
+
+    private func reviewCard(_ order: DeliveryOrder) -> some View {
+        SGCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Review Delivery").font(.headline).foregroundStyle(SGStyle.gold)
+                if order.status == .delivered {
+                    Label("Delivered — record locked", systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    SGAction(title: "Mark Delivered") {
+                        store.review(orderID: orderID, status: .delivered)
+                    }
+                    Picker("Hold Reason", selection: $holdReason) {
+                        ForEach(holdReasons, id: \.self) { Text($0) }
+                    }.pickerStyle(.menu)
+                    if holdReason == "Other" {
+                        TextField("Explanation (required)", text: $holdNote)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    SGAction(title: "On Hold", filled: false) {
+                        store.review(orderID: orderID, status: .hold,
+                                     reason: holdReason, note: holdNote)
+                    }
+                    SGAction(title: "Skipped", filled: false) {
+                        store.review(orderID: orderID, status: .skipped)
+                    }
+                }
             }
         }
     }
