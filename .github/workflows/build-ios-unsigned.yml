@@ -1,5 +1,9 @@
 name: Build SG Delivery Native iOS Unsigned IPA
 on:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios-unsigned.yml'
   workflow_dispatch:
   pull_request:
     paths:
@@ -17,7 +21,7 @@ jobs:
         run: xcodegen generate
       - name: Compile iPhone app without signing
         working-directory: ios
-        run: xcodebuild -project SGDeliveryV3.xcodeproj -scheme SGDeliveryV3 -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -project SGDeliveryV3.xcodeproj -scheme SGDeliveryV3 -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
       - name: Package unsigned IPA
         working-directory: ios
         run: |
