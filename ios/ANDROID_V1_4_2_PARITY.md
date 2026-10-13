@@ -2,7 +2,7 @@
 
 Reference: Android V1.4.2 merged PR #26 (main), building on Android V1.4.1 PR #25. Target is a native SwiftUI/MapKit iPhone app, not a PWA. Work is in draft PR #21 on branch ios/v3-native-swiftui. Android is not modified by this branch.
 
-## Implemented in iOS source (still requires compilation and real-device validation)
+## Implemented native iOS source (hardware verification pending)
 
 - Navy/royal blue/gold five-tab shell: Home, Route, Delivery, Map, History.
 - Up to 50 WhatsApp customer parcels, separate customers at a repeated postal, duplicate/postal correction details, original message retention, and manual postal import.
@@ -18,19 +18,25 @@ Reference: Android V1.4.2 merged PR #26 (main), building on Android V1.4.1 PR #2
   - No automatic sending.
 - Core tests cover exact order isolation, amount, time format, midnight rollover, URL encoding of emoji/newlines, invalid/missing input, and backward-compatible JSON without new optional ETA.
 
-## Important difference from Android V1.4.2
+## Android V1.4.2 follow-up implemented in this branch
 
-The existing iOS planner only produces **planned ETA**. A per-order updatedArrival date can be stored and used by the draft, but there is **not yet a live GPS/dynamic Updated ETA calculator or updater**, so the fallback to the planned ETA is expected until that feature is ported. Do not label a planned ETA as a live prediction.
+- **Foreground GPS navigation** via Apple MapKit / CoreLocation: current position, road polyline, Apple MapKit turn steps, spoken voice, periodic rerouting, ETA from road distance and estimated travel time.
+- **Updated ETA saved automatically** for the selected parcel and propagated to downstream uncompleted parcels while foreground navigation runs. WhatsApp uses Updated ETA + 10 min where present, otherwise planned ETA. No fake live ETA without GPS.
+- **Native camera proof** for Delivery and Payment, plus Photos picker, normalized JPEG and per-order persistence; a simulator has no physical camera.
+- **Cash/tax/summary** includes actual recorded vs planned finish, COD collected total, editable SGD cash/tax, SGD-to-MYR positive exchange rate, converted tax and remarks.
+- **Real XLSX export** with Delivery Summary and Parcels sheets; strings stored as spreadsheet inline strings, avoiding formula injection.
+- **Android HistoryBackup v1 ZIP format** import/export with manifest, SavedRoute JSON, order IDs and proof JPEGs; imported photos can be recompressed to iOS limits. Import merges only new route IDs and explicitly reports missing proof files. Android→iOS and iOS→Android device-to-device restore still need QA.
+- Native simulator integration tests now exercise ZIP + photos, XLSX internal sheets, camera JPEG processing and GPS/ETA maths. Separate smoke tests cover order isolation and Android route JSON round-tripping.
 
-## Still required before 100% Android feature parity
+## Still required before 100% Android parity and production
 
-- Verify the CI simulator build at the latest head, plus actual iPhone installation and screenshots.
-- Build native turn-by-turn GPS/voice navigation, live ETA update/rerouting, traffic cameras equivalent to Android.
-- Finish cash/tax and summary reporting, XLSX, single-customer image exports, Android-equivalent reporting and history.
-- Android ZIP backup/restore compatibility including proof photos (iOS JSON currently separate).
-- Full configurable map-picked start/end, native camera capture, light theme, preferences parity.
-- Compare UI element placement and fonts with Android screens, and test full 50-order import, route, WhatsApp, delivery, status and proof end-to-end on Singapore network/device.
-- Address remote API quotas and accessibility/privacy review.
+- **Real iPhone test**: actual GPS drive, spoken steps, camera hardware, WhatsApp, 50 orders, offline/restart, actual network errors, battery and proof persistence.
+- **Actual Android↔iPhone ZIP migration test** on two devices to check full field parity and non-lossy photos; iOS recompresses proofs for app storage.
+- Full **background voice navigation**, Android-equivalent live traffic cameras and rich navigation alerts are not implemented. Current GPS runs while built-in navigation is visible.
+- Exact Android single-customer image reporting, advanced cash/tax summaries, status workflows and full export formats still require comparison.
+- Full custom map-selected start/end picker, true light/system appearance, and screenshot-by-screenshot font/logo alignment.
+- Accessibility review, OneMap/OSRM availability and rate limiting checks. Test on real Singapore roads; estimates are not guaranteed arrival times.
+- See **DEVICE_QA_V1_4_2.md** for the pass/fail hardware checklist.
 
 ## Release gate
 
