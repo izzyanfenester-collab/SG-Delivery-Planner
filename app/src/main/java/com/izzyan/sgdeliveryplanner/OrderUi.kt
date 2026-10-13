@@ -160,7 +160,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                             onClick = { showDuplicates = !showDuplicates },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         ) {
-                            Text(if (showDuplicates) "HIDE DUPLICATE POSTALS"
+                            Text(if (showDuplicates) "BACK TO ALL ORDERS"
                                  else "VIEW DUPLICATE POSTALS (${duplicateGroups.size})")
                         }
                         if (showDuplicates) {
@@ -195,6 +195,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                             Text("VIEW FAILED ORDERS (${result.failed})")
                         }
                     }
+                    if (!showDuplicates) {
                     TextButton(onClick={selected=result.orders.map { it.orderId }.toSet()}) { Text("SELECT ALL") }
                     Text("$capacity spaces available. Each customer remains a separate parcel.",style=MaterialTheme.typography.bodySmall)
                     if (selected.size > capacity) Text("Select fewer orders to stay within 50 deliveries.",color=MaterialTheme.colorScheme.error)
@@ -216,6 +217,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                             }
                         }
                     } }
+                    }
                 }
             }
         }
