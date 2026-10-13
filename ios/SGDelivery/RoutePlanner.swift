@@ -212,9 +212,9 @@ enum RoutePlanner {
         if let pathURL = URL(string: "\(root)/route/v1/driving/\(roadPath)?overview=full&geometries=geojson&steps=false") {
             var lineRequest = URLRequest(url: pathURL)
             lineRequest.timeoutInterval = 60
-            if let (lineData,lineResponse) = try? await URLSession.shared.data(for: lineRequest),
-               (lineResponse as? HTTPURLResponse)?.statusCode == 200,
-               let geometry = try? JSONDecoder().decode(RoadPolyline.self, from: lineData),
+            if let fetched = try? await URLSession.shared.data(for: lineRequest),
+               (fetched.1 as? HTTPURLResponse)?.statusCode == 200,
+               let geometry = try? JSONDecoder().decode(RoadPolyline.self, from: fetched.0),
                geometry.code == "Ok", let points = geometry.routes?.first?.geometry?.coordinates {
                 polyline = points.compactMap {
                     guard $0.count >= 2 else { return nil }
