@@ -46,8 +46,65 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     var raw by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<OrderImport?>(null) }
     var showFailed by remember { mutableStateOf(false) }
+    var editingFailedIndex by remember { mutableStateOf<Int?>(null) }
+    var editedOrderText by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     val capacity = (50-vm.ordersBeforeImport().size).coerceAtLeast(0)
+    if (editingFailedIndex != null) {
+        AlertDialog(
+            onDismissRequest = { editingFailedIndex = null; editError = null },
+            title = { Text("Edit failed WhatsApp order") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Correct the address or six-digit Singapore postal code. Other customer details are preserved.",
+                        style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = editedOrderText,
+                        onValueChange = { editedOrderText = it; editError = null },
+                        label = { Text("Original order text") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 235.dp),
+                        minLines = 9,
+                        maxLines = 15
+                    )
+                    editError?.let { Text(it, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val current = parsed
+                        val index = editingFailedIndex
+                        if (current != null && index != null) {
+                            val retry = retryFailedCustomerOrder(current, index, editedOrderText)
+                            if (retry.updated != null) {
+                                parsed = retry.updated
+                                if (retry.addedOrder != null) {
+                                    selected = selected + retry.addedOrder.orderId
+                                    editingFailedIndex = null
+                                    showFailed = retry.updated.failed > 0
+                                    android.widget.Toast.makeText(context,
+                                        "Corrected order added. Failed: ${retry.updated.failed}",
+                                        android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    editError = retry.message
+                                }
+                            } else {
+                                editError = retry.message
+                            }
+                        }
+                    },
+                    enabled = !vm.busy && editedOrderText.isNotBlank()
+                ) { Text("RECHECK & ADD") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingFailedIndex = null; editError = null }) {
+                    Text("CANCEL")
+                }
+            }
+        )
+    } else {
     AlertDialog(onDismissRequest = { vm.importOrdersDialog = false }, title = { Text("WhatsApp Import") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (parsed == null) {
@@ -60,7 +117,8 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     Text("Failed orders: ${result.failed}",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.titleMedium)
                     Text("These orders were NOT imported. Check the address or postal code in the original WhatsApp message, then correct and import again.",style=MaterialTheme.typography.bodySmall)
                     LazyColumn(Modifier.heightIn(max=340.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        items(result.failedOrders) { failure ->
+                        items(result.failedOrders.size) { index ->
+                            val failure = result.failedOrders[index]
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                                     Text("Customer: ${failure.customerName ?: "Unknown — check original message"}",style=MaterialTheme.typography.titleSmall)
@@ -70,6 +128,19 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                     Text("Original WhatsApp order:",style=MaterialTheme.typography.labelMedium)
                                     androidx.compose.foundation.text.selection.SelectionContainer {
                                         Text(failure.originalMessage,style=MaterialTheme.typography.bodySmall)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            editingFailedIndex = index
+                                            editedOrderText = failure.originalMessage
+                                            editError = null
+                                        },
+                                        enabled = !vm.busy,
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Edit text")
                                     }
                                 }
                             }
@@ -88,15 +159,23 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     Text("$capacity spaces available. Each customer remains a separate parcel.",style=MaterialTheme.typography.bodySmall)
                     if (selected.size > capacity) Text("Select fewer orders to stay within 50 deliveries.",color=MaterialTheme.colorScheme.error)
                     LazyColumn(Modifier.heightIn(max=280.dp)) { items(result.orders,key={it.orderId}) { order ->
-                        Row(Modifier.fillMaxWidth().heightIn(min=52.dp).toggleable(order.orderId in selected,onValueChange={checked -> selected=if(checked) selected+order.orderId else selected-order.orderId}),verticalAlignment=Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().height(48.dp)
+                                .toggleable(order.orderId in selected,
+                                    onValueChange={checked -> selected=if(checked) selected+order.orderId else selected-order.orderId}),
+                            verticalAlignment=Alignment.CenterVertically
+                        ) {
                             Checkbox(order.orderId in selected,null)
-                            Text("${order.postalCode} · ${order.customerName ?: "—"} · ${orderPrice(order)}")
+                            Text("${order.postalCode} · ${order.customerName ?: "—"} · ${orderPrice(order)}",
+                                style=MaterialTheme.typography.bodySmall,
+                                maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     } }
                 }
             }
         }
     },confirmButton={Button(onClick={if(parsed==null) { parsed=parseCustomerOrders(raw); raw=""; selected=parsed!!.orders.map { it.orderId }.toSet() } else vm.importOrders(parsed!!.orders.filter { it.orderId in selected },parsed!!.failed)},enabled=!vm.busy && (if(parsed==null) raw.isNotBlank() else !showFailed && selected.size in 1..capacity)) {Text(if(parsed==null) "PREVIEW" else "Use These Orders")}},dismissButton={TextButton(onClick={vm.importOrdersDialog=false}) {Text("CANCEL")}})
+    }
 }
 
 @Composable fun ProofPickerHost(vm: PlannerViewModel) {
