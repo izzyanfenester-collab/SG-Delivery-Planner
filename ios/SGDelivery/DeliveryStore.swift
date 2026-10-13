@@ -247,6 +247,35 @@ final class DeliveryStore: ObservableObject {
         else { routes[i].orders[j].proofDelivery = value }
     }
 
+    func exportExcel() -> URL? {
+        guard let route = active else { errorMessage = "No route selected."; return nil }
+        do { return try DeliveryExcel.create(route: route) }
+        catch { errorMessage = "Excel export failed: \(error.localizedDescription)"; return nil }
+    }
+
+    func exportAndroidBackup() -> URL? {
+        do { return try AndroidBackupZIP.exportArchive(routes) }
+        catch { errorMessage = "Android backup failed: \(error.localizedDescription)"; return nil }
+    }
+
+    /// Imports missing route IDs without silently overwriting local iPhone history or photos.
+    func importAndroidBackup(from url: URL) throws -> (restored: Int, skipped: Int) {
+        let incoming = try AndroidBackupZIP.importArchive(url)
+        let currentIDs = Set(routes.map(\.id))
+        let newRoutes = incoming.filter { !currentIDs.contains($0.id) }
+        guard routes.count + newRoutes.count <= 2000 else {
+            throw DeliveryError.invalid("Too many routes in combined history.")
+        }
+        if !newRoutes.isEmpty {
+            restoring = true
+            routes = newRoutes + routes
+            if selectedRouteID == nil { selectedRouteID = newRoutes.first?.id }
+            restoring = false
+            save()
+        }
+        return (newRoutes.count, incoming.count - newRoutes.count)
+    }
+
     func exportJSON() -> URL? {
         do {
             let data = try JSONEncoder().encode(Archive(
