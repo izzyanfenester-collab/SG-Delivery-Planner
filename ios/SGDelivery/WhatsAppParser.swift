@@ -75,6 +75,7 @@ enum WhatsAppParser {
         flush()
 
         var orders: [DeliveryOrder] = [], duplicates = 0, failed = 0
+        var failedOrders: [FailedImport] = []
         var seenMessages = Set<String>()
         for lines in blocks {
             let original = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -96,7 +97,18 @@ enum WhatsAppParser {
             let cleanAddress = address.replacingOccurrences(of: #"https?://\S+"#, with: " ", options: .regularExpression)
                 .replacingOccurrences(of: #"\b[0-9]{1,4}[/.-][0-9]{1,2}[/.-][0-9]{2,4}\b"#, with: " ", options: .regularExpression)
             guard let postal = match(#"(?:\bSingapore|\bS['’]pore|\bSG|\bS)\s*([0-9]{6})(?![0-9])"#, in: cleanAddress, group: 1)
-                ?? match(#"(?<!\d)[0-9]{6}(?!\d)"#, in: cleanAddress) else { failed += 1; continue }
+                ?? match(#"(?<!\d)[0-9]{6}(?!\d)"#, in: cleanAddress) else {
+                failed += 1
+                let suspect = match(#"(?<!\d)[0-9]{4,8}(?!\d)"#, in: cleanAddress)
+                let reason: String
+                if address.isEmpty { reason = "Address field is missing or empty" }
+                else if let suspect { reason = "Postal code \(suspect) is not a valid six-digit Singapore postal code" }
+                else { reason = "No six-digit Singapore postal code found in the address" }
+                failedOrders.append(FailedImport(
+                    customerName: values["name"]?.components(separatedBy: "\n").first ?? "Unknown customer",
+                    address: address, reason: reason, originalMessage: original))
+                continue
+            }
             let rawPhone = values["phone"] ?? ""
             let number = match(#"wa\.me/\+?([0-9]+)"#, in: rawPhone, group: 1) ?? rawPhone.components(separatedBy: "\n").first ?? ""
             let amount = match(#"^(?:\$\s*|SGD\s*)?([0-9]+(?:\.[0-9]{1,2})?)(?![0-9.])"#, in: values["amount"] ?? "", group: 1) ?? ""
@@ -108,6 +120,6 @@ enum WhatsAppParser {
                     (payment.localizedCaseInsensitiveContains("COD") ? "COD" : ""),
                 originalMessage: original))
         }
-        return ImportResult(orders: orders, duplicates: duplicates, failed: failed)
+        return ImportResult(orders: orders, duplicates: duplicates, failed: failed, failedOrders: failedOrders)
     }
 }
