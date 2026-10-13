@@ -4,6 +4,11 @@ import ZIPFoundation
 
 /// Interoperable with Android HistoryBackup.kt ZIP format v1.
 /// Private customer records/photos are unencrypted: handle/share these files carefully.
+struct AndroidBackupImport {
+    let routes: [DeliveryRoute]
+    let missingProofs: Int
+}
+
 enum AndroidBackupZIP {
     private static let manifestName = "manifest.json"
     private static let routesName = "routes.json"
@@ -72,7 +77,7 @@ enum AndroidBackupZIP {
         return jpeg
     }
 
-    static func importArchive(_ input: URL) throws -> [DeliveryRoute] {
+    static func importArchive(_ input: URL) throws -> AndroidBackupImport {
         guard let archive = Archive(url: input, accessMode: .read) else {
             throw DeliveryError.invalid("Invalid ZIP file.")
         }
@@ -123,10 +128,12 @@ enum AndroidBackupZIP {
               count >= 0, count <= 2000 else {
             throw DeliveryError.invalid("ZIP manifest is not Android SG Delivery history v1.")
         }
+        let expectedPhotos = try AndroidHistoryFormat.expectedPhotoIDs(routes)
         let restored = try AndroidHistoryFormat.readRoutes(routes, photos: photos)
         guard restored.count == count else {
             throw DeliveryError.invalid("Backup route count does not match manifest.")
         }
-        return restored
+        return AndroidBackupImport(routes: restored,
+            missingProofs: expectedPhotos.subtracting(Set(photos.keys)).count)
     }
 }
