@@ -149,7 +149,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     }
                     TextButton(onClick={showFailed=false}) { Text("BACK TO ORDERS") }
                 } else {
-                    Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${duplicateGroups.sumOf { it.extraParcels }}\nFailed: ${result.failed}")
+                    Text("Orders found: ${result.orders.size}\nUnique postal codes: ${result.orders.map { it.postalCode }.distinct().size}\nDuplicate parcels preserved: ${duplicateGroups.sumOf { it.extraParcels }}\nFailed: ${result.failed}")
                     if (duplicateGroups.isNotEmpty()) {
                         Text(
                             "⚠ ${duplicateGroups.size} postal code(s) shared by multiple customers. Check the duplicates below; every parcel stays separate.",
