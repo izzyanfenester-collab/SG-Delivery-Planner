@@ -170,21 +170,51 @@ struct DeliveryDetailView: View {
     }
 
     private func customerCard(_ order: DeliveryOrder) -> some View {
-        SGCard {
+        SGCard(color: SGStyle.navy, stroke: SGStyle.gold) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Customer details").font(.headline).foregroundStyle(SGStyle.gold)
+                HStack(spacing: 10) {
+                    let position = (store.active?.orders.firstIndex(where: { $0.id == order.id }) ?? 0) + 1
+                    Text("Stop \(position) of \(store.active?.orders.count ?? 0)")
+                        .font(.system(size: 21, weight: .semibold, design: .serif))
+                        .foregroundStyle(SGStyle.gold)
                     Spacer()
-                    SGStatus(status: order.status)
+                    Button("Send message") { openCustomerWhatsApp(order) }
+                        .font(.system(size: 14, weight: .semibold, design: .serif))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                        .background(Color(red: 24/255, green: 102/255, blue: 145/255),
+                                    in: Capsule())
+                        .buttonStyle(.plain)
                 }
-                SGField(title: "Name", value: order.name)
-                SGField(title: "Full address", value: order.address)
-                SGField(title: "WhatsApp phone", value: order.phone)
-                SGField(title: "Amount SGD", value: order.amount.isEmpty ? "—" : "$\(order.amount)")
-                SGField(title: "Payment method", value: order.payment)
-                if let eta = order.arrival { SGField(title: "ETA", value: SGFormat.date(eta)) }
-                if let delivered = order.deliveredAt { SGField(title: "Delivered", value: SGFormat.date(delivered)) }
-                if let reason = order.holdReason { SGField(title: "Hold reason", value: reason) }
+                Text(order.postal).font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(SGStyle.text)
+                SGField(title: "Customer", value: order.name)
+                SGField(title: "Phone", value: order.phone)
+                SGField(title: "Address", value: order.address)
+                SGField(title: "Parcel Price (SGD)",
+                        value: order.amount.isEmpty ? "—" : "S$\(order.amount)")
+                SGField(title: "Payment Mode", value: order.payment)
+                SGStatus(status: order.status)
+                Divider().overlay(SGStyle.outline)
+                if let planned = order.arrival {
+                    SGField(title: "Planned arrival", value: SGFormat.date(planned))
+                }
+                if let updated = order.updatedArrival {
+                    SGField(title: "Updated ETA", value: SGFormat.date(updated))
+                }
+                if let window = DeliveryWhatsApp.etaWindow(for: order) {
+                    SGField(title: "WhatsApp ETA window (+10 min)", value: window)
+                }
+                Text(order.updatedArrival == nil
+                    ? "Planning estimate — live Updated ETA not yet available on iOS."
+                    : "Updated ETA available for this stop.")
+                    .font(.caption2).foregroundStyle(SGStyle.muted)
+                if let delivered = order.deliveredAt {
+                    SGField(title: "Delivered", value: SGFormat.date(delivered))
+                }
+                if let reason = order.holdReason {
+                    SGField(title: "Hold reason", value: reason)
+                }
             }
         }
     }
@@ -193,16 +223,7 @@ struct DeliveryDetailView: View {
         SGCard {
             VStack(spacing: 10) {
                 SGAction(title: "Navigate", filled: false) { showNavigation = true }
-                if !order.phone.isEmpty, let url = whatsappURL(order) {
-                    Link(destination: url) {
-                        Text("Send WhatsApp Draft")
-                            .foregroundStyle(SGStyle.navy)
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 53)
-                            .background(SGStyle.blue, in: RoundedRectangle(cornerRadius: 18))
-                    }
-                }
-                Text("WhatsApp messages open as drafts only. Nothing is sent automatically.")
+                Text("Send message opens an editable WhatsApp draft for this customer. It never sends automatically.")
                     .font(.caption2).foregroundStyle(SGStyle.muted)
             }
         }
@@ -264,14 +285,23 @@ struct DeliveryDetailView: View {
         }
     }
 
-    private func whatsappURL(_ order: DeliveryOrder) -> URL? {
-        let digits = order.phone.filter(\.isNumber)
-        let text = order.originalMessage.isEmpty
-            ? "Hello, this is SG Delivery regarding parcel delivery to \(order.postal)."
-            : order.originalMessage
-        var components = URLComponents(string: "https://wa.me/\(digits)")
-        components?.queryItems = [URLQueryItem(name: "text", value: text)]
-        return components?.url
+    private func openCustomerWhatsApp(_ order: DeliveryOrder) {
+        guard let links = DeliveryWhatsApp.urls(for: order) else {
+            store.errorMessage = DeliveryWhatsApp.missingReason(for: order)
+                ?? "Could not prepare WhatsApp message for this customer."
+            return
+        }
+        // Try WhatsApp directly. The HTTPS link is only a fallback when the app is not available.
+        UIApplication.shared.open(links.app, options: [:]) { opened in
+            guard !opened else { return }
+            UIApplication.shared.open(links.web, options: [:]) { webOpened in
+                if !webOpened {
+                    DispatchQueue.main.async {
+                        store.errorMessage = "Could not open WhatsApp. Install WhatsApp or check the customer's phone."
+                    }
+                }
+            }
+        }
     }
 
     private func openNavigation(_ order: DeliveryOrder, provider: String) {
