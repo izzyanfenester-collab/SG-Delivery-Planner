@@ -133,7 +133,8 @@ enum RoutePlanner {
             throw DeliveryError.invalid("Routing server must use HTTPS.")
         }
         let unique = Array(Set(orders.map(\.postal))).sorted()
-        var places = [startPostal == "738203" ? woodlands : try await resolve(startPostal)]
+        let startPlace = startPostal == "738203" ? woodlands : try await resolve(startPostal)
+        var places = [startPlace]
         var failures: [PostalFailure] = []
         for postal in unique {
             do {
