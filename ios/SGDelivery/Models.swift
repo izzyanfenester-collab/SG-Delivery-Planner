@@ -46,6 +46,11 @@ struct DeliveryRoute: Identifiable, Codable {
     var optimized: Bool = false
     var roadGeometry: [RouteCoordinate]?
     var trafficMode: String?
+    // Optional for transparent migration of existing iOS JSON records.
+    var cashOnHand: String?
+    var tax: String?
+    var exchangeRate: String?
+    var remark: String?
 
     var deliveredCount: Int { orders.filter { $0.status == .delivered }.count }
     var successRate: Double {
