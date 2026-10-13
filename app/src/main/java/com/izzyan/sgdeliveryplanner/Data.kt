@@ -43,6 +43,12 @@ fun createRoutingApi(baseUrl:String="https://router.project-osrm.org/"): Api =
   OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS).build()
  ).addConverterFactory(GsonConverterFactory.create()).build().create(Api::class.java)
 
+/** Postal lookup errors with precise affected postals, not guesses from message text. */
+data class PostalLookupFailure(val postalCode: String, val reason: String)
+class PostalResolutionException(val failures: List<PostalLookupFailure>) : PlannerError(
+    "Could not check ${failures.size} postal code(s). Review affected orders, correct any errors, or retry if OneMap was temporarily unavailable."
+)
+
 class Repository(context:Context) {
  private val gson=Gson()
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
@@ -63,8 +69,11 @@ class Repository(context:Context) {
    catch(e:OneMapRateLimitError){throw e}
    catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) }
   }
-  val failures=resolved.filter { it.isFailure }.map { englishError(it.exceptionOrNull()!!, "Could not check this postal code. Please try again.") }
-  checkPlanning(failures.isEmpty()) { "Could not create a route because these postal codes could not be checked:\n${failures.joinToString("\n")}\nCheck your internet connection and postal codes, then try again. Your entries have been kept." }
+  val failures=resolved.mapIndexedNotNull { index, result ->
+   result.exceptionOrNull()?.let { PostalLookupFailure(codes[index],
+    englishError(it, "Could not check this postal code. Please try again.")) }
+  }
+  if (failures.isNotEmpty()) throw PostalResolutionException(failures)
   progress("Finding road distances and driving times…")
   val places=listOf(location.asPlace())+resolved.map { it.getOrThrow() }
   val coordinates=places.joinToString(";") { "${it.lon},${it.lat}" }
