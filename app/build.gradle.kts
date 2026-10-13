@@ -3,6 +3,31 @@ android {
  namespace = "com.izzyan.sgdeliveryplanner"
  compileSdk = 36
  defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 3; versionName = "1.2" }
+ // Release signing is intentionally supplied only by environment variables.
+ // Never commit the keystore or passwords to the repository.
+ val releaseKeystore = System.getenv("SG_DELIVERY_KEYSTORE_PATH")
+ val releaseStorePassword = System.getenv("SG_DELIVERY_KEYSTORE_PASSWORD")
+ val releaseKeyAlias = System.getenv("SG_DELIVERY_KEY_ALIAS")
+ val releaseKeyPassword = System.getenv("SG_DELIVERY_KEY_PASSWORD")
+ val releaseSigningReady = listOf(releaseKeystore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+   .all { !it.isNullOrBlank() }
+
+ if (releaseSigningReady) {
+   signingConfigs {
+     create("sgDeliveryRelease") {
+       storeFile = file(requireNotNull(releaseKeystore))
+       storePassword = requireNotNull(releaseStorePassword)
+       keyAlias = requireNotNull(releaseKeyAlias)
+       keyPassword = requireNotNull(releaseKeyPassword)
+     }
+   }
+ }
+ buildTypes {
+   getByName("release") {
+     isMinifyEnabled = false
+     if (releaseSigningReady) signingConfig = signingConfigs.getByName("sgDeliveryRelease")
+   }
+ }
  buildFeatures { compose = true }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 
