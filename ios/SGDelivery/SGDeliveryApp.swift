@@ -8,7 +8,8 @@ struct SGDeliveryApp: App {
     @StateObject private var store = DeliveryStore()
     var body: some Scene {
         WindowGroup {
-            MainView().environmentObject(store)
+            MainView()
+                .environmentObject(store)
                 .preferredColorScheme(.dark)
         }
     }
@@ -16,324 +17,113 @@ struct SGDeliveryApp: App {
 
 struct MainView: View {
     @EnvironmentObject private var store: DeliveryStore
-    @State private var selection = 0
+    @State private var selectedTab = 0
+    @State private var showingSettings = false
+
+    private let tabs = ["Home", "Route", "Delivery", "Map", "History"]
 
     var body: some View {
-        TabView(selection: $selection) {
-            NavigationStack { PlanView(onPlanned: { selection = 1 }) }
-                .tabItem { Label("Home", systemImage: "house.fill") }.tag(0)
-            NavigationStack { RouteView() }
-                .tabItem { Label("Route", systemImage: "list.number") }.tag(1)
-            NavigationStack { DeliveryListView() }
-                .tabItem { Label("Delivery", systemImage: "shippingbox.fill") }.tag(2)
-            NavigationStack { RouteMapView() }
-                .tabItem { Label("Map", systemImage: "map.fill") }.tag(3)
-            NavigationStack { HistoryView() }
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(4)
-        }
-        .tint(.yellow)
-        .alert("SG Delivery", isPresented: Binding(
-            get: { store.errorMessage != nil },
-            set: { if !$0 { store.errorMessage = nil } }
-        )) {
-            Button("OK") { store.errorMessage = nil }
-        } message: {
-            Text(store.errorMessage ?? "")
-        }
-    }
-}
-
-struct PlanView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    let onPlanned: () -> Void
-    var body: some View {
-        Form {
-            Section("Start & End") {
-                TextField("Singapore depot postal", text: $store.depotPostal)
-                    .keyboardType(.numberPad)
-                Text("Default: Woodlands Checkpoint (738203). Route returns here.")
-                    .font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            topBar
+            if store.isPlanning {
+                ProgressView().tint(SGStyle.gold).padding(6)
             }
-            Section("Delivery Schedule") {
-                DatePicker("Delivery Date", selection: $store.deliveryDate, displayedComponents: .date)
-                DatePicker("Start Time (Singapore)", selection: $store.deliveryTime, displayedComponents: .hourAndMinute)
-                Stepper("Minutes per order: \(store.minutesPerStop)", value: $store.minutesPerStop, in: 1...120)
+            if let error = store.errorMessage, !error.isEmpty {
+                SGCard(color: SGStyle.error) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(error).foregroundStyle(.white)
+                            .font(.system(size: 13, weight: .medium, design: .serif))
+                        if !store.failedRoutePostals.isEmpty {
+                            Button("REVIEW FAILED ORDERS (\(store.failedRoutePostals.count))") {
+                                store.showFailedPostalReview = true
+                                selectedTab = 0
+                            }
+                            .foregroundStyle(SGStyle.blue).font(.subheadline.bold())
+                        }
+                        Button("Dismiss") { store.errorMessage = nil }
+                            .font(.caption.bold()).foregroundStyle(SGStyle.gold)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 8)
             }
-            Section("Import WhatsApp Orders / Postal Codes") {
-                TextEditor(text: $store.importText)
-                    .frame(minHeight: 160)
-                    .textInputAutocapitalization(.never)
-                let result = store.importPreview()
+            if let notice = store.noticeMessage, !notice.isEmpty {
                 HStack {
-                    metric("Found", result.found)
-                    metric("Added", result.orders.count)
-                    metric("Duplicate", result.duplicates)
-                    metric("Failed", result.failed)
-                }
-                Button {
-                    UIPasteboard.general.string.map { store.importText = $0 }
-                } label: { Label("Paste from WhatsApp", systemImage: "doc.on.clipboard") }
-                Button {
-                    Task {
-                        await store.plan()
-                        if store.active?.optimized == true { onPlanned() }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if store.isPlanning { ProgressView().padding(.trailing, 8) }
-                        Text(store.isPlanning ? "Optimizing…" : "Optimize Driving Route")
-                            .bold()
-                        Spacer()
-                    }
-                }
-                .disabled(store.isPlanning || result.orders.isEmpty || result.orders.count > 50)
-            }
-            Section {
-                Link("Singapore Customs — Tax Declare",
-                     destination: URL(string: "https://m.customs.gov.sg/CustomsTravellerPortal/")!)
-                Text("Route estimates use OneMap and an online OSRM road matrix. They are not live traffic ETAs. Internet is required to optimize.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("SG Delivery V3")
-    }
-    private func metric(_ label: String, _ value: Int) -> some View {
-        VStack { Text("\(value)").font(.headline); Text(label).font(.system(size: 10)) }
-            .frame(maxWidth: .infinity)
-    }
-}
-
-struct RouteView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    var body: some View {
-        List {
-            if let route = store.active {
-                Section {
-                    Text("Start & End: \(route.startName) (\(route.startPostal))")
-                    Text("Stops: \(route.orders.count) • Delivered: \(route.deliveredCount)")
-                    if let km = route.totalKm { Text(String(format: "Road distance: %.1f km", km)) }
-                    if let eta = route.returnETA { Text("Estimated return: \(SGFormat.date(eta))") }
-                }
-                Section("Optimized Stops") {
-                    ForEach(Array(route.orders.enumerated()), id: \.element.id) { index,order in
-                        NavigationLink {
-                            DeliveryDetailView(orderID: order.id)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text("\(index + 1). \(order.postal)").bold()
-                                    Spacer()
-                                    Text(order.status.rawValue).foregroundStyle(order.status == .delivered ? .green : .secondary)
-                                }
-                                Text(order.name.isEmpty ? order.address : order.name)
-                                    .font(.subheadline).lineLimit(2)
-                                if let arrival = order.arrival {
-                                    Text("ETA: \(SGFormat.date(arrival))").font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                ContentUnavailableView("No Route Yet", systemImage: "point.topleft.down.curvedto.point.bottomright.up",
-                                       description: Text("Import WhatsApp orders on Home to optimize."))
-            }
-        }.navigationTitle("Route")
-    }
-}
-
-struct DeliveryListView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    var body: some View {
-        List {
-            if let route = store.active {
-                Section {
-                    Text("\(route.deliveredCount) / \(route.orders.count) delivered")
-                    ProgressView(value: Double(route.deliveredCount), total: Double(max(route.orders.count, 1)))
-                }
-                ForEach(Array(route.orders.enumerated()), id: \.element.id) { index,order in
-                    NavigationLink {
-                        DeliveryDetailView(orderID: order.id)
-                    } label: {
-                        HStack {
-                            Text("\(index+1)").foregroundStyle(.yellow).frame(width: 25)
-                            VStack(alignment: .leading) {
-                                Text(order.postal).bold()
-                                Text(order.name.isEmpty ? order.address : order.name)
-                                    .font(.caption).lineLimit(1)
-                            }
-                            Spacer()
-                            Text(order.status.rawValue).font(.caption)
-                        }
-                    }
-                }
-            } else { ContentUnavailableView("No Deliveries", systemImage: "shippingbox") }
-        }.navigationTitle("Delivery")
-    }
-}
-
-struct DeliveryDetailView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    let orderID: UUID
-    @State private var holdReason = "Customer not home"
-    @State private var holdNote = ""
-    @State private var deliveryPhoto: PhotosPickerItem?
-    @State private var paymentPhoto: PhotosPickerItem?
-
-    private var order: DeliveryOrder? {
-        store.active?.orders.first(where: { $0.id == orderID })
-    }
-    var body: some View {
-        Form {
-            if let order {
-                Section("Customer") {
-                    LabeledContent("Postal", value: order.postal)
-                    LabeledContent("Name", value: order.name.isEmpty ? "—" : order.name)
-                    Text(order.address)
-                    LabeledContent("Phone", value: order.phone.isEmpty ? "—" : order.phone)
-                    LabeledContent("Price SGD", value: order.amount.isEmpty ? "—" : "$\(order.amount)")
-                    LabeledContent("Payment", value: order.payment.isEmpty ? "—" : order.payment)
-                    LabeledContent("Status", value: order.status.rawValue)
-                    if let arrival = order.arrival { Text("Planned arrival: \(SGFormat.date(arrival))") }
-                    if let delivered = order.deliveredAt { Text("Delivered: \(SGFormat.date(delivered))") }
-                }
-                Section("Customer Contact & Navigation") {
-                    if let url = URL(string: "https://www.google.com/maps/search/?api=1&query=\(order.postal)") {
-                        Link("Navigate with Google Maps", destination: url)
-                    }
-                    if !order.phone.isEmpty {
-                        let digits = order.phone.filter(\.isNumber)
-                        let text = order.originalMessage.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        if let url = URL(string: "https://wa.me/\(digits)?text=\(text)") {
-                            Link("Open WhatsApp Draft (does not send)", destination: url)
-                        }
-                    }
-                }
-                Section {
-                    PhotosPicker("Add Proof of Delivery", selection: $deliveryPhoto, matching: .images)
-                    PhotosPicker("Add Proof of Payment", selection: $paymentPhoto, matching: .images)
-                    if let encoded = order.proofDelivery,
-                       let data = Data(base64Encoded: encoded),
-                       let image = UIImage(data: data) {
-                        Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
-                    }
-                    if let encoded = order.proofPayment,
-                       let data = Data(base64Encoded: encoded),
-                       let image = UIImage(data: data) {
-                        Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 160)
-                    }
-                } header: {
-                    Text("Proof Photos")
-                }
-                Section("Review Delivery") {
-                    if order.status == .delivered {
-                        Label("Delivered — record locked", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                    } else {
-                        Button("Mark Delivered") { store.review(orderID: orderID, status: .delivered) }
-                            .foregroundStyle(.green)
-                        Picker("Hold Reason", selection: $holdReason) {
-                            ForEach(["Customer not home","No answer","Reschedule","Payment issue","Access issue","Joy buyer","Other"], id: \.self) { Text($0) }
-                        }
-                        if holdReason == "Other" { TextField("Explanation (required)", text: $holdNote) }
-                        Button("On Hold") { store.review(orderID: orderID, status: .hold, reason: holdReason, note: holdNote) }
-                            .foregroundStyle(.orange)
-                        Button("Skipped") { store.review(orderID: orderID, status: .skipped) }
-                    }
-                }
-            }
-        }
-        .navigationTitle(order?.postal ?? "Delivery")
-        .onChange(of: deliveryPhoto) { _,newValue in
-            if let newValue { Task { await importPhoto(newValue, payment: false); deliveryPhoto = nil } }
-        }
-        .onChange(of: paymentPhoto) { _,newValue in
-            if let newValue { Task { await importPhoto(newValue, payment: true); paymentPhoto = nil } }
-        }
-
-    }
-    private func importPhoto(_ photo: PhotosPickerItem, payment: Bool) async {
-        do {
-            guard let data = try await photo.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data),
-                  let compressed = image.jpegData(compressionQuality: 0.45) else {
-                store.errorMessage = "Unsupported image"; return
-            }
-            store.saveProof(orderID: orderID, data: compressed, payment: payment)
-        } catch { store.errorMessage = "Could not load proof photo" }
-    }
-}
-
-struct RouteMapView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 1.3521, longitude: 103.8198),
-        span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)))
-    var body: some View {
-        Map(position: $position) {
-            if let route = store.active {
-                ForEach(route.orders) { order in
-                    if let lat = order.latitude, let lon = order.longitude {
-                        Annotation(order.postal, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)) {
-                            Image(systemName: order.status == .delivered ? "checkmark.circle.fill" : "shippingbox.circle.fill")
-                                .font(.title2).foregroundStyle(order.status == .delivered ? .green : .yellow)
-                        }
-                    }
-                }
-                Annotation("Start & End", coordinate: CLLocationCoordinate2D(
-                    latitude: route.depotLatitude ?? 1.4464, longitude: route.depotLongitude ?? 103.7696)) {
-                    Image(systemName: "house.circle.fill").font(.title).foregroundStyle(.cyan)
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Text("Pins show delivery locations. Driving polyline and live navigation are not yet available.")
-                .font(.caption).padding(10).background(.regularMaterial)
-        }
-        .navigationTitle("Delivery Map")
-    }
-}
-
-struct HistoryView: View {
-    @EnvironmentObject private var store: DeliveryStore
-    @State private var restoreFile = false
-    var body: some View {
-        List {
-            Section("Backup") {
-                if let url = store.exportJSON() {
-                    ShareLink(item: url) { Label("Export iOS Backup (JSON + Photos)", systemImage: "square.and.arrow.up") }
-                }
-                Button("Restore iOS Backup") { restoreFile = true }
-                Text("Backups contain private customer data and embedded proof photos. JSON is not encrypted.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Saved Routes") {
-                ForEach(store.routes) { route in
+                    Text(notice).font(.caption).foregroundStyle(SGStyle.muted)
+                    Spacer()
                     Button {
-                        store.selectedRouteID = route.id
-                    } label: {
-                        VStack(alignment: .leading) {
-                            Text(SGFormat.date(route.created)).bold()
-                            Text("\(route.orders.count) parcels • \(route.deliveredCount) delivered • \(Int(route.successRate))% success")
-                            if let km = route.totalKm { Text(String(format: "%.1f km", km)) }
-                            if store.selectedRouteID == route.id {
-                                Label("Selected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                            }
-                        }
+                        store.noticeMessage = nil
+                    } label: { Image(systemName: "xmark.circle") }
+                        .foregroundStyle(SGStyle.muted)
+                }
+                .padding(10)
+                .background(SGStyle.cardAlt, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 16).padding(.top, 4)
+            }
+            NavigationStack {
+                Group {
+                    switch selectedTab {
+                    case 0: PlanView(onPlanned: { selectedTab = 1 })
+                    case 1: RouteView()
+                    case 2: DeliveryListView()
+                    case 3: RouteMapView()
+                    default: HistoryView()
                     }
                 }
+                .toolbar(.hidden, for: .navigationBar)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tabBar
+        }
+        .background(SGStyle.navy.ignoresSafeArea())
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack { SGSettingsView() }
+                .environmentObject(store)
+                .preferredColorScheme(.dark)
+        }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Text("SG DELIVERY")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .tracking(1.4)
+                .foregroundStyle(SGStyle.gold)
+            Spacer()
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 27)).foregroundStyle(SGStyle.gold)
+                    .frame(width: 46, height: 50)
+            }
+            Link(destination: URL(string: "https://chatgpt.com/")!) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(SGStyle.gold)
+                    .frame(width: 44, height: 50)
             }
         }
-        .navigationTitle("History")
-        .fileImporter(isPresented: $restoreFile, allowedContentTypes: [.json]) { result in
-            do {
-                let url = try result.get()
-                guard url.startAccessingSecurityScopedResource() else {
-                    throw DeliveryError.invalid("Could not access selected backup")
+        .padding(.horizontal, 18)
+        .padding(.top, 5).padding(.bottom, 10)
+        .background(SGStyle.navy)
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(tabs.enumerated()), id: \.offset) { index, title in
+                Button {
+                    if !store.isPlanning { selectedTab = index }
+                } label: {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .foregroundStyle(index == selectedTab ? SGStyle.gold : SGStyle.muted)
+                        .frame(maxWidth: .infinity, minHeight: 67)
+                        .background(index == selectedTab ? SGStyle.royal : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 21))
                 }
-                defer { url.stopAccessingSecurityScopedResource() }
-                try store.restoreJSON(Data(contentsOf: url))
-            } catch { store.errorMessage = "Restore failed: \(error.localizedDescription)" }
+                .disabled(store.isPlanning)
+                .buttonStyle(.plain)
+            }
         }
+        .padding(.horizontal, 7).padding(.vertical, 8)
+        .background(SGStyle.navy)
     }
 }
