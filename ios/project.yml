@@ -45,3 +45,15 @@ targets:
         UIDeviceFamily: [1]
         CFBundleURLTypes: []
         UIRequiresFullScreen: false
+  SGDeliveryTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - tests/SGDeliveryCoreTests.swift
+    dependencies:
+      - target: SGDeliveryV3
+      - package: ZIPFoundation
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.izzyan.sgdelivery.v3.tests
