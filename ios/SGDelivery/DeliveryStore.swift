@@ -265,5 +265,5 @@ func parseManualPostals(_ text: String) -> [DeliveryOrder] {
     return tokens.map(String.init)
         .filter { $0.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil }
         .filter { used.insert($0).inserted }
-        .map { DeliveryOrder(postal: $0) }
+        .map { postal in DeliveryOrder(id: UUID(uuidString: "00000000-0000-4000-8000-000000\(postal)")!, postal: postal) }
 }
