@@ -45,6 +45,9 @@ targets:
         UIDeviceFamily: [1]
         CFBundleURLTypes: []
         UIRequiresFullScreen: false
+        NSCameraUsageDescription: "Capture proof of delivery and payment for the selected parcel."
+        NSLocationWhenInUseUsageDescription: "Use GPS for road navigation, spoken guidance and live delivery ETA."
+        NSPhotoLibraryUsageDescription: "Select existing delivery and payment proof photos."
   SGDeliveryTests:
     type: bundle.unit-test
     platform: iOS
