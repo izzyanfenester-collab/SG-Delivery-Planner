@@ -70,7 +70,7 @@ class DeliveryWhatsAppDraftTest {
         val intent = customerWhatsAppIntent("+6597298524", WhatsAppChoice.PERSONAL, message)
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertEquals(message, intent.data!!.getQueryParameter("text"))
-        assertEquals("6587298524".replace("6587298524", "6597298524"), intent.data!!.lastPathSegment)
+        assertEquals("6597298524", intent.data!!.lastPathSegment)
     }
 
     @Test fun plannedEtaFallbackWhenNoUpdatedEtaAndAcrossMidnight() {
