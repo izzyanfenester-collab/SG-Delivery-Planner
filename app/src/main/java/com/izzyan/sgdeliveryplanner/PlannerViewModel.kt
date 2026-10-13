@@ -27,6 +27,33 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     }.getOrDefault(emptyList())); private set
     var proofRequest by mutableStateOf<ProofRequest?>(null)
     var importOrdersDialog by mutableStateOf(false)
+    var failedRoutePostalChecks by mutableStateOf<List<PostalLookupFailure>>(emptyList())
+        private set
+    var reviewFailedRoutePostals by mutableStateOf(false)
+
+    fun updatePostalInput(value: String) {
+        if (busy) return
+        input = value
+        failedRoutePostalChecks = emptyList()
+        reviewFailedRoutePostals = false
+        persist()
+    }
+
+    fun correctFailedRoutePostalOrder(orderId: String, editedText: String): String? {
+        if (busy) return "Wait until route checking has finished."
+        val result = correctRoutePostalOrder(planningOrders(), orderId, editedText)
+        val orders = result.updatedOrders ?: return result.error ?: "Could not update this order."
+        draftOrders = orders
+        input = orders.joinToString("\n") { it.postalCode }
+        val remainingPostals = orders.map { it.postalCode }.toSet()
+        failedRoutePostalChecks = failedRoutePostalChecks.filter { it.postalCode in remainingPostals }
+        persist()
+        notice = "Updated ${result.changedOrder?.customerName?.takeIf { it.isNotBlank() } ?: "order"}: ${result.changedOrder?.postalCode}. Retry Optimize Route to verify every postal code."
+        message = ""
+        return null
+    }
+
+
     internal fun ordersBeforeImport(): List<CustomerOrder> =
         if (parseInput(input).invalid.isEmpty()) planningOrders() else emptyList()
     fun importOrders(orders: List<CustomerOrder>, failed: Int = 0) {
@@ -36,10 +63,11 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         // Raw chat and invalid manual tokens can never leak through the import path.
         draftOrders = existing + orders
         input = draftOrders.joinToString("\n") { it.postalCode }
+        failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false
         persist(); importOrdersDialog = false; message = ""
         notice = "${orders.size} orders imported.\nDuplicate postals preserved.\n$failed ${if(failed==1) "order" else "orders"} failed."
     }
-    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); persist() }
+    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false; persist() }
     internal fun planningOrders(): List<CustomerOrder> {
         if (draftOrders.isEmpty()) return parseInput(input).valid.map { CustomerOrder(postalCode = it) }
         val queues = draftOrders.groupBy { it.postalCode }.mapValues { it.value.toMutableList() }
@@ -253,6 +281,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         }
         val orders = planningOrders()
         if (orders.size > 50) { message = "Routes support at most 50 deliveries."; return }
+        failedRoutePostalChecks = emptyList()
+        reviewFailedRoutePostals = false
         val routeStart = scheduledStart()
         persist()
         refreshExchangeRate()
@@ -271,6 +301,11 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 screen = "Route"
                 message = ""
             } catch (e: CancellationException) { throw e }
+            catch (e: PostalResolutionException) {
+                failedRoutePostalChecks = e.failures
+                reviewFailedRoutePostals = true
+                message = "Cannot optimize: ${e.failures.size} postal code(s) could not be verified. Tap Review Failed Orders to check the affected customers, edit their order text and retry."
+            }
             catch (e: Exception) { message = englishError(e, "Could not plan your route. Check your internet connection and postal codes, then try again.") }
             finally { busy = false }
         }

@@ -97,6 +97,7 @@ fun App(vm: PlannerViewModel) {
     ProofPickerHost(vm)
     DeliveryReportPreviewHost(vm)
     if (vm.importOrdersDialog) CustomerImportDialog(vm)
+    RoutePostalReviewDialog(vm)
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(view, lifecycle, vm.screen) {
@@ -168,6 +169,12 @@ fun App(vm: PlannerViewModel) {
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(vm.message, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                    if (vm.failedRoutePostalChecks.isNotEmpty() && vm.screen == "Home") {
+                        OutlinedButton(
+                            onClick = { vm.reviewFailedRoutePostals = true },
+                            modifier = Modifier.padding(horizontal = 16.dp).heightIn(min = 48.dp)
+                        ) { Text("REVIEW FAILED ORDERS (${vm.failedRoutePostalChecks.size})") }
+                    }
                     TextButton(onClick = { vm.message = "" }) { Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer) }
                 }
             }
@@ -308,7 +315,7 @@ fun Home(vm: PlannerViewModel) {
         }
         Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
-            value = vm.input, onValueChange = { vm.input = it; vm.persist() },
+            value = vm.input, onValueChange = vm::updatePostalInput,
             label = { Text("Singapore postal codes") },
             placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
             modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),

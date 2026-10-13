@@ -176,6 +176,119 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     }
 }
 
+/**
+ * Route-level failure review: OneMap postals are mapped back to individual
+ * customer IDs so the runner can edit just one order without losing the other 49.
+ */
+@Composable fun RoutePostalReviewDialog(vm: PlannerViewModel) {
+    if (!vm.reviewFailedRoutePostals) return
+
+    val orders = vm.planningOrders()
+    var editingOrderId by remember { mutableStateOf<String?>(null) }
+    var editedText by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+    val editing = orders.firstOrNull { it.orderId == editingOrderId }
+
+    if (editing != null) {
+        val isWhatsApp = !editing.originalMessage.isNullOrBlank()
+        AlertDialog(
+            onDismissRequest = { editingOrderId = null; editError = null },
+            title = { Text(if (isWhatsApp) "Edit WhatsApp order" else "Edit postal code") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isWhatsApp) "Correct this customer's order text, especially the address/postal. Other orders will not change."
+                        else "Enter the correct six-digit Singapore postal code. The other stops will not change.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text("Customer: ${editing.customerName ?: "Manual postal entry"}")
+                    OutlinedTextField(
+                        value = editedText,
+                        onValueChange = { editedText = it; editError = null },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = if (isWhatsApp) 230.dp else 70.dp),
+                        minLines = if (isWhatsApp) 8 else 1,
+                        maxLines = if (isWhatsApp) 14 else 1,
+                        label = { Text(if (isWhatsApp) "Full WhatsApp order text" else "Postal code") }
+                    )
+                    editError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !vm.busy && editedText.isNotBlank(),
+                    onClick = {
+                        val error = vm.correctFailedRoutePostalOrder(editing.orderId, editedText)
+                        if (error == null) {
+                            editingOrderId = null
+                            editError = null
+                        } else editError = error
+                    }
+                ) { Text("SAVE CORRECTION") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingOrderId = null; editError = null }) { Text("CANCEL") }
+            }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = { vm.reviewFailedRoutePostals = false },
+            title = { Text("Review Failed Postal Codes") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Only the affected orders are listed. No parcels have been removed.",
+                        style = MaterialTheme.typography.bodySmall)
+                    if (vm.failedRoutePostalChecks.isEmpty()) {
+                        Text("All reported postal codes have been edited. Retry optimization to verify the route.",
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                    LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(vm.failedRoutePostalChecks, key = { it.postalCode }) { failure ->
+                            val affected = orders.filter { it.postalCode == failure.postalCode }
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Postal: ${failure.postalCode}", style = MaterialTheme.typography.titleMedium)
+                                    Text(failure.reason, color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall)
+                                    Text("${affected.size} affected order(s)", style = MaterialTheme.typography.bodySmall)
+                                    affected.forEach { order ->
+                                        HorizontalDivider()
+                                        Text("Customer: ${order.customerName?.takeIf { it.isNotBlank() } ?: "Manual postal entry"}",
+                                            style = MaterialTheme.typography.titleSmall)
+                                        Text("Address: ${order.fullAddress ?: "Postal only — no WhatsApp address"}",
+                                            style = MaterialTheme.typography.bodySmall, maxLines = 4)
+                                        Text("Parcel price: ${orderPrice(order)}", style = MaterialTheme.typography.bodySmall)
+                                        OutlinedButton(
+                                            enabled = !vm.busy,
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                            onClick = {
+                                                editingOrderId = order.orderId
+                                                editedText = order.originalMessage ?: order.postalCode
+                                                editError = null
+                                            }
+                                        ) { Text(if (order.originalMessage.isNullOrBlank()) "Edit postal code" else "Edit text") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text("If the postal is correct but OneMap was unavailable, retry later. Do not guess or change a valid address just to bypass the error.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.reviewFailedRoutePostals = false
+                    vm.optimize()
+                }, enabled = !vm.busy) { Text("RETRY OPTIMIZE") }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.reviewFailedRoutePostals = false }) { Text("BACK TO HOME") }
+            }
+        )
+    }
+}
+
 @Composable fun ProofPickerHost(vm: PlannerViewModel) {
     val context=LocalContext.current
     val capture=remember(context) {ProofCameraCapture(context)}
