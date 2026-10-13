@@ -5,26 +5,58 @@ import SwiftUI
 final class DeliveryStore: ObservableObject {
     @Published var routes: [DeliveryRoute] = [] { didSet { save() } }
     @Published var selectedRouteID: UUID? { didSet { save() } }
-    @Published var importText: String = ""
+    @Published var draftOrders: [DeliveryOrder] = [] { didSet { save() } }
+    @Published var postalInput = "" { didSet { save() } }
+    @Published var importText = ""
     @Published var isPlanning = false
     @Published var errorMessage: String?
+    @Published var noticeMessage: String?
+    @Published var failedRoutePostals: [PostalFailure] = []
+    @Published var showFailedPostalReview = false
     @Published var deliveryDate = Date()
     @Published var deliveryTime = Date()
-    @Published var depotPostal = "738203"
-    @Published var minutesPerStop = 8
+    @Published var depotPostal = "738203" { didSet { UserDefaults.standard.set(depotPostal, forKey: "sg.depot") } }
+    @Published var minutesPerStop = 8 { didSet { UserDefaults.standard.set(minutesPerStop, forKey: "sg.service") } }
+    @Published var trafficMode = "Normal" { didSet { UserDefaults.standard.set(trafficMode, forKey: "sg.traffic") } }
+    @Published var appearance = "Dark" { didSet { UserDefaults.standard.set(appearance, forKey: "sg.appearance") } }
+    @Published var roadServer = "https://router.project-osrm.org" { didSet { UserDefaults.standard.set(roadServer, forKey: "sg.server") } }
+    @Published var defaultNavigation = "Ask every time" { didSet { UserDefaults.standard.set(defaultNavigation, forKey: "sg.navigation") } }
 
+    private var restoring = false
     private struct Archive: Codable {
         var version: Int
         var routes: [DeliveryRoute]
         var selectedRouteID: UUID?
+        var draftOrders: [DeliveryOrder]?
+        var postalInput: String?
     }
     private var url: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("sg-delivery-v3.json")
     }
-    init() { load() }
+
+    init() {
+        restoring = true
+        let settings = UserDefaults.standard
+        depotPostal = settings.string(forKey: "sg.depot") ?? "738203"
+        minutesPerStop = settings.object(forKey: "sg.service") as? Int ?? 8
+        trafficMode = settings.string(forKey: "sg.traffic") ?? "Normal"
+        appearance = settings.string(forKey: "sg.appearance") ?? "Dark"
+        roadServer = settings.string(forKey: "sg.server") ?? "https://router.project-osrm.org"
+        defaultNavigation = settings.string(forKey: "sg.navigation") ?? "Ask every time"
+        load()
+        restoring = false
+    }
     var activeIndex: Int? { routes.firstIndex(where: { $0.id == selectedRouteID }) }
-    var active: DeliveryRoute? { guard let i = activeIndex else { return nil }; return routes[i] }
+    var active: DeliveryRoute? {
+        guard let i = activeIndex else { return nil }
+        return routes[i]
+    }
+    var draft: [DeliveryOrder] {
+        if draftOrders.isEmpty { return parseManualPostals(postalInput) }
+        return draftOrders
+    }
+    var duplicateParcelCount: Int { draft.count - Set(draft.map(\.postal)).count }
 
     private func load() {
         guard let data = try? Data(contentsOf: url),
@@ -32,28 +64,117 @@ final class DeliveryStore: ObservableObject {
               archive.version == 3 else { return }
         routes = archive.routes
         selectedRouteID = archive.selectedRouteID
+        draftOrders = archive.draftOrders ?? []
+        postalInput = archive.postalInput ?? ""
     }
     private func save() {
-        let archive = Archive(version: 3, routes: routes, selectedRouteID: selectedRouteID)
+        guard !restoring else { return }
+        let archive = Archive(version: 3, routes: routes, selectedRouteID: selectedRouteID,
+                              draftOrders: draftOrders, postalInput: postalInput)
         do {
             let data = try JSONEncoder().encode(archive)
             try data.write(to: url, options: .atomic)
-        } catch { errorMessage = "Could not save delivery records: \(error.localizedDescription)" }
+        } catch {
+            errorMessage = "Could not save delivery records: \(error.localizedDescription)"
+        }
     }
+    func setPostalText(_ value: String) {
+        draftOrders = []
+        postalInput = value
+        failedRoutePostals = []
+    }
+    func clearDraft() {
+        draftOrders = []
+        postalInput = ""
+        failedRoutePostals = []
+        noticeMessage = nil
+    }
+
     func importPreview() -> ImportResult { WhatsAppParser.parse(importText) }
 
-    func plan() async {
-        let result = importPreview()
-        guard !result.orders.isEmpty else { errorMessage = "No valid Singapore postal codes"; return }
-        guard result.orders.count <= 50 else { errorMessage = "Maximum 50 orders"; return }
+    func addImportedOrders(_ imported: [DeliveryOrder]) {
+        guard !imported.isEmpty else { errorMessage = "Select at least one order"; return }
+        guard draft.count + imported.count <= 50 else {
+            errorMessage = "Maximum 50 parcels. Select fewer orders."
+            return
+        }
+        let existing = draft
+        let combined = existing + imported
+        guard Set(combined.map(\.id)).count == combined.count else {
+            errorMessage = "Duplicate parcel IDs detected"; return
+        }
+        draftOrders = combined
+        postalInput = combined.map(\.postal).joined(separator: "\n")
+        failedRoutePostals = []
+        noticeMessage = "\(imported.count) orders imported. Duplicate postal codes are preserved as separate parcels."
+    }
+
+    func correctDraftOrder(orderID: UUID, editedText: String) -> String? {
+        let all = draft
+        guard let index = all.firstIndex(where: { $0.id == orderID }) else {
+            return "Order no longer exists in the draft."
+        }
+        let old = all[index], source = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var corrected = old
+        if old.originalMessage.isEmpty {
+            guard source.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil else {
+                return "Enter one six-digit postal code."
+            }
+            corrected.postal = source
+        } else {
+            let result = WhatsAppParser.parse(source)
+            guard result.orders.count == 1, result.failed == 0 else {
+                return result.failedOrders.first?.reason ?? "Keep exactly one complete WhatsApp order."
+            }
+            let fresh = result.orders[0]
+            corrected.postal = fresh.postal
+            corrected.name = fresh.name
+            corrected.phone = fresh.phone
+            corrected.address = fresh.address
+            corrected.amount = fresh.amount
+            corrected.payment = fresh.payment
+            corrected.originalMessage = fresh.originalMessage
+        }
+        var updated = all
+        updated[index] = corrected
+        draftOrders = updated
+        postalInput = updated.map(\.postal).joined(separator: "\n")
+        failedRoutePostals.removeAll { failure in !updated.contains(where: { $0.postal == failure.postal }) }
+        // Recheck all codes against OneMap; a syntactically valid postal is not yet verified.
+        noticeMessage = "Updated \(corrected.name.isEmpty ? corrected.postal : corrected.name). Tap Retry Optimize to verify all locations."
+        return nil
+    }
+
+    func plan() async -> Bool {
+        guard !isPlanning else { return false }
+        let orders = draft
+        guard (1...50).contains(orders.count) else {
+            errorMessage = "Enter 1–50 Singapore delivery orders."; return false
+        }
+        guard orders.allSatisfy({ $0.postal.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil }) else {
+            errorMessage = "One or more postal codes are not six digits."; return false
+        }
         isPlanning = true
+        errorMessage = nil
+        failedRoutePostals = []
         defer { isPlanning = false }
         do {
-            let route = try await RoutePlanner.plan(result.orders, date: deliveryDate,
-                time: deliveryTime, minutes: minutesPerStop, startPostal: depotPostal)
+            let route = try await RoutePlanner.plan(orders, date: deliveryDate,
+                time: deliveryTime, minutes: minutesPerStop, startPostal: depotPostal,
+                trafficMode: trafficMode, server: roadServer)
             routes.insert(route, at: 0)
             selectedRouteID = route.id
-        } catch { errorMessage = error.localizedDescription }
+            showFailedPostalReview = false
+            noticeMessage = "Optimized \(route.orders.count) delivery orders."
+            return true
+        } catch let problem as RoutePostalLookupError {
+            failedRoutePostals = problem.failures
+            showFailedPostalReview = true
+            errorMessage = "Could not verify \(problem.failures.count) postal code(s). Review affected orders or retry OneMap."
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        return false
     }
 
     func review(orderID: UUID, status: DeliveryStatus, reason: String? = nil, note: String? = nil) {
@@ -64,7 +185,7 @@ final class DeliveryStore: ObservableObject {
         if status == .hold {
             let allowed = ["Customer not home","No answer","Reschedule","Payment issue","Access issue","Joy buyer","Other"]
             guard let reason, allowed.contains(reason), reason != "Other" || !(note ?? "").trimmingCharacters(in: .whitespaces).isEmpty else {
-                errorMessage = "Select a valid hold reason and enter a note for Other"; return
+                errorMessage = "Select a hold reason and enter a note for Other."; return
             }
         }
         routes[i].orders[j].status = status
@@ -86,8 +207,31 @@ final class DeliveryStore: ObservableObject {
 
     func exportJSON() -> URL? {
         do {
-            let data = try JSONEncoder().encode(Archive(version: 3, routes: routes, selectedRouteID: selectedRouteID))
-            let destination = FileManager.default.temporaryDirectory.appendingPathComponent("SG-Delivery-iOS-Backup.json")
+            let data = try JSONEncoder().encode(Archive(
+                version: 3, routes: routes, selectedRouteID: selectedRouteID,
+                draftOrders: draftOrders, postalInput: postalInput))
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SG-Delivery-iOS-Backup.json")
+            try data.write(to: destination, options: .atomic)
+            return destination
+        } catch { errorMessage = error.localizedDescription; return nil }
+    }
+
+    func exportCSV() -> URL? {
+        guard let route = active else { errorMessage = "No route to export"; return nil }
+        func escaped(_ text: String) -> String { "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        var rows = ["No,Postal,Customer,Phone,Address,Amount SGD,Payment,Status,ETA Singapore,Hold Reason"]
+        for (i,order) in route.orders.enumerated() {
+            rows.append([
+                String(i + 1),order.postal,order.name,order.phone,order.address,
+                order.amount,order.payment,order.status.rawValue,
+                order.arrival.map(SGFormat.date) ?? "",order.holdReason ?? ""
+            ].map(escaped).joined(separator: ","))
+        }
+        do {
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SG-Delivery-Report.csv")
+            let data = Data(("\u{FEFF}" + rows.joined(separator: "\r\n")).utf8)
             try data.write(to: destination, options: .atomic)
             return destination
         } catch { errorMessage = error.localizedDescription; return nil }
@@ -98,10 +242,28 @@ final class DeliveryStore: ObservableObject {
         let archive = try JSONDecoder().decode(Archive.self, from: data)
         guard archive.version == 3, archive.routes.count <= 2000,
               archive.routes.allSatisfy({ $0.orders.count <= 50 &&
-                  $0.orders.allSatisfy({ $0.postal.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil }) }) else {
+                $0.orders.allSatisfy({ $0.postal.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil }) }) else {
             throw DeliveryError.invalid("Unsupported or invalid iOS backup")
         }
+        guard archive.selectedRouteID == nil || archive.routes.contains(where: { $0.id == archive.selectedRouteID }) else {
+            throw DeliveryError.invalid("Backup has invalid selected route")
+        }
+        restoring = true
         routes = archive.routes
         selectedRouteID = archive.selectedRouteID
+        draftOrders = archive.draftOrders ?? []
+        postalInput = archive.postalInput ?? ""
+        restoring = false
+        save()
     }
+}
+
+func parseManualPostals(_ text: String) -> [DeliveryOrder] {
+    let tokens = text.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == ";" })
+    // Android manual input removes repeated postal entries; WhatsApp imports preserve separate customers.
+    var used = Set<String>()
+    return tokens.map(String.init)
+        .filter { $0.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil }
+        .filter { used.insert($0).inserted }
+        .map { DeliveryOrder(postal: $0) }
 }
