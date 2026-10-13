@@ -46,9 +46,10 @@ final class SGDeliveryCoreTests: XCTestCase {
         XCTAssertNotNil(archive["routes.json"])
         XCTAssertEqual(archive.filter { $0.path.hasPrefix("proofs/") }.count, 1)
 
-        let restored = try AndroidBackupZIP.importArchive(zip)
-        XCTAssertEqual(restored.count, 1)
-        let output = try XCTUnwrap(restored.first)
+        let imported = try AndroidBackupZIP.importArchive(zip)
+        XCTAssertEqual(imported.routes.count, 1)
+        XCTAssertEqual(imported.missingProofs, 0)
+        let output = try XCTUnwrap(imported.routes.first)
         XCTAssertEqual(output.id, original.id)
         XCTAssertEqual(output.orders.count, 2)
         XCTAssertEqual(output.orders.map(\.id), original.orders.map(\.id))
