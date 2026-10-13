@@ -46,6 +46,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     var raw by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<OrderImport?>(null) }
     var showFailed by remember { mutableStateOf(false) }
+    var showDuplicates by remember { mutableStateOf(false) }
     var editingFailedIndex by remember { mutableStateOf<Int?>(null) }
     var editedOrderText by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
@@ -113,6 +114,8 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
             }
             else {
                 val result = parsed!!
+                val duplicateGroups = duplicatePostalGroups(result.orders)
+                val duplicateCounts = duplicateGroups.associate { it.postalCode to it.orders.size }
                 if (showFailed) {
                     Text("Failed orders: ${result.failed}",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.titleMedium)
                     Text("These orders were NOT imported. Check the address or postal code in the original WhatsApp message, then correct and import again.",style=MaterialTheme.typography.bodySmall)
@@ -146,13 +149,53 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     }
                     TextButton(onClick={showFailed=false}) { Text("BACK TO ORDERS") }
                 } else {
-                    Text("Orders found: ${result.orders.size}\nPostal codes found: ${result.orders.size}\nDuplicate postals preserved: ${result.orders.size-result.orders.map { it.postalCode }.distinct().size}\nFailed: ${result.failed}")
+                    Text("Orders found: ${result.orders.size}\nUnique postal codes: ${result.orders.map { it.postalCode }.distinct().size}\nDuplicate parcels preserved: ${duplicateGroups.sumOf { it.extraParcels }}\nFailed: ${result.failed}")
+                    if (duplicateGroups.isNotEmpty()) {
+                        Text(
+                            "⚠ ${duplicateGroups.size} postal code(s) shared by multiple customers. Check the duplicates below; every parcel stays separate.",
+                            color = Color(0xFFFFCC80),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedButton(
+                            onClick = { showDuplicates = !showDuplicates },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        ) {
+                            Text(if (showDuplicates) "BACK TO ALL ORDERS"
+                                 else "VIEW DUPLICATE POSTALS (${duplicateGroups.size})")
+                        }
+                        if (showDuplicates) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 170.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(duplicateGroups, key = { it.postalCode }) { group ->
+                                    Card(Modifier.fillMaxWidth()) {
+                                        Column(Modifier.padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                "⚠ ${group.postalCode} — ${group.orders.size} customers",
+                                                color = Color(0xFFFFCC80),
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            group.orders.forEachIndexed { index, customer ->
+                                                Text(
+                                                    "${index + 1}. ${customer.customerName?.takeIf { it.isNotBlank() } ?: "Unknown customer"} · ${orderPrice(customer)}",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (result.failed > 0) {
                         Text("⚠ ${result.failed} order(s) could not be imported. Review the failed addresses before continuing.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick={showFailed=true},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {
                             Text("VIEW FAILED ORDERS (${result.failed})")
                         }
                     }
+                    if (!showDuplicates) {
                     TextButton(onClick={selected=result.orders.map { it.orderId }.toSet()}) { Text("SELECT ALL") }
                     Text("$capacity spaces available. Each customer remains a separate parcel.",style=MaterialTheme.typography.bodySmall)
                     if (selected.size > capacity) Text("Select fewer orders to stay within 50 deliveries.",color=MaterialTheme.colorScheme.error)
@@ -165,10 +208,16 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                         ) {
                             Checkbox(order.orderId in selected,null)
                             Text("${order.postalCode} · ${order.customerName ?: "—"} · ${orderPrice(order)}",
+                                modifier = Modifier.weight(1f),
                                 style=MaterialTheme.typography.bodySmall,
                                 maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            duplicateCounts[order.postalCode]?.let { count ->
+                                Text("DUP ×$count", color=Color(0xFFFFCC80),
+                                    style=MaterialTheme.typography.labelSmall)
+                            }
                         }
                     } }
+                    }
                 }
             }
         }
