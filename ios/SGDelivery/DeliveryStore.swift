@@ -259,8 +259,9 @@ final class DeliveryStore: ObservableObject {
     }
 
     /// Imports missing route IDs without silently overwriting local iPhone history or photos.
-    func importAndroidBackup(from url: URL) throws -> (restored: Int, skipped: Int) {
-        let incoming = try AndroidBackupZIP.importArchive(url)
+    func importAndroidBackup(from url: URL) throws -> (restored: Int, skipped: Int, missingProofs: Int) {
+        let backup = try AndroidBackupZIP.importArchive(url)
+        let incoming = backup.routes
         let currentIDs = Set(routes.map(\.id))
         let newRoutes = incoming.filter { !currentIDs.contains($0.id) }
         guard routes.count + newRoutes.count <= 2000 else {
@@ -273,7 +274,7 @@ final class DeliveryStore: ObservableObject {
             restoring = false
             save()
         }
-        return (newRoutes.count, incoming.count - newRoutes.count)
+        return (newRoutes.count, incoming.count - newRoutes.count, backup.missingProofs)
     }
 
     func exportJSON() -> URL? {
