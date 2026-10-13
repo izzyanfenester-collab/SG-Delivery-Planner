@@ -419,17 +419,18 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
 }
 
 /** Route-only action: opens this customer's original order, already drafted in WhatsApp. */
-@Composable fun SendOrderMessageButton(vm: PlannerViewModel, order: CustomerOrder) {
+@Composable fun SendOrderMessageButton(vm: PlannerViewModel, stop: Stop) {
+    val order = stop.order ?: return
     val context = LocalContext.current
     var choosing by remember(order.orderId) { mutableStateOf(false) }
     var selected by remember(order.orderId) { mutableStateOf(WhatsAppChoice.PERSONAL) }
-    val draft = orderMessageDraft(order)
+    val draft = deliveryWhatsAppMessageDraft(stop)
     Button(
         onClick = {
             val phone = order.phoneNumber
             when {
                 draft == null -> android.widget.Toast.makeText(context,
-                    "Original order text is unavailable. Re-import this WhatsApp order to include all items.",
+                    "Message details are missing (original WhatsApp order, parcel price or ETA). Re-import or correct this order before messaging.",
                     android.widget.Toast.LENGTH_LONG).show()
                 normalizeCustomerPhone(phone) == null -> android.widget.Toast.makeText(context,
                     "Customer phone number unavailable.", android.widget.Toast.LENGTH_LONG).show()
