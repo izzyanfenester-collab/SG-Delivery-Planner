@@ -355,6 +355,8 @@ struct DeliveryDetailView: View {
 struct HistoryView: View {
     @EnvironmentObject private var store: DeliveryStore
     @State private var restoring = false
+    @State private var financeSheet = false
+    @State private var androidBackupURL: URL?
 
     var body: some View {
         ScrollView {
@@ -363,6 +365,18 @@ struct HistoryView: View {
                 SGCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Export & Backup").font(.headline).foregroundStyle(SGStyle.gold)
+                        SGAction(title: "Delivery Report · Cash · Tax · Excel") {
+                            financeSheet = true
+                        }
+                        SGAction(title: "Prepare Android-Compatible ZIP Backup", filled: false) {
+                            androidBackupURL = store.exportAndroidBackup()
+                        }
+                        if let androidBackupURL {
+                            ShareLink(item: androidBackupURL) {
+                                Label("Share / Save Android ZIP Backup", systemImage: "archivebox")
+                                    .foregroundStyle(SGStyle.blue)
+                            }
+                        }
                         if let backup = store.exportJSON() {
                             ShareLink(item: backup) {
                                 Label("Export iOS Backup (JSON + Photos)", systemImage: "square.and.arrow.up")
@@ -375,10 +389,10 @@ struct HistoryView: View {
                                     .foregroundStyle(SGStyle.blue)
                             }
                         }
-                        SGAction(title: "Restore iOS Backup", filled: false) {
+                        SGAction(title: "Restore Android ZIP / iOS JSON", filled: false) {
                             restoring = true
                         }
-                        Text("Backups contain private customer addresses and photos. JSON is unencrypted and is not Android ZIP-compatible.")
+                        Text("Android ZIP backup uses the SG Delivery history v1 format; iOS JSON remains available. Both contain unencrypted private customer data and photos. Restore keeps existing route IDs unchanged; backup before restoring.")
                             .font(.caption).foregroundStyle(SGStyle.muted)
                     }
                 }
@@ -412,15 +426,23 @@ struct HistoryView: View {
             }.padding(20)
         }
         .background(SGStyle.navy)
-        .fileImporter(isPresented: $restoring, allowedContentTypes: [.json]) { selection in
+        .sheet(isPresented: $financeSheet) {
+            NavigationStack { FinanceReportView().environmentObject(store) }
+        }
+        .fileImporter(isPresented: $restoring, allowedContentTypes: [.json, .zip]) { selection in
             do {
                 let url = try selection.get()
                 guard url.startAccessingSecurityScopedResource() else {
                     throw DeliveryError.invalid("Cannot access selected backup")
                 }
                 defer { url.stopAccessingSecurityScopedResource() }
-                try store.restoreJSON(Data(contentsOf: url))
-                store.noticeMessage = "iOS backup restored."
+                if url.pathExtension.lowercased() == "zip" {
+                    let result = try store.importAndroidBackup(from: url)
+                    store.noticeMessage = "Android ZIP restored: (result.restored) routes added; (result.skipped) existing routes skipped."
+                } else {
+                    try store.restoreJSON(Data(contentsOf: url))
+                    store.noticeMessage = "iOS backup restored."
+                }
             } catch { store.errorMessage = "Restore failed: \(error.localizedDescription)" }
         }
     }
