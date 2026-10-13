@@ -191,7 +191,7 @@ struct WhatsAppImportSheet: View {
                                 }
                             }
                         } else if mode == "Duplicates" {
-                            ForEach(result.duplicatePostalGroups, id: \.postal) { group in
+                            ForEach(Array(result.duplicatePostalGroups.enumerated()), id: \.offset) { _, group in
                                 SGCard(color: SGStyle.cardAlt) {
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text("⚠ \(group.postal) — \(group.orders.count) customers")
