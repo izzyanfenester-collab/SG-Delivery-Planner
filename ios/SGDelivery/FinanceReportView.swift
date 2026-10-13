@@ -48,8 +48,8 @@ struct FinanceReportView: View {
                                 .lineLimit(2...4).textFieldStyle(.roundedBorder)
                             if let amount = MoneyCalculator.amount(tax),
                                let exchange = MoneyCalculator.positiveRate(rate) {
-                                Text("Tax converted to RM \(MoneyCalculator.display(
-                                    MoneyCalculator.taxMYR(tax: amount, rate: exchange)))")
+                                let myrAmount = MoneyCalculator.taxMYR(tax: amount, rate: exchange)
+                                Text("Tax converted to RM " + MoneyCalculator.display(myrAmount))
                                     .foregroundStyle(SGStyle.blue)
                             }
                             SGAction(title: "Save Finance") {
