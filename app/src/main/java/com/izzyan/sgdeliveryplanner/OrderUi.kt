@@ -138,8 +138,6 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                         enabled = !vm.busy,
                                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                     ) {
-                                        Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null)
-                                        Spacer(Modifier.width(8.dp))
                                         Text("Edit text")
                                     }
                                 }
