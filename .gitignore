@@ -4,3 +4,6 @@ local.properties
 *.jks
 *.keystore
 .idea/
+*.p12
+*.pfx
+signing.properties
