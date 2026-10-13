@@ -42,6 +42,29 @@ enum AndroidHistoryFormat {
         return value
     }
 
+    static func expectedPhotoIDs(_ routesData: Data) throws -> Set<String> {
+        guard let rows = try JSONSerialization.jsonObject(with: routesData) as? [[String: Any]] else {
+            throw DeliveryError.invalid("Android routes.json is invalid.")
+        }
+        var ids = Set<String>()
+        for row in rows {
+            guard let json = row["json"] as? String, let bytes = json.data(using: .utf8),
+                  let plan = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                  let stops = plan["stops"] as? [[String: Any]] else {
+                throw DeliveryError.invalid("Android route JSON could not be parsed.")
+            }
+            for item in stops {
+                guard let order = item["order"] as? [String: Any] else { continue }
+                for key in ["proofFileId", "paymentProofFileId"] {
+                    if let name = string(order[key]),
+                       name.range(of: #"^[A-Za-z0-9_-]+\.jpg$"#,
+                                  options: .regularExpression) != nil { ids.insert(name) }
+                }
+            }
+        }
+        return ids
+    }
+
     static func readRoutes(_ routesData: Data, photos: [String: Data] = [:]) throws -> [DeliveryRoute] {
         guard routesData.count <= 30 * 1024 * 1024,
               let rows = try JSONSerialization.jsonObject(with: routesData) as? [[String: Any]],
