@@ -57,3 +57,12 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.izzyan.sgdelivery.v3.tests
+
+schemes:
+  SGDeliveryV3:
+    build:
+      targets:
+        SGDeliveryV3: all
+    test:
+      targets:
+        - SGDeliveryTests
