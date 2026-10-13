@@ -14,13 +14,21 @@ settings:
     INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Select proof-of-delivery and payment photos."
+    INFOPLIST_KEY_NSCameraUsageDescription: "Capture delivery and payment proof photos for the selected customer."
+    INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Use your location for live delivery navigation, voice instructions and updated ETA."
     SUPPORTS_MACCATALYST: NO
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: "0.9.19"
 targets:
   SGDeliveryV3:
     type: application
     platform: iOS
     sources:
       - SGDelivery
+    dependencies:
+      - package: ZIPFoundation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.izzyan.sgdelivery.v3
