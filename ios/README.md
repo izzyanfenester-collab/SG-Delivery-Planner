@@ -1,7 +1,7 @@
 # SG Delivery V3 — Native iOS (SwiftUI)
 
 This is **not a PWA**. It is a separate native iPhone app, built with SwiftUI and MapKit.
-The existing Android application and the deployed V2 PWA are unchanged.
+The existing Android application on `main` is unchanged. GitHub Pages/PWA remains discontinued.
 
 ## Current implementation
 
@@ -11,11 +11,13 @@ The existing Android application and the deployed V2 PWA are unchanged.
 - Customer details, WhatsApp draft (never auto-send), Google Maps handoff.
 - Delivery statuses, hold reason, delivery timestamps, proof images from Photos.
 - Local JSON persistence and JSON export/restore with embedded images.
-- MapKit stop pins and history.
+- MapKit stop pins and OSRM driving polyline when available; history, CSV export and iOS JSON backup.
+- Native navy / royal blue / gold UI modeled after Android V1.4.1, with WhatsApp failed-order editing and duplicate-postal review.
+- For exact parity status, see [Android V1.4.1 parity tracker](ANDROID_V1_4_1_PARITY.md).
 
 ## Build and install using a free Apple ID
 
-**A macOS/Xcode build environment is required to compile iOS code.** GitHub Actions provides a hosted macOS builder that can produce an **unsigned IPA**, even if your own computer runs Windows. The unsigned IPA **cannot** be installed directly on iPhone: it must be signed using a free Apple ID with an appropriate sideloading tool or Xcode on a Mac. No paid Apple Developer Program membership is required for personal testing, but free provisioning has limitations.
+**macOS/Xcode is required to compile and code-sign natively through Apple's standard workflow.** GitHub Actions can produce an **unsigned IPA** even for a Windows user. An unsigned IPA **cannot be installed directly on iPhone**; it needs valid signing and provisioning. Free Apple ID installation through Xcode requires Mac access; third-party Windows sideloading tools are experimental alternatives and are not guaranteed to work.
 
 1. On a Mac, install Xcode from the Mac App Store and launch it once.
 2. Install XcodeGen: `brew install xcodegen`.
@@ -42,7 +44,7 @@ Free Personal Team provisioning is limited and generally expires after **7 days*
 ## Not ready for production
 
 - The public OneMap and OSRM services may reject or throttle iPhone traffic. Route planning must be tested with actual Singapore postal codes and up to 50 orders.
-- MapKit currently displays **pins**, not a verified driving polyline; no built-in turn-by-turn GPS navigation.
+- MapKit displays route geometry **when OSRM returns it**. Built-in turn-by-turn GPS navigation and actual-device routing tests are still missing.
 - Proof photos are embedded in local JSON and can exceed iOS app storage/backup limits; no Android-compatible ZIP import yet.
 - Traffic is an estimate, not live.
 - No iPhone hardware test has been performed yet. CI simulator compilation is necessary but not sufficient.
