@@ -4,6 +4,10 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/check-ios.yml'
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/check-ios.yml'
   workflow_dispatch:
 jobs:
   build:
