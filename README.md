@@ -16,6 +16,10 @@ History supports Select history or a long press to enter multi-select, then Dele
 
 The rate provider uses Frankfurter's public daily SGD/MYR reference rate and adds 0.40. Planning and Summary opens refresh the latest rate in the background; saved routes require explicitly selecting Use latest rate to replace their historical rate, so refreshes do not overwrite manual edits or change historical MYR displays. Offline failures keep the latest/manual value and do not block delivery. New and legacy payloads default to 3.60 when no rate is stored; this is a fallback, not a live quote. Each route stores the final rate actually used, so historical MYR tax is stable: Tax SGD × saved Rate, with currency displays rounded half up to two decimals. Remarks default to empty. SQL tables, database name/version, settings keys and existing JSON fields are retained without destructive migration.
 
+## Signed Android releases
+
+Android release signing uses a **permanent, owner-generated keystore**; it is never stored in Git. Follow the [Windows release signing guide](docs/ANDROID_RELEASE_SIGNING_WINDOWS.md) to generate the key, configure four protected GitHub Actions secrets, and build the signed APK via the manual **Build Signed SG Delivery Release APK** workflow. The first signed release is version **1.3 (versionCode 4)**. Existing debug-signed builds usually require backup and reinstall because their certificate differs; do not uninstall before backing up delivery data.
+
 ## Build status
 
 The [GitHub Actions APK workflow](https://github.com/izzyanfenester-collab/SG-Delivery-Planner/actions/workflows/build-apk.yml) runs unit tests, debug APK assembly and Android lint on each push and pull request. Successful runs upload **SG-Delivery-Planner-APK** and verification reports. Tests include OneMap searches without an Authorization header, retries and persistent caching, real Room database close/reopen persistence and legacy payload compatibility. Driver device testing and validation against real Singapore road journeys remain required before operational use.
