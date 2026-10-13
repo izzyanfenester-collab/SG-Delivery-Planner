@@ -73,6 +73,70 @@ struct IOSCoreSmokeTests {
         let normal = RoutePlanner.trafficBuffer(km: 5, seconds: 600, mode: "Normal")
         let heavy = RoutePlanner.trafficBuffer(km: 5, seconds: 600, mode: "Heavy Traffic")
         check(light < normal && normal < heavy, "Traffic buffers ordered correctly")
+        // Android V1.4.2 Send message: use this order only, exact imported text,
+        // two-decimal COD amount, Singapore ETA, +10 min, and safe WhatsApp links.
+        var sgCalendar = Calendar(identifier: .gregorian)
+        sgCalendar.timeZone = SGFormat.singapore
+        let planned = sgCalendar.date(from: DateComponents(
+            year: 2026, month: 10, day: 13, hour: 19, minute: 21))!
+        let updated = sgCalendar.date(from: DateComponents(
+            year: 2026, month: 10, day: 13, hour: 19, minute: 10))!
+        var customerA = result.orders[0]
+        customerA.amount = "75"
+        customerA.arrival = planned
+        customerA.updatedArrival = updated
+        let draftA = DeliveryWhatsApp.draft(for: customerA)!
+        check(draftA.contains("COD Amount: S$75.00"), "COD uses selected customer's price")
+        check(draftA.contains("ETA : 7.10pm - 7.20pm"), "Updated ETA preferred over planned ETA")
+        check(draftA.contains(customerA.originalMessage.trimmingCharacters(in: .whitespacesAndNewlines)),
+              "Exact original customer order remains in draft")
+        check(draftA.contains("please have the exact cash ready"), "Cash reminder present")
+        check(DeliveryWhatsApp.phoneDigits(customerA.phone) == "6590123456", "SG phone is normalized")
+
+        var customerB = result.orders[1]
+        customerB.arrival = planned
+        let draftB = DeliveryWhatsApp.draft(for: customerB)!
+        check(draftB.contains("COD Amount: S$75.00"), "Second customer's own amount")
+        check(draftB.contains(customerB.originalMessage), "Second customer's original message")
+        check(!draftB.contains(customerA.originalMessage), "Same postcode never swaps orders")
+        check(draftB.contains("ETA : 7.21pm - 7.31pm"), "Planned ETA fallback")
+        let links = DeliveryWhatsApp.urls(for: customerA)!
+        check(links.app.scheme == "whatsapp", "Direct native WhatsApp scheme")
+        check(links.web.host == "wa.me", "HTTPS WhatsApp fallback")
+        check(URLComponents(url: links.app, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "text" })?.value == draftA,
+              "Native app link preserves emoji and newlines")
+        check(URLComponents(url: links.web, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "text" })?.value == draftA,
+              "Fallback link preserves the full exact message")
+
+        var night = customerA
+        night.updatedArrival = sgCalendar.date(from: DateComponents(
+            year: 2026, month: 10, day: 13, hour: 23, minute: 55))
+        check(DeliveryWhatsApp.etaWindow(for: night) == "11.55pm - 12.05am",
+              "10-minute window crosses midnight without truncation")
+        var incomplete = customerA
+        incomplete.originalMessage = ""
+        check(DeliveryWhatsApp.draft(for: incomplete) == nil, "Never invent missing original order")
+        incomplete = customerA
+        incomplete.amount = ""
+        check(DeliveryWhatsApp.draft(for: incomplete) == nil, "Never invent missing parcel price")
+        incomplete = customerA
+        incomplete.phone = "12345"
+        check(DeliveryWhatsApp.urls(for: incomplete) == nil, "Reject invalid phone number")
+        incomplete = customerA
+        incomplete.arrival = nil
+        incomplete.updatedArrival = nil
+        check(DeliveryWhatsApp.draft(for: incomplete) == nil, "Never invent ETA")
+        let persisted = try JSONEncoder().encode(customerA)
+        let restored = try JSONDecoder().decode(DeliveryOrder.self, from: persisted)
+        check(restored.updatedArrival == updated, "Updated ETA survives JSON archive")
+        var oldJSON = try JSONSerialization.jsonObject(with: persisted) as! [String: Any]
+        oldJSON.removeValue(forKey: "updatedArrival")
+        let older = try JSONDecoder().decode(DeliveryOrder.self,
+            from: JSONSerialization.data(withJSONObject: oldJSON))
+        check(older.updatedArrival == nil, "Older iOS backup remains compatible")
+
         print("SG Delivery native iOS core smoke tests PASSED.")
     }
 }
