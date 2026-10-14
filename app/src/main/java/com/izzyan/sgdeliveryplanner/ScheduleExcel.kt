@@ -22,7 +22,6 @@ fun deliveryExcelFileName(plan: Plan): String =
  * string: addresses, postal codes and other imported data can never become Excel formulas.
  */
 fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
-    val summary = deliverySummary(plan)
     val origin = plan.startLocation.asPlace()
     val endpointLabel = if (plan.startLocation.type == "WOODLANDS") plan.startLocation.displayName
         else plan.startLocation.reportLabel
@@ -56,25 +55,6 @@ fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
         durationCell(plan.returnLeg.plannedSeconds), textCell("—"), dateTimeCell(plan.returned),
         kmCell(plan.totalKm), plan.etaReturned?.let(::dateTimeCell) ?: textCell("—"), textCell("—"), textCell("—")
     )
-    val summaryRows = listOf(
-        "Date" to numericCell(excelDate(plan.deliveryDate), DATE_STYLE, plan.deliveryDate.toString()),
-        "Start Location" to textCell(plan.startLocation.reportLabel),
-        "End Location" to textCell(plan.startLocation.reportLabel),
-        "Start Time" to dateTimeCell(summary.start),
-        "Finish Time" to dateTimeCell(summary.finish),
-        "Total Parcel" to numberCell(summary.totalParcel),
-        "Delivered" to numberCell(summary.delivered),
-        "On Hold" to numberCell(summary.onHold),
-        "Skipped" to numberCell(summary.skipped),
-        "Pending" to numberCell(summary.pending),
-        "Success Rate" to numericCell(summary.successRate / 100.0, PERCENT_STYLE, "${summary.successRate}%"),
-        "Total KM" to kmCell(summary.totalKm),
-        "Cash on Hand" to moneyCell(plan.cashOnHand),
-        "Tax" to moneyCell(plan.tax),
-        "Tax MYR" to textCell("RM ${taxMyr(plan.tax, plan.exchangeRate)}"),
-        "Rate" to textCell(plan.exchangeRate),
-        "Remark" to textCell(plan.remark)
-    )
     val lastRow = SCHEDULE_HEADER_ROW + rows.size
     val worksheet = buildString {
         append(XML_DECLARATION)
@@ -84,26 +64,14 @@ fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
         append("<pane ySplit=\"$SCHEDULE_HEADER_ROW\" topLeftCell=\"A${SCHEDULE_HEADER_ROW + 1}\" activePane=\"bottomLeft\" state=\"frozen\"/>")
         append("<selection pane=\"bottomLeft\" activeCell=\"A${SCHEDULE_HEADER_ROW + 1}\" sqref=\"A${SCHEDULE_HEADER_ROW + 1}\"/>")
         append("</sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"22\"/><cols>")
-        headings.forEachIndexed { index, heading ->
-            val longest = maxOf(heading.length, rows.maxOfOrNull { it[index].displayWidth } ?: 0)
-            // Very long imported addresses wrap instead of producing an unusably wide sheet.
-            val width = (longest + 3).coerceIn(if (index == 0) 18 else 12, if (index == 9) 42 else 34)
-            append("<col min=\"${index + 1}\" max=\"${index + 1}\" width=\"$width\" bestFit=\"1\" customWidth=\"1\"/>")
-        }
+        append("<col min=\"1\" max=\"15\" width=\"14.14\" customWidth=\"1\"/>")
         append("</cols><sheetData>")
-        appendExcelRow(1, listOf(textCell("Runner Route Planning - Complete Delivery Schedule", TITLE_STYLE)), 30)
-        appendExcelRow(2, listOf(textCell("Runner Route Planning Route Summary", SUMMARY_TITLE_STYLE)), 26)
-        summaryRows.forEachIndexed { index, (label, value) ->
-            appendExcelRow(index + 3, listOf(textCell(label, SUMMARY_LABEL_STYLE), value), 22)
-        }
         appendExcelRow(SCHEDULE_HEADER_ROW, headings.map { textCell(it, HEADER_STYLE) }, 42)
         rows.forEachIndexed { index, cells ->
             appendExcelRow(SCHEDULE_HEADER_ROW + index + 1, cells, 42)
         }
         append("</sheetData><autoFilter ref=\"A$SCHEDULE_HEADER_ROW:O$lastRow\"/>")
-        append("<mergeCells count=\"${summaryRows.size + 2}\"><mergeCell ref=\"A1:O1\"/><mergeCell ref=\"A2:O2\"/>")
-        summaryRows.indices.forEach { append("<mergeCell ref=\"B${it + 3}:D${it + 3}\"/>") }
-        append("</mergeCells><pageMargins left=\"0.3\" right=\"0.3\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/>")
+        append("<pageMargins left=\"0.3\" right=\"0.3\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/>")
         append("<pageSetup paperSize=\"9\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/>")
         append("</worksheet>")
     }
@@ -117,7 +85,7 @@ fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
     }
 }
 
-private const val SCHEDULE_HEADER_ROW = 21
+private const val SCHEDULE_HEADER_ROW = 1
 private const val TITLE_STYLE = 1
 private const val SUMMARY_TITLE_STYLE = 2
 private const val SUMMARY_LABEL_STYLE = 3
@@ -170,7 +138,7 @@ private fun excelDate(date: LocalDate): Double {
 }
 
 private fun deliveryPeriodTime(value: String): String = runCatching {
-    LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a", Locale.ENGLISH))
+    LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
 }.getOrDefault(value)
 
 private fun StringBuilder.appendExcelRow(row: Int, cells: List<ExcelCell>, height: Int) {
@@ -236,7 +204,7 @@ private val WORKBOOK = XML_DECLARATION + """
     <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
       <bookViews><workbookView/></bookViews>
       <sheets><sheet name="Delivery Schedule" sheetId="1" r:id="rId1"/></sheets>
-      <definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'Delivery Schedule'!${'$'}21:${'$'}21</definedName></definedNames>
+      <definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'Delivery Schedule'!${'$'}1:${'$'}1</definedName></definedNames>
       <calcPr calcId="191029"/>
     </workbook>
 """.trimIndent()
@@ -252,7 +220,7 @@ private val STYLES = XML_DECLARATION + """
     <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
       <numFmts count="6">
         <numFmt numFmtId="164" formatCode="yyyy-mm-dd"/>
-        <numFmt numFmtId="165" formatCode="yyyy-mm-dd h:mm AM/PM"/>
+        <numFmt numFmtId="165" formatCode="h:mm AM/PM"/>
         <numFmt numFmtId="166" formatCode="0.0&quot; KM&quot;"/>
         <numFmt numFmtId="167" formatCode="[h]&quot; hr &quot;mm&quot; min&quot;"/>
         <numFmt numFmtId="168" formatCode="&quot;SGD &quot;#,##0.00"/>
@@ -282,8 +250,8 @@ private val STYLES = XML_DECLARATION + """
         <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>
         <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
         <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
-        <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
-        <xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
+        <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+        <xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
         <xf numFmtId="168" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
         <xf numFmtId="169" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
         <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
