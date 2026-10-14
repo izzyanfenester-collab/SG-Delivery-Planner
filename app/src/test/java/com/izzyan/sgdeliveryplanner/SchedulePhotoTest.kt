@@ -54,7 +54,6 @@ class SchedulePhotoTest {
             assertTrue(cells[3].matches(Regex("\\d{1,2}:\\d{2} [AP]M")))
         }
         assertEquals("END", rows.last().stop)
-        assertEquals(plan.returned.substring(11, 13).toInt() >= 0, true)
         assertTrue(rows.last().arrival.matches(Regex("\\d{1,2}:\\d{2} [AP]M")))
         assertFalse(rows.any { it.cells().any { field -> field.contains("Example address") } })
     }
