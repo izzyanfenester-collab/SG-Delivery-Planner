@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -325,29 +329,76 @@ private fun retainExcelWriteGrant(context: Context, uri: Uri, permissionFlags: I
 }
 
 @Composable
-fun ScheduleExportActions(plan: Plan, enabled: Boolean = true) {
+fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean, onToggleExpanded: () -> Unit) {
     val export: ScheduleExportViewModel = viewModel()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sharingPhoto by remember(plan.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = { export.prepare(plan, share = false) },
-            enabled = enabled && !export.busy,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, PremiumGold),
-            colors = ButtonDefaults.buttonColors(containerColor = PremiumNavy, contentColor = PremiumGold),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
-        ) {
-            Text("Export to Excel", style = MaterialTheme.typography.titleMedium)
+        // Keep the original Excel actions and their ViewModel behavior unchanged.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = { export.prepare(plan, share = false) },
+                enabled = enabled && !export.busy,
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, PremiumGold),
+                colors = ButtonDefaults.buttonColors(containerColor = PremiumNavy, contentColor = PremiumGold),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
+            ) {
+                Text("Export to Excel", style = MaterialTheme.typography.titleMedium)
+            }
+            OutlinedButton(
+                onClick = { export.prepare(plan, share = true) },
+                enabled = enabled && !export.busy,
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, PremiumGold),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = PremiumNavy, contentColor = PremiumGold)
+            ) {
+                Text("Share Excel")
+            }
         }
-        OutlinedButton(
-            onClick = { export.prepare(plan, share = true) },
-            enabled = enabled && !export.busy,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, PremiumGold),
-            colors = ButtonDefaults.outlinedButtonColors(containerColor = PremiumNavy, contentColor = PremiumGold)
-        ) {
-            Text("Share Excel")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                onClick = {
+                    // Capture the chosen route before rendering on a background thread.
+                    val snapshot = plan.copy(stops = plan.stops.toList(), geometry = emptyList())
+                    sharingPhoto = true
+                    scope.launch {
+                        try {
+                            val image = withContext(Dispatchers.IO) {
+                                generateSchedulePhoto(context.applicationContext, snapshot)
+                            }
+                            context.startActivity(Intent.createChooser(
+                                schedulePhotoShareIntent(context, image), "Share Photo"
+                            ))
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "Could not share schedule photo. Please try again.",
+                                Toast.LENGTH_LONG).show()
+                        } finally {
+                            sharingPhoto = false
+                        }
+                    }
+                },
+                enabled = enabled && !export.busy && !sharingPhoto,
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, PremiumGold),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = PremiumNavy, contentColor = PremiumGold)
+            ) {
+                Text(if (sharingPhoto) "Preparing photo…" else "Share Photo")
+            }
+            OutlinedButton(
+                onClick = onToggleExpanded,
+                enabled = enabled && !export.busy,
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, PremiumGold),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = PremiumNavy, contentColor = PremiumGold)
+            ) {
+                Text(if (expanded) "Minimize below table" else "Maximize below table")
+            }
         }
         if (export.busy) {
             LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)

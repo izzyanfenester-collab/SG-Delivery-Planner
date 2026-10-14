@@ -681,6 +681,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
 fun Results(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
     val summary = deliverySummary(p)
+    var scheduleExpanded by rememberSaveable(p.id) { mutableStateOf(true) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -733,8 +734,9 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
         Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ScheduleExportActions(p, enabled = !vm.busy)
-        ScheduleTable(p)
+        ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
+            onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
+        if (scheduleExpanded) ScheduleTable(p)
     }
 }
 
