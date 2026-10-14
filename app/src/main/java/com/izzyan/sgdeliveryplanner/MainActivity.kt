@@ -723,10 +723,6 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         } else {
             Text("Google Maps can open up to 3 delivery stops together in a mobile browser. Your full ${p.stops.size}-stop route is shown here in optimized order. Tap Navigate on the Delivery screen for directions to each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
-        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ScheduleExportActions(p, enabled = !vm.busy)
-        ScheduleTable(p)
         Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
@@ -735,6 +731,10 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
+        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
+        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ScheduleExportActions(p, enabled = !vm.busy)
+        ScheduleTable(p)
     }
 }
 
