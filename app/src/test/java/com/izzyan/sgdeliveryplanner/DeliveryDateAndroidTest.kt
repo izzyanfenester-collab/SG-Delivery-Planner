@@ -126,8 +126,14 @@ class DeliveryDateAndroidTest {
         val bytes = ByteArrayOutputStream().also { writeDeliveryScheduleXlsx(started, it) }.toByteArray()
         XSSFWorkbook(ByteArrayInputStream(bytes)).use { book ->
             val sheet = book.getSheetAt(0)
-            val dateRow = sheet.first { it.getCell(0)?.toString() == "Date" }
-            assertEquals(LocalDate.of(2028, 2, 29), dateRow.getCell(1).localDateTimeCellValue.toLocalDate())
+            // The summary date row is intentionally removed; the START/ACTUAL rows
+            // retain complete Excel date-time values with a time-only display.
+            assertEquals("Stop", sheet.getRow(0).getCell(0).stringCellValue)
+            val startTime = sheet.getRow(1).getCell(4)
+            assertEquals(LocalDate.of(2028, 2, 29), startTime.localDateTimeCellValue.toLocalDate())
+            assertEquals("h:mm AM/PM", startTime.cellStyle.dataFormatString)
+            assertEquals(LocalDate.of(2028, 3, 1),
+                sheet.getRow(2).getCell(14).localDateTimeCellValue.toLocalDate())
         }
         assertEquals("2028-03-01T00:20:37", vm.route!!.stops[0].completedAt)
         assertEquals(started.etaReturned, vm.route!!.etaReturned)
