@@ -13,6 +13,7 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.ceil
 
@@ -51,13 +52,6 @@ class ScheduleExcelTest {
         headings.indices.all { column -> row.getCell(column)?.stringCellValue == headings[column] }
     }
 
-    private fun summaryCell(sheet: XSSFSheet, label: String): Cell {
-        val labelCell = sheet.asSequence().flatMap { it.asSequence() }.first {
-            it.cellType == CellType.STRING && it.stringCellValue == label
-        }
-        return sheet.getRow(labelCell.rowIndex).getCell(labelCell.columnIndex + 1)
-    }
-
     private fun assertDateTime(expected: String, cell: Cell) {
         assertEquals(CellType.NUMERIC, cell.cellType)
         assertTrue("Excel must recognize the date/time format", DateUtil.isCellDateFormatted(cell))
@@ -77,9 +71,10 @@ class ScheduleExcelTest {
             assertEquals(1, book.numberOfSheets)
             assertEquals("Delivery Schedule", book.getSheetName(0))
             val sheet = book.getSheetAt(0)
-            assertEquals("Runner Route Planning - Complete Delivery Schedule", sheet.getRow(0).getCell(0).stringCellValue)
-            assertTrue(sheet.asSequence().flatMap { it.asSequence() }.any {
-                it.cellType == CellType.STRING && it.stringCellValue == "Runner Route Planning Route Summary"
+            assertEquals("The table header must start at Excel row 1", 0, header(sheet).rowNum)
+            assertEquals("Stop", sheet.getRow(0).getCell(0).stringCellValue)
+            assertFalse(sheet.asSequence().flatMap { it.asSequence() }.any {
+                it.cellType == CellType.STRING && it.stringCellValue.contains("Route Summary")
             })
             val headers = header(sheet)
             assertEquals(headings, headings.indices.map { headers.getCell(it).stringCellValue })
@@ -103,39 +98,27 @@ class ScheduleExcelTest {
         }
     }
 
-    @Test fun exportsFullSummaryFromSavedStatusesReviewFinishAndManualMoney() {
+    @Test fun exportsOnlyTheScheduleTableEvenWhenMoneyStatusesAndNotesAreSaved() {
         val base = route()
         val plan = base.copy(
             stops = base.stops.mapIndexed { index, stop ->
                 stop.copy(status = listOf("DELIVERED", "ON_HOLD", "SKIPPED", "PENDING", "DELIVERED")[index])
             },
-            reviewedFinishedAt = "2026-10-04T01:34", actualCompletion = "2026-10-04T01:30"
+            reviewedFinishedAt = "2026-10-04T01:34", actualCompletion = "2026-10-04T01:30",
+            remark = "Internal remarks that should not appear in the schedule summary"
         )
         workbook(plan).use { book ->
             val sheet = book.getSheetAt(0)
-            val expectedCounts = mapOf("Total Parcel" to 5, "Delivered" to 2, "On Hold" to 1, "Skipped" to 1, "Pending" to 1)
-            expectedCounts.forEach { (label, count) ->
-                val cell = summaryCell(sheet, label)
-                assertEquals(CellType.NUMERIC, cell.cellType)
-                assertEquals(count.toDouble(), cell.numericCellValue, 0.0)
+            assertEquals(0, header(sheet).rowNum)
+            assertEquals(plan.stops.size + 2, sheet.lastRowNum)
+            val allStrings = sheet.asSequence().flatMap { it.asSequence() }
+                .filter { it.cellType == CellType.STRING }.map { it.stringCellValue }.toList()
+            listOf("Total Parcel", "Cash on Hand", "Tax MYR", "Success Rate",
+                "Runner Route Planning Route Summary", "Runner Route Planning - Complete Delivery Schedule",
+                plan.remark).forEach { forbidden ->
+                assertFalse("Only the schedule table must be exported: $forbidden", allStrings.contains(forbidden))
             }
-            val date = summaryCell(sheet, "Date")
-            assertDateTime("2026-10-03T00:00", date)
-            assertDateTime(plan.start, summaryCell(sheet, "Start Time"))
-            assertDateTime("2026-10-04T01:34", summaryCell(sheet, "Finish Time"))
-            val success = summaryCell(sheet, "Success Rate")
-            assertEquals(0.4, success.numericCellValue, 0.000000001)
-            assertEquals("40.0%", formatter.formatCellValue(success))
-            assertKm(plan.totalKm, summaryCell(sheet, "Total KM"))
-            listOf("Cash on Hand" to 12345.67, "Tax" to 8.35).forEach { (label, amount) ->
-                val cell = summaryCell(sheet, label)
-                assertEquals(CellType.NUMERIC, cell.cellType)
-                assertEquals(amount, cell.numericCellValue, 0.000000001)
-                val displayed = formatter.formatCellValue(cell)
-                assertTrue(displayed.contains("SGD"))
-                assertTrue(displayed.endsWith(if (label == "Tax") ".35" else ".67"))
-                assertTrue(cell.cellStyle.dataFormatString.contains("0.00"))
-            }
+            assertEquals("A1:O${sheet.lastRowNum + 1}", sheet.ctWorksheet.autoFilter.ref)
         }
     }
 
@@ -152,7 +135,11 @@ class ScheduleExcelTest {
                 val row = sheet.getRow(header.rowNum + index + 2)
                 assertDateTime(stop.arrival, row.getCell(4))
                 assertDateTime(stop.leave, row.getCell(10))
-                assertTrue(formatter.formatCellValue(row.getCell(4)).contains("2026"))
+                assertEquals(
+                    LocalDateTime.parse(stop.arrival).format(DateTimeFormatter.ofPattern("h:mm a", Locale.US)),
+                    formatter.formatCellValue(row.getCell(4))
+                )
+                assertFalse(formatter.formatCellValue(row.getCell(10)).contains("2026"))
                 assertKm(stop.leg.km, row.getCell(5))
                 assertKm(stop.cumulativeKm, row.getCell(11))
                 listOf(6 to stop.leg.baseSeconds, 7 to stop.leg.bufferSeconds, 8 to stop.leg.plannedSeconds).forEach { (column, seconds) ->
@@ -163,8 +150,12 @@ class ScheduleExcelTest {
                 }
                 val delivery = row.getCell(9)
                 assertEquals(CellType.STRING, delivery.cellType)
-                assertTrue(delivery.stringCellValue.contains("2026-10-04"))
-                assertTrue(delivery.stringCellValue.contains("–"))
+                assertEquals(
+                    "${LocalDateTime.parse(stop.arrival).format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))} – " +
+                        LocalDateTime.parse(stop.leave).format(DateTimeFormatter.ofPattern("h:mm a", Locale.US)),
+                    delivery.stringCellValue
+                )
+                assertFalse(delivery.stringCellValue.contains("2026"))
             }
             val end = sheet.getRow(header.rowNum + plan.stops.size + 2)
             assertDateTime(plan.returned, end.getCell(4))
@@ -192,7 +183,13 @@ class ScheduleExcelTest {
                 val cell = headers.getCell(column)
                 assertTrue(book.getFontAt(cell.cellStyle.fontIndexAsInt).bold)
                 val width = sheet.getColumnWidth(column)
-                assertTrue("Column $column must remain usable", width in (10 * 256)..(60 * 256))
+                assertEquals("Column $column must be 14.14 Excel units (104 px)",
+                    14.14, width / 256.0, 0.02)
+                assertTrue("Header $column needs Wrap Text", cell.cellStyle.wrapText)
+                for (row in 1..sheet.lastRowNum) {
+                    assertTrue("Cell at row $row, column $column needs Wrap Text",
+                        sheet.getRow(row).getCell(column).cellStyle.wrapText)
+                }
             }
         }
     }
@@ -221,17 +218,13 @@ class ScheduleExcelTest {
         }
     }
 
-    @Test fun exportsSavedCustomLocationAtBothBoundariesAndInSummary() {
+    @Test fun exportsSavedCustomLocationAtBothBoundaries() {
         val custom = StartLocation("CUSTOM", 1.3012, 103.8159, "Custom Location",
             "5 Alpine Road, Singapore 000123", "000123")
         val saved = PlanJson.decode(PlanJson.encode(route().copy(startLocation = custom)))
         workbook(saved).use { book ->
             val sheet = book.getSheetAt(0)
             val headers = header(sheet)
-            assertEquals("5 Alpine Road, Singapore 000123",
-                summaryCell(sheet, "Start Location").stringCellValue)
-            assertEquals("5 Alpine Road, Singapore 000123",
-                summaryCell(sheet, "End Location").stringCellValue)
             listOf(headers.rowNum + 1 to "START", headers.rowNum + saved.stops.size + 2 to "END").forEach { (index, label) ->
                 val row = sheet.getRow(index)
                 assertEquals(label, row.getCell(0).stringCellValue)
@@ -254,8 +247,6 @@ class ScheduleExcelTest {
         workbook(plan).use { book ->
             val sheet = book.getSheetAt(0)
             val headers = header(sheet)
-            assertEquals("Custom Location", summaryCell(sheet, "Start Location").stringCellValue)
-            assertEquals("Custom Location", summaryCell(sheet, "End Location").stringCellValue)
             listOf(headers.rowNum + 1, sheet.lastRowNum).forEach { index ->
                 assertEquals("Custom Location", sheet.getRow(index).getCell(2).stringCellValue)
                 assertEquals("", sheet.getRow(index).getCell(1).stringCellValue)
@@ -270,8 +261,6 @@ class ScheduleExcelTest {
         workbook(saved).use { book ->
             val sheet = book.getSheetAt(0)
             val headers = header(sheet)
-            assertEquals("Home — 7 Ocean Road, Singapore 000007", summaryCell(sheet, "Start Location").stringCellValue)
-            assertEquals("Home — 7 Ocean Road, Singapore 000007", summaryCell(sheet, "End Location").stringCellValue)
             listOf(headers.rowNum + 1 to "START", headers.rowNum + saved.stops.size + 2 to "END").forEach { (index, label) ->
                 val row = sheet.getRow(index)
                 assertEquals(label, row.getCell(0).stringCellValue)
@@ -294,15 +283,10 @@ class ScheduleExcelTest {
         workbook(restored).use { book ->
             val sheet = book.getSheetAt(0)
             val headers = header(sheet)
-            assertEquals("Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203",
-                summaryCell(sheet, "Start Location").stringCellValue)
-            assertEquals("Woodlands Checkpoint — 21 Woodlands Crossing, Singapore 738203",
-                summaryCell(sheet, "End Location").stringCellValue)
             listOf(headers.rowNum + 1, sheet.lastRowNum).forEach { index ->
                 assertEquals("Woodlands Checkpoint", sheet.getRow(index).getCell(2).stringCellValue)
                 assertEquals("738203", sheet.getRow(index).getCell(1).stringCellValue)
             }
-            assertEquals(restored.stops.size.toDouble(), summaryCell(sheet, "Total Parcel").numericCellValue, 0.0)
         }
     }
 
@@ -316,9 +300,15 @@ class ScheduleExcelTest {
             assertDateTime(requireNotNull(plan.stops[1].etaArrival), sheet.getRow(row + 3).getCell(12))
             assertDateTime(requireNotNull(plan.stops[1].etaLeave), sheet.getRow(row + 3).getCell(13))
             assertDateTime(base.stops[1].arrival, sheet.getRow(row + 3).getCell(4))
-            assertEquals("RM 99.79", summaryCell(sheet, "Tax MYR").stringCellValue)
-            assertEquals("3.60", summaryCell(sheet, "Rate").stringCellValue)
-            assertEquals("Paid in SGD", summaryCell(sheet, "Remark").stringCellValue)
+            for (index in 1..sheet.lastRowNum) {
+                for (column in listOf(4, 10, 12, 13, 14)) {
+                    val cell = sheet.getRow(index).getCell(column)
+                    if (cell.cellType == CellType.NUMERIC) {
+                        assertFalse("Date should not be displayed in column $column",
+                            formatter.formatCellValue(cell).contains("2026"))
+                    }
+                }
+            }
         }
     }
 
