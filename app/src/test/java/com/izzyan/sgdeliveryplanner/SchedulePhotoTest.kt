@@ -39,23 +39,109 @@ class SchedulePhotoTest {
             LocalDateTime.of(2026, 10, 14, 23, 55), 8, "Normal", emptyList())
     }
 
-    @Test fun photoContainsOnlyFourColumnsAndAllFiftyStopsInOriginalOrder() {
+    @Test fun photoContainsOnlyDeliveryRowsAndAllFiftyStopsInOriginalOrder() {
         val plan = route(50)
         val rows = schedulePhotoRows(plan)
-        assertEquals(52, rows.size)
-        assertEquals(listOf("START", "738203", "Woodlands", "11:55 PM"), rows.first().cells())
+        assertEquals("No START or END depot rows in shared photo", 50, rows.size)
         plan.stops.forEachIndexed { index, stop ->
-            val cells = rows[index + 1].cells()
-            assertEquals(4, cells.size)
+            val cells = rows[index].cells()
+            assertEquals(5, cells.size)
             assertEquals((index + 1).toString(), cells[0])
             assertEquals(stop.place.postal, cells[1])
-            assertEquals(stop.place.area, cells[2])
-            assertFalse(cells[3].contains("2026"))
-            assertTrue(cells[3].matches(Regex("\\d{1,2}:\\d{2} [AP]M")))
+            assertEquals("—", cells[2]) // Manual postal has no customer name.
+            assertEquals(stop.place.area, cells[3])
+            assertFalse(cells[4].contains("2026"))
+            assertTrue(cells[4].matches(Regex("""\d{1,2}:\d{2} [AP]M""")))
         }
-        assertEquals("END", rows.last().stop)
-        assertTrue(rows.last().arrival.matches(Regex("\\d{1,2}:\\d{2} [AP]M")))
+        assertEquals("1", rows.first().stop)
+        assertEquals("50", rows.last().stop)
+        assertFalse(rows.any { it.stop == "START" || it.stop == "END" })
         assertFalse(rows.any { it.cells().any { field -> field.contains("Example address") } })
+        // Keep the full depot-to-depot plan intact in Route page and persisted history.
+        assertEquals(50, plan.stops.size)
+        assertEquals("738203", plan.startLocation.postalCode)
+        assertTrue(plan.returned.isNotBlank())
+    }
+
+    @Test fun deliveryAtSamePostalAsDepotStillAppearsInPhoto() {
+        val original = route(2)
+        val actualDepotDelivery = original.stops[0].copy(
+            place = original.stops[0].place.copy(postal = "738203", area = "Woodlands"),
+            order = CustomerOrder(postalCode = "738203", customerName = "Test Recipient"))
+        val plan = original.copy(stops = listOf(actualDepotDelivery, original.stops[1]))
+        val rows = schedulePhotoRows(plan)
+        assertEquals(2, rows.size)
+        assertEquals("738203", rows[0].postalCode)
+        assertEquals("Test Recipient", rows[0].customerName)
+        assertEquals("1", rows[0].stop)
+        assertEquals("2", rows[1].stop)
+    }
+
+    @Test fun customerNameAppearsBesidePostalForSpecificParcelIncludingDuplicatePostals() {
+        val original = route(3)
+        val duplicatePostal = original.stops[0].place.postal
+        val otherPostal = original.stops[2].place.postal
+        val named = original.copy(stops = listOf(
+            original.stops[0].copy(
+                order = CustomerOrder(postalCode = duplicatePostal, customerName = "Cik Jamaliah Hassan",
+                    phoneNumber = "+6591234567", fullAddress = "Private address A",
+                    parcelPrice = java.math.BigDecimal("200.00"), originalMessage = "Private order A")
+            ),
+            original.stops[1].copy(
+                place = original.stops[0].place,
+                order = CustomerOrder(postalCode = duplicatePostal, customerName = "Nurul Atikah Binti Abidin",
+                    phoneNumber = "+6599999999", fullAddress = "Private address B",
+                    originalMessage = "Private order B")
+            ),
+            original.stops[2].copy(
+                order = CustomerOrder(postalCode = otherPostal,
+                    customerName = "    ", originalMessage = "No name")
+            )
+        ))
+        val rows = schedulePhotoRows(named)
+        assertEquals(3, rows.size)
+        assertEquals("1", rows[0].stop)
+        assertEquals("2", rows[1].stop)
+        assertEquals("3", rows[2].stop)
+        assertEquals(duplicatePostal, rows[0].postalCode)
+        assertEquals("Cik Jamaliah Hassan", rows[0].customerName)
+        assertEquals(duplicatePostal, rows[1].postalCode)
+        assertEquals("Nurul Atikah Binti Abidin", rows[1].customerName)
+        assertEquals("—", rows[2].customerName)
+        assertFalse(rows.any { it.stop == "START" || it.stop == "END" })
+        assertFalse(rows.any { it.cells().any { cell ->
+            cell.contains("Private address") || cell.contains("Private order") ||
+                cell.contains("+65") || cell.contains("200.00")
+        } })
+        // Customer names must not be replaced by another parcel at a shared postal code.
+        assertEquals(listOf("Cik Jamaliah Hassan", "Nurul Atikah Binti Abidin", "—"),
+            rows.map { it.customerName })
+    }
+
+    @Test fun veryLongCustomerNameWrapsAndFullJpegIncludesAllStops() {
+        val original = route(50)
+        val longName = "Nurul Atikah Binti Abidin / Second Name Mohd Zulkarnaini " +
+            "and additional long customer text safely wrapped"
+        val modified = original.copy(stops = original.stops.mapIndexed { index, stop ->
+            if (index == 17) stop.copy(
+                order = CustomerOrder(postalCode = stop.place.postal, customerName = longName))
+            else stop
+        })
+        assertEquals(longName, schedulePhotoRows(modified)[17].customerName)
+        val baselineHeight = generateSchedulePhoto(context, original).let { normal ->
+            try {
+                val image = requireNotNull(BitmapFactory.decodeFile(normal.absolutePath))
+                image.height.also { image.recycle() }
+            } finally { normal.delete() }
+        }
+        val expanded = generateSchedulePhoto(context, modified)
+        try {
+            val bitmap = requireNotNull(BitmapFactory.decodeFile(expanded.absolutePath))
+            try {
+                assertEquals(1440, bitmap.width)
+                assertTrue("Long names must not be truncated", bitmap.height > baselineHeight)
+            } finally { bitmap.recycle() }
+        } finally { expanded.delete() }
     }
 
     @Test fun photoIsRealJpegAndShareIntentGrantsReadOnlyAccessToOneFile() {
@@ -70,7 +156,7 @@ class SchedulePhotoTest {
             assertEquals(0xD8, bytes[1].toInt() and 0xFF)
             val bitmap = requireNotNull(BitmapFactory.decodeFile(file.absolutePath))
             try {
-                assertEquals(1080, bitmap.width)
+                assertEquals(1440, bitmap.width)
                 assertTrue(bitmap.height > 250)
             } finally {
                 bitmap.recycle()

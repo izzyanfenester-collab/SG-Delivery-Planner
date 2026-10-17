@@ -20,14 +20,15 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
-/** Exactly four visible columns; no customer information, summary, or hidden route fields. */
+/** Five visible columns; only the imported customer name is included (never phone, address or price). */
 internal data class SchedulePhotoRow(
     val stop: String,
     val postalCode: String,
+    val customerName: String,
     val area: String,
     val arrival: String
 ) {
-    fun cells(): List<String> = listOf(stop, postalCode, area, arrival)
+    fun cells(): List<String> = listOf(stop, postalCode, customerName, area, arrival)
 }
 
 private val photoTimeFormat: DateTimeFormatter =
@@ -36,21 +37,21 @@ private val photoTimeFormat: DateTimeFormatter =
 private fun photoTime(value: String): String =
     runCatching { LocalDateTime.parse(value).format(photoTimeFormat) }.getOrDefault(value)
 
-/** Share START, every saved stop in optimized order, and END, independent of horizontal scrolling. */
-internal fun schedulePhotoRows(plan: Plan): List<SchedulePhotoRow> {
-    val origin = plan.startLocation.asPlace()
-    return buildList {
-        add(SchedulePhotoRow("START", origin.postal, origin.area, photoTime(plan.start)))
-        plan.stops.forEachIndexed { index, stop ->
-            add(SchedulePhotoRow((index + 1).toString(), stop.place.postal,
-                stop.place.area, photoTime(stop.arrival)))
-        }
-        add(SchedulePhotoRow("END", origin.postal, origin.area, photoTime(plan.returned)))
+/**
+ * Share delivery stops ONLY, in optimized order. The START/END depot remains in the
+ * on-screen Route schedule, but is deliberately omitted from the shared JPEG.
+ * Do not filter on depot postal: a genuine parcel at the same postal is still delivered.
+ */
+internal fun schedulePhotoRows(plan: Plan): List<SchedulePhotoRow> =
+    plan.stops.mapIndexed { index, stop ->
+        SchedulePhotoRow((index + 1).toString(), stop.place.postal,
+            stop.order?.customerName?.trim()?.takeIf { it.isNotEmpty() } ?: "—",
+            stop.place.area, photoTime(stop.arrival))
     }
-}
 
-private const val PHOTO_WIDTH = 1080
-private val photoWidths = intArrayOf(138, 220, 482, 192) // 1032 + 24px side margins
+private const val PHOTO_WIDTH = 1440
+// Stop | Postal Code | Customer Name | Area | Arrival, totals 1392 + 48px side margins.
+private val photoWidths = intArrayOf(112, 204, 344, 512, 220)
 private const val PHOTO_MARGIN = 24f
 private const val PHOTO_PADDING = 11f
 
@@ -74,7 +75,7 @@ private fun photoLayout(text: String, width: Int, header: Boolean): StaticLayout
  * Only a temporary private cache file is created; route history and proofs are never touched.
  */
 internal fun generateSchedulePhoto(context: Context, plan: Plan): File {
-    val entries = listOf(SchedulePhotoRow("Stop", "Postal Code", "Area", "Arrival")) +
+    val entries = listOf(SchedulePhotoRow("Stop", "Postal Code", "Customer Name", "Area", "Arrival")) +
         schedulePhotoRows(plan)
     val lines = entries.mapIndexed { index, entry ->
         val layouts = entry.cells().mapIndexed { col, cell ->
