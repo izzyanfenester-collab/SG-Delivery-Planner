@@ -37,19 +37,17 @@ private val photoTimeFormat: DateTimeFormatter =
 private fun photoTime(value: String): String =
     runCatching { LocalDateTime.parse(value).format(photoTimeFormat) }.getOrDefault(value)
 
-/** Share START, every saved stop in optimized order, and END, independent of horizontal scrolling. */
-internal fun schedulePhotoRows(plan: Plan): List<SchedulePhotoRow> {
-    val origin = plan.startLocation.asPlace()
-    return buildList {
-        add(SchedulePhotoRow("START", origin.postal, "—", origin.area, photoTime(plan.start)))
-        plan.stops.forEachIndexed { index, stop ->
-            add(SchedulePhotoRow((index + 1).toString(), stop.place.postal,
-                stop.order?.customerName?.trim()?.takeIf { it.isNotEmpty() } ?: "—",
-                stop.place.area, photoTime(stop.arrival)))
-        }
-        add(SchedulePhotoRow("END", origin.postal, "—", origin.area, photoTime(plan.returned)))
+/**
+ * Share delivery stops ONLY, in optimized order. The START/END depot remains in the
+ * on-screen Route schedule, but is deliberately omitted from the shared JPEG.
+ * Do not filter on depot postal: a genuine parcel at the same postal is still delivered.
+ */
+internal fun schedulePhotoRows(plan: Plan): List<SchedulePhotoRow> =
+    plan.stops.mapIndexed { index, stop ->
+        SchedulePhotoRow((index + 1).toString(), stop.place.postal,
+            stop.order?.customerName?.trim()?.takeIf { it.isNotEmpty() } ?: "—",
+            stop.place.area, photoTime(stop.arrival))
     }
-}
 
 private const val PHOTO_WIDTH = 1440
 // Stop | Postal Code | Customer Name | Area | Arrival, totals 1392 + 48px side margins.
