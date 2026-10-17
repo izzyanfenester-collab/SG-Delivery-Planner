@@ -51,7 +51,7 @@ class SchedulePhotoTest {
             assertEquals("—", cells[2]) // Manual postal has no customer name.
             assertEquals(stop.place.area, cells[3])
             assertFalse(cells[4].contains("2026"))
-            assertTrue(cells[4].matches(Regex("\\d{1,2}:\\d{2} [AP]M")))
+            assertTrue(cells[4].matches(Regex("""\d{1,2}:\d{2} [AP]M""")))
         }
         assertEquals("1", rows.first().stop)
         assertEquals("50", rows.last().stop)
