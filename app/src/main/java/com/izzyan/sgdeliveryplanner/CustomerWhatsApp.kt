@@ -43,8 +43,10 @@ fun deliveryWhatsAppMessageDraft(stop: Stop): String? {
     fun formatted(value: LocalDateTime) = value.format(formatter).lowercase(Locale.ENGLISH)
     return buildString {
         appendLine("Hi! I’ll be delivering your COD parcel today.")
-        append("COD Amount: S$").appendLine(amount.setScale(2, RoundingMode.HALF_UP).toPlainString())
-        append("ETA : ").append(formatted(eta)).append(" - ").appendLine(formatted(eta.plusMinutes(10)))
+        appendLine()
+        append("*COD Amount: S$").append(amount.setScale(2, RoundingMode.HALF_UP).toPlainString()).appendLine("*")
+        append("*ETA : ").append(formatted(eta)).append(" - ").append(formatted(eta.plusMinutes(10))).appendLine("*")
+        appendLine()
         appendLine("Order Details :")
         appendLine("=================================")
         appendLine(original)
