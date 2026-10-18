@@ -51,7 +51,7 @@ class SchedulePhotoTest {
             assertEquals("—", cells[2]) // Manual postal has no customer name.
             assertEquals(stop.place.area, cells[3])
             assertFalse(cells[4].contains("2026"))
-            assertTrue(cells[4].matches(Regex("""\\d{1,2}:\\d{2} [AP]M – \\d{1,2}:\\d{2} [AP]M""")))
+            assertTrue(cells[4].matches(Regex("""\d{1,2}:\d{2} [AP]M – \d{1,2}:\d{2} [AP]M""")))
             val formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
             val expectedPeriod = listOf(stop.arrival, stop.leave).joinToString(" – ") {
                 LocalDateTime.parse(it).format(formatter)
