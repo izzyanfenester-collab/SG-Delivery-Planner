@@ -114,8 +114,16 @@ fun HistoryViewOnly(plan:Plan,onClose:()->Unit) {
                             PaymentModeRow(stop.order)
                             if(stop.holdReason!=null) Text("Hold reasons : "+stop.holdReason)
                             if(stop.holdNote!=null) Text("Hold notes : "+stop.holdNote)
-                            ReadOnlyHistoryProof(stop.order?.paymentProofFileId,"Proof of Payment")
-                            ReadOnlyHistoryProof(stop.order?.proofFileId,"Proof of Delivery")
+                            // Keep both proof types visible in the same row, even when one is missing.
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),
+                                verticalAlignment=Alignment.Top) {
+                                Column(Modifier.weight(1f)) {
+                                    ReadOnlyHistoryProof(stop.order?.paymentProofFileId,"Proof of Payment")
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    ReadOnlyHistoryProof(stop.order?.proofFileId,"Proof of Delivery")
+                                }
+                            }
                             OutlinedButton(onClick={reportIndex=index},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {
                                 Text("View / Share Delivery Report")
                             }
