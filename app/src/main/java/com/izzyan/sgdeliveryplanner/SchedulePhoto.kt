@@ -26,9 +26,9 @@ internal data class SchedulePhotoRow(
     val postalCode: String,
     val customerName: String,
     val area: String,
-    val arrival: String
+    val deliveryPeriod: String
 ) {
-    fun cells(): List<String> = listOf(stop, postalCode, customerName, area, arrival)
+    fun cells(): List<String> = listOf(stop, postalCode, customerName, area, deliveryPeriod)
 }
 
 private val photoTimeFormat: DateTimeFormatter =
@@ -46,12 +46,12 @@ internal fun schedulePhotoRows(plan: Plan): List<SchedulePhotoRow> =
     plan.stops.mapIndexed { index, stop ->
         SchedulePhotoRow((index + 1).toString(), stop.place.postal,
             stop.order?.customerName?.trim()?.takeIf { it.isNotEmpty() } ?: "—",
-            stop.place.area, photoTime(stop.arrival))
+            stop.place.area, "${photoTime(stop.arrival)} – ${photoTime(stop.leave)}")
     }
 
 private const val PHOTO_WIDTH = 1440
-// Stop | Postal Code | Customer Name | Area | Arrival, totals 1392 + 48px side margins.
-private val photoWidths = intArrayOf(112, 204, 344, 512, 220)
+// Stop | Postal Code | Customer Name | Area | Delivery Period, totals 1392 + 48px side margins.
+private val photoWidths = intArrayOf(112, 204, 344, 392, 340)
 private const val PHOTO_MARGIN = 24f
 private const val PHOTO_PADDING = 11f
 
@@ -75,7 +75,7 @@ private fun photoLayout(text: String, width: Int, header: Boolean): StaticLayout
  * Only a temporary private cache file is created; route history and proofs are never touched.
  */
 internal fun generateSchedulePhoto(context: Context, plan: Plan): File {
-    val entries = listOf(SchedulePhotoRow("Stop", "Postal Code", "Customer Name", "Area", "Arrival")) +
+    val entries = listOf(SchedulePhotoRow("Stop", "Postal Code", "Customer Name", "Area", "Delivery Period")) +
         schedulePhotoRows(plan)
     val lines = entries.mapIndexed { index, entry ->
         val layouts = entry.cells().mapIndexed { col, cell ->
