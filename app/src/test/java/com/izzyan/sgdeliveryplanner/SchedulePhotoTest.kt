@@ -51,7 +51,12 @@ class SchedulePhotoTest {
             assertEquals("—", cells[2]) // Manual postal has no customer name.
             assertEquals(stop.place.area, cells[3])
             assertFalse(cells[4].contains("2026"))
-            assertTrue(cells[4].matches(Regex("""\d{1,2}:\d{2} [AP]M""")))
+            assertTrue(cells[4].matches(Regex("""\\d{1,2}:\\d{2} [AP]M – \\d{1,2}:\\d{2} [AP]M""")))
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+            val expectedPeriod = listOf(stop.arrival, stop.leave).joinToString(" – ") {
+                LocalDateTime.parse(it).format(formatter)
+            }
+            assertEquals("Delivery period must match this stop's arrival and departure", expectedPeriod, cells[4])
         }
         assertEquals("1", rows.first().stop)
         assertEquals("50", rows.last().stop)
@@ -61,6 +66,20 @@ class SchedulePhotoTest {
         assertEquals(50, plan.stops.size)
         assertEquals("738203", plan.startLocation.postalCode)
         assertTrue(plan.returned.isNotBlank())
+    }
+
+    @Test fun deliveryPeriodShowsStartAndFinishEvenWhenCrossingMidnight() {
+        val original = route(1)
+        val adjustedStop = original.stops.single().copy(
+            arrival = "2026-10-18T23:57:00",
+            leave = "2026-10-19T00:05:00"
+        )
+        val rows = schedulePhotoRows(original.copy(stops = listOf(adjustedStop)))
+        assertEquals("11:57 PM – 12:05 AM", rows.single().deliveryPeriod)
+        assertEquals(5, rows.single().cells().size)
+        // The shared image changes presentation only; the stored stop is unchanged.
+        assertEquals("2026-10-18T23:57:00", adjustedStop.arrival)
+        assertEquals("2026-10-19T00:05:00", adjustedStop.leave)
     }
 
     @Test fun deliveryAtSamePostalAsDepotStillAppearsInPhoto() {
