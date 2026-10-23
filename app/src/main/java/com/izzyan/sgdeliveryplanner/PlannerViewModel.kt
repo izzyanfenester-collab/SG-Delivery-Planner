@@ -304,7 +304,12 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             catch (e: PostalResolutionException) {
                 failedRoutePostalChecks = e.failures
                 reviewFailedRoutePostals = true
-                message = "Cannot optimize: ${e.failures.size} postal code(s) could not be verified. Tap Review Failed Orders to check the affected customers, edit their order text and retry."
+                message = formattedPostalFailures(e.failures) + "\nTap Review Failed Orders to correct or retry."
+            }
+            catch (e: RoutingPostalException) {
+                failedRoutePostalChecks = e.failures
+                reviewFailedRoutePostals = true
+                message = formattedPostalFailures(e.failures) + "\nAddress lookup succeeded, but these roads could not be matched by the routing server. Tap Review Failed Orders."
             }
             catch (e: Exception) { message = englishError(e, "Could not plan your route. Check your internet connection and postal codes, then try again.") }
             finally { busy = false }
