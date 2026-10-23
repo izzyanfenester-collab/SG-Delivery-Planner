@@ -96,9 +96,17 @@ class Repository(context:Context) {
    val table=try {
      api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
     } catch(e:HttpException) {
-     if(e.code()==400) throw routingHttpFailure(e, places, "distance table") else throw e
+     if(e.code()==400) {
+       val problem = routingHttpFailure(e, places, "distance table")
+       progress("Checking which postal code blocks road routing…")
+       throw isolateNoRouteIfNeeded(problem, api, root, places + places.first())
+     } else throw e
     }
-   if(table.get("code")?.asString != "Ok") throw routingProblem(table, places, "distance table")
+   if(table.get("code")?.asString != "Ok") {
+      val problem = routingProblem(table, places, "distance table")
+      progress("Checking which postal code blocks road routing…")
+      throw isolateNoRouteIfNeeded(problem, api, root, places + places.first())
+    }
    fun matrix(name:String):Array<DoubleArray> = Array(n) { i -> DoubleArray(n) { j ->
     val cell=table.getAsJsonArray(name)[i].asJsonArray[j]
     if(cell.isJsonNull) throw noDrivingConnection(places[i],i,places[j],j)
@@ -121,9 +129,17 @@ class Repository(context:Context) {
    val route=try {
     api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
    } catch(e:HttpException) {
-    if(e.code()==400) throw routingHttpFailure(e, routePlaces, "route map") else throw e
+    if(e.code()==400) {
+       val problem = routingHttpFailure(e, routePlaces, "route map")
+       progress("Checking which postal code blocks road routing…")
+       throw isolateNoRouteIfNeeded(problem, api, root, routePlaces)
+     } else throw e
    }
-  if(route.get("code")?.asString != "Ok") throw routingProblem(route, routePlaces, "route map")
+  if(route.get("code")?.asString != "Ok") {
+     val problem = routingProblem(route, routePlaces, "route map")
+     progress("Checking which postal code blocks road routing…")
+     throw isolateNoRouteIfNeeded(problem, api, root, routePlaces)
+   }
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
   val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location)
   (if (orders.isEmpty()) scheduled else expandCustomerOrders(scheduled, orders)).also { save(it) }
