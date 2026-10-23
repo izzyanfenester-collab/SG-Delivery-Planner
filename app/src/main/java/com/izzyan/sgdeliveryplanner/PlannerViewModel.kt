@@ -81,10 +81,11 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         draftOrders = existing + orders
         input = draftOrders.joinToString("\n") { it.postalCode }
         failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false
+        reviewAllRoutePostals = false; routingReviewReason = ""
         persist(); importOrdersDialog = false; message = ""
         notice = "${orders.size} orders imported.\nDuplicate postals preserved.\n$failed ${if(failed==1) "order" else "orders"} failed."
     }
-    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false; persist() }
+    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false; reviewAllRoutePostals = false; routingReviewReason = ""; persist() }
     internal fun planningOrders(): List<CustomerOrder> {
         if (draftOrders.isEmpty()) return parseInput(input).valid.map { CustomerOrder(postalCode = it) }
         val queues = draftOrders.groupBy { it.postalCode }.mapValues { it.value.toMutableList() }
