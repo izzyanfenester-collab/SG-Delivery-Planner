@@ -300,6 +300,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         if (orders.size > 50) { message = "Routes support at most 50 deliveries."; return }
         failedRoutePostalChecks = emptyList()
         reviewFailedRoutePostals = false
+        reviewAllRoutePostals = false
+        routingReviewReason = ""
         val routeStart = scheduledStart()
         persist()
         refreshExchangeRate()
