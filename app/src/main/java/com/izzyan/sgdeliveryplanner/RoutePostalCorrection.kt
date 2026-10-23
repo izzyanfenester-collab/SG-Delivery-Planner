@@ -19,11 +19,18 @@ fun correctRoutePostalOrder(
     val text = editedText.trim()
     if (text.isEmpty()) return RoutePostalEditResult(error = "Enter the corrected order or postal code.")
 
-    val updated = if (old.originalMessage.isNullOrBlank()) {
-        if (!text.matches(Regex("[0-9]{6}"))) {
-            return RoutePostalEditResult(error = "Enter exactly one six-digit Singapore postal code.")
-        }
-        old.copy(postalCode = text)
+    val updated = if (text.matches(Regex("[0-9]{6}"))) {
+        // Postal-only editing works for WhatsApp imports too. Keep order identity,
+        // payment, price and proofs, and only replace the old six-digit code in
+        // customer-supplied address/original message. Do not touch other orders.
+        val oldPostal = Regex("(?<!\\\\d)${Regex.escape(old.postalCode)}(?!\\\\d)")
+        old.copy(
+            postalCode = text,
+            fullAddress = old.fullAddress?.replace(oldPostal, text),
+            originalMessage = old.originalMessage?.replace(oldPostal, text)
+        )
+    } else if (old.originalMessage.isNullOrBlank()) {
+        return RoutePostalEditResult(error = "Enter exactly one six-digit Singapore postal code.")
     } else {
         val retry = parseCustomerOrders(text)
         if (retry.failed != 0 || retry.orders.size != 1) {
