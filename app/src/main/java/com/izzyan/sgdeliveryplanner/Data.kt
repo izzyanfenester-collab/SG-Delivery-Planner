@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import retrofit2.HttpException
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Url
@@ -67,7 +68,7 @@ class Repository(context:Context) {
    catch(e:CancellationException){throw e}
    // Stop persistent throttling without issuing requests for the remaining postal codes.
    catch(e:OneMapRateLimitError){throw e}
-   catch(e:Exception){ Result.failure<Place>(PlannerError("$code: ${englishError(e, "Could not find the address. Check the postal code and try again.")}", e)) }
+   catch(e:Exception){ Result.failure<Place>(PlannerError(englishError(e, "Could not find the address. Check the postal code and try again."), e)) }
   }
   val failures=resolved.mapIndexedNotNull { index, result ->
    result.exceptionOrNull()?.let { PostalLookupFailure(codes[index],
@@ -92,11 +93,15 @@ class Repository(context:Context) {
    meters=Array(n) { i -> DoubleArray(n) { j -> cached[i][j]!!.km*1000 } }
    seconds=Array(n) { i -> DoubleArray(n) { j -> cached[i][j]!!.baseSeconds } }
   } else {
-   val table=api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
-   checkPlanning(table.get("code")?.asString == "Ok") { "The routing service could not calculate driving times. Try again or change the routing server in Settings." }
+   val table=try {
+     api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
+    } catch(e:HttpException) {
+     if(e.code()==400) throw routingHttpFailure(e, places, "distance table") else throw e
+    }
+   if(table.get("code")?.asString != "Ok") throw routingProblem(table, places, "distance table")
    fun matrix(name:String):Array<DoubleArray> = Array(n) { i -> DoubleArray(n) { j ->
     val cell=table.getAsJsonArray(name)[i].asJsonArray[j]
-    checkPlanning(!cell.isJsonNull) { "No driving route was found between ${places[i].address} and ${places[j].address}. Check the locations or change the routing server in Settings." }
+    if(cell.isJsonNull) throw noDrivingConnection(places[i],i,places[j],j)
     cell.asDouble.also { checkPlanning(it.isFinite() && it>=0) { "The routing service returned invalid travel information. Please try again." } }
    } }
    meters=matrix("distances"); seconds=matrix("durations")
@@ -112,8 +117,13 @@ class Repository(context:Context) {
    dao.leg(CachedLeg(key,gson.toJson(leg),System.currentTimeMillis())); leg
   }
   progress("Loading the route map…")
-  val route=api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
-  checkPlanning(route.get("code")?.asString == "Ok") { "The route map is unavailable. Please try planning the route again." }
+  val routePlaces=path.map { places[it] }
+   val route=try {
+    api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
+   } catch(e:HttpException) {
+    if(e.code()==400) throw routingHttpFailure(e, routePlaces, "route map") else throw e
+   }
+  if(route.get("code")?.asString != "Ok") throw routingProblem(route, routePlaces, "route map")
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
   val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location)
   (if (orders.isEmpty()) scheduled else expandCustomerOrders(scheduled, orders)).also { save(it) }
