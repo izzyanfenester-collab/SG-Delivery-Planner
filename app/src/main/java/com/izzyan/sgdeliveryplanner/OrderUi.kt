@@ -233,6 +233,11 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     if (!vm.reviewFailedRoutePostals) return
 
     val orders = vm.planningOrders()
+    val reviewItems = if (vm.reviewAllRoutePostals)
+        orders.distinctBy { it.postalCode }.map { PostalLookupFailure(
+            it.postalCode, "OneMap address lookup succeeded. This postal code has NOT been confirmed invalid."
+        ) }
+    else vm.failedRoutePostalChecks
     var editingOrderId by remember { mutableStateOf<String?>(null) }
     var editedText by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
@@ -281,17 +286,23 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     } else {
         AlertDialog(
             onDismissRequest = { vm.reviewFailedRoutePostals = false },
-            title = { Text("Review Failed Postal Codes") },
+            title = { Text(if (vm.reviewAllRoutePostals) "Review / Edit Postal Codes" else "Review Failed Postal Codes") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Only the affected orders are listed. No parcels have been removed.",
+                    Text(if (vm.reviewAllRoutePostals)
+                        "The routing server did not identify a wrong postal code. All orders below are editable, but only change an address if you confirm it is incorrect. No parcels have been removed."
+                        else "OneMap could not verify the postal codes below. Only affected orders are listed. No parcels have been removed.",
                         style = MaterialTheme.typography.bodySmall)
-                    if (vm.failedRoutePostalChecks.isEmpty()) {
+                    if (vm.reviewAllRoutePostals) {
+                        Text(vm.routingReviewReason, color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (reviewItems.isEmpty()) {
                         Text("All reported postal codes have been edited. Retry optimization to verify the route.",
                             color = MaterialTheme.colorScheme.primary)
                     }
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(vm.failedRoutePostalChecks, key = { it.postalCode }) { failure ->
+                        items(reviewItems, key = { it.postalCode }) { failure ->
                             val affected = orders.filter { it.postalCode == failure.postalCode }
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp),
@@ -321,7 +332,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                             }
                         }
                     }
-                    Text("If the postal is correct but OneMap was unavailable, retry later. Do not guess or change a valid address just to bypass the error.",
+                    Text("If an address is correct, do not change it to bypass a server error. Retry first or change the routing server in Settings. Edited orders keep their own customer details.",
                         style = MaterialTheme.typography.bodySmall)
                 }
             },
