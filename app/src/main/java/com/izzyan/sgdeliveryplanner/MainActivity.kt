@@ -169,11 +169,15 @@ fun App(vm: PlannerViewModel) {
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(vm.message, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-                    if (vm.failedRoutePostalChecks.isNotEmpty() && vm.screen == "Home") {
+                    if (vm.screen == "Home" &&
+                        (vm.failedRoutePostalChecks.isNotEmpty() || vm.reviewAllRoutePostals)) {
                         OutlinedButton(
                             onClick = { vm.reviewFailedRoutePostals = true },
                             modifier = Modifier.padding(horizontal = 16.dp).heightIn(min = 48.dp)
-                        ) { Text("REVIEW FAILED ORDERS (${vm.failedRoutePostalChecks.size})") }
+                        ) {
+                            Text(if (vm.reviewAllRoutePostals) "REVIEW / EDIT POSTAL CODES"
+                                 else "REVIEW FAILED ORDERS (${vm.failedRoutePostalChecks.size})")
+                        }
                     }
                     TextButton(onClick = { vm.message = "" }) { Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer) }
                 }

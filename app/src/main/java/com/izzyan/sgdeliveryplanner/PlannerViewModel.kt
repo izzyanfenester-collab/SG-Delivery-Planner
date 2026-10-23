@@ -30,12 +30,29 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     var failedRoutePostalChecks by mutableStateOf<List<PostalLookupFailure>>(emptyList())
         private set
     var reviewFailedRoutePostals by mutableStateOf(false)
+    // A routing-service failure does not prove any postal code is bad. Offer editable
+    // inputs separately from confirmed OneMap lookup failures.
+    var reviewAllRoutePostals by mutableStateOf(false)
+        private set
+    var routingReviewReason by mutableStateOf("")
+        private set
+
+    internal fun postalValidationMessage(failures: List<PostalLookupFailure>): String {
+        val items = failures.take(8).joinToString("\n") { entry ->
+            val reason = entry.reason.removePrefix("${entry.postalCode}: ").trim()
+            "• ${entry.postalCode} — $reason"
+        }
+        val more = if (failures.size > 8) "\n...and ${failures.size - 8} more (tap Review Failed Orders)." else ""
+        return "Cannot optimize — OneMap could not verify these postal codes:\n$items$more\nTap Review Failed Orders to edit the affected customer or postal code, then retry."
+    }
 
     fun updatePostalInput(value: String) {
         if (busy) return
         input = value
         failedRoutePostalChecks = emptyList()
         reviewFailedRoutePostals = false
+        reviewAllRoutePostals = false
+        routingReviewReason = ""
         persist()
     }
 
@@ -64,10 +81,11 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         draftOrders = existing + orders
         input = draftOrders.joinToString("\n") { it.postalCode }
         failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false
+        reviewAllRoutePostals = false; routingReviewReason = ""
         persist(); importOrdersDialog = false; message = ""
         notice = "${orders.size} orders imported.\nDuplicate postals preserved.\n$failed ${if(failed==1) "order" else "orders"} failed."
     }
-    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false; persist() }
+    fun clearPostalCodes() { input = ""; draftOrders = emptyList(); failedRoutePostalChecks = emptyList(); reviewFailedRoutePostals = false; reviewAllRoutePostals = false; routingReviewReason = ""; persist() }
     internal fun planningOrders(): List<CustomerOrder> {
         if (draftOrders.isEmpty()) return parseInput(input).valid.map { CustomerOrder(postalCode = it) }
         val queues = draftOrders.groupBy { it.postalCode }.mapValues { it.value.toMutableList() }
@@ -283,6 +301,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         if (orders.size > 50) { message = "Routes support at most 50 deliveries."; return }
         failedRoutePostalChecks = emptyList()
         reviewFailedRoutePostals = false
+        reviewAllRoutePostals = false
+        routingReviewReason = ""
         val routeStart = scheduledStart()
         persist()
         refreshExchangeRate()
@@ -303,8 +323,24 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             } catch (e: CancellationException) { throw e }
             catch (e: PostalResolutionException) {
                 failedRoutePostalChecks = e.failures
+                reviewAllRoutePostals = false
                 reviewFailedRoutePostals = true
-                message = "Cannot optimize: ${e.failures.size} postal code(s) could not be verified. Tap Review Failed Orders to check the affected customers, edit their order text and retry."
+                message = postalValidationMessage(e.failures)
+            }
+            catch (e: RoadConnectionException) {
+                // This pair is confirmed unreachable by the routing matrix, not confirmed invalid.
+                failedRoutePostalChecks = emptyList()
+                routingReviewReason = e.englishMessage
+                reviewAllRoutePostals = true
+                reviewFailedRoutePostals = false
+                message = e.englishMessage
+            }
+            catch (e: RoadRoutingException) {
+                failedRoutePostalChecks = emptyList()
+                routingReviewReason = e.englishMessage
+                reviewAllRoutePostals = true
+                reviewFailedRoutePostals = false
+                message = e.englishMessage
             }
             catch (e: Exception) { message = englishError(e, "Could not plan your route. Check your internet connection and postal codes, then try again.") }
             finally { busy = false }

@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 internal enum class NavigationChoice(val label: String, val packageName: String? = null) {
-    BUILT_IN("Built-in GPS"), GOOGLE_MAPS("Google Maps", "com.google.android.apps.maps"), WAZE("Waze", "com.waze")
+    BUILT_IN("Built-in GPS"), GOOGLE_MAPS("Google Maps", "com.google.android.apps.maps"), TOMTOM("TomTom - Maps & Traffic", "com.tomtom.speedcams.android.map")
 }
 
 /** Stored independently of route/history data; unknown legacy values safely mean Ask every time. */
@@ -72,9 +72,9 @@ internal fun externalNavigationIntent(stop: Place, choice: NavigationChoice): In
         else listOf(stop.address.trim(), "Singapore", stop.postal.trim()).filter { it.isNotBlank() }.joinToString(" ")
     val uri = when (choice) {
         NavigationChoice.GOOGLE_MAPS -> Uri.parse("google.navigation:q=${Uri.encode(destination)}&mode=d")
-        NavigationChoice.WAZE -> Uri.Builder().scheme("waze").authority("")
-            .appendQueryParameter(if (GpsPoint(stop.lat, stop.lon).valid()) "ll" else "q", destination)
-            .appendQueryParameter("navigate", "yes").build()
+        // Geo deep link is the standard Android map destination request. TomTom's
+        // consumer app may not support it on every version; handled below.
+        NavigationChoice.TOMTOM -> Uri.parse("geo:0,0?q=" + Uri.encode(destination))
         else -> error("Internal navigation uses the existing activity")
     }
     return Intent(Intent.ACTION_VIEW, uri).setPackage(choice.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -87,7 +87,18 @@ internal fun openDeliveryNavigation(context: Context, plan: Plan, choice: Naviga
         val intent = if (choice == NavigationChoice.BUILT_IN) builtInNavigationIntent(context, plan) ?: return false
             else externalNavigationIntent(stop, choice)
         if (choice != NavigationChoice.BUILT_IN && intent.resolveActivity(context.packageManager) == null) {
-            Toast.makeText(context, "${choice.label} is not installed.", Toast.LENGTH_LONG).show()
+            if (choice == NavigationChoice.TOMTOM) {
+                // Not all releases of the consumer TomTom app accept a geo deep link.
+                // Open TomTom directly if installed; never send the destination to a
+                // different maps app or misleadingly report it as uninstalled.
+                val launch = context.packageManager.getLaunchIntentForPackage(choice.packageName!!)
+                if (launch != null) {
+                    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    Toast.makeText(context, "TomTom opened. If the stop does not appear, enter its postal code in TomTom.", Toast.LENGTH_LONG).show()
+                    return true
+                }
+            }
+            Toast.makeText(context, "${choice.label} is not installed or cannot open this destination.", Toast.LENGTH_LONG).show()
             return false
         }
         context.startActivity(intent)

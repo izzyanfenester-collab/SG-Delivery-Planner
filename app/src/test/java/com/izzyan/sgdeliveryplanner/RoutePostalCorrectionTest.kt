@@ -89,6 +89,33 @@ class RoutePostalCorrectionTest {
         assertEquals(original.orderId,corrected.orderId)
     }
 
+    @Test fun importedWhatsAppCustomerCanCorrectOnlyPostalWhileKeepingAllFieldsAndProofs() {
+        val original = imported().copy(
+            proofFileId = "proof-id",
+            paymentProofFileId = "payment-id",
+            paymentProofUploadedAt = "2026-10-12T12:00:00"
+        )
+        val second = original.copy(orderId = "other", customerName = "Other")
+        val edited = requireNotNull(correctRoutePostalOrder(
+            listOf(original, second), original.orderId, "680573"
+        ).updatedOrders)
+        val fixed = edited.first()
+        assertEquals("680573", fixed.postalCode)
+        assertTrue(fixed.fullAddress.orEmpty().contains("680573"))
+        assertFalse(fixed.fullAddress.orEmpty().contains("731301"))
+        assertTrue(fixed.originalMessage.orEmpty().contains("680573"))
+        assertFalse(fixed.originalMessage.orEmpty().contains("731301"))
+        assertEquals(original.customerName, fixed.customerName)
+        assertEquals(original.phoneNumber, fixed.phoneNumber)
+        assertEquals(original.parcelPrice, fixed.parcelPrice)
+        assertEquals(original.paymentStatus, fixed.paymentStatus)
+        assertEquals(original.orderId, fixed.orderId)
+        assertEquals(original.proofFileId, fixed.proofFileId)
+        assertEquals(original.paymentProofFileId, fixed.paymentProofFileId)
+        assertEquals(original.paymentProofUploadedAt, fixed.paymentProofUploadedAt)
+        assertEquals(second, edited.last())
+    }
+
     @Test fun staleOrderIdIsRejected() {
         val original = imported()
         val result = correctRoutePostalOrder(listOf(original),"wrong",badText)

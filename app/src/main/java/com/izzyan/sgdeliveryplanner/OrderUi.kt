@@ -233,32 +233,43 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     if (!vm.reviewFailedRoutePostals) return
 
     val orders = vm.planningOrders()
+    val reviewItems = if (vm.reviewAllRoutePostals)
+        orders.distinctBy { it.postalCode }.map { PostalLookupFailure(
+            it.postalCode, "OneMap address lookup succeeded. This postal code has NOT been confirmed invalid."
+        ) }
+    else vm.failedRoutePostalChecks
     var editingOrderId by remember { mutableStateOf<String?>(null) }
     var editedText by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
+    var editFullOrder by remember { mutableStateOf(false) }
     val editing = orders.firstOrNull { it.orderId == editingOrderId }
 
     if (editing != null) {
         val isWhatsApp = !editing.originalMessage.isNullOrBlank()
         AlertDialog(
             onDismissRequest = { editingOrderId = null; editError = null },
-            title = { Text(if (isWhatsApp) "Edit WhatsApp order" else "Edit postal code") },
+            title = { Text(if (editFullOrder) "Edit WhatsApp order" else "Edit postal code") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (isWhatsApp) "Correct this customer's order text, especially the address/postal. Other orders will not change."
-                        else "Enter the correct six-digit Singapore postal code. The other stops will not change.",
+                        if (editFullOrder) "Correct this customer's full WhatsApp order. Other orders will not change."
+                        else "Enter the correct six-digit Singapore postal code. Customer, price, proofs and other orders stay unchanged.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text("Customer: ${editing.customerName ?: "Manual postal entry"}")
                     OutlinedTextField(
                         value = editedText,
                         onValueChange = { editedText = it; editError = null },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = if (isWhatsApp) 230.dp else 70.dp),
-                        minLines = if (isWhatsApp) 8 else 1,
-                        maxLines = if (isWhatsApp) 14 else 1,
-                        label = { Text(if (isWhatsApp) "Full WhatsApp order text" else "Postal code") }
+                        modifier = Modifier.fillMaxWidth().heightIn(min = if (editFullOrder) 230.dp else 70.dp),
+                        minLines = if (editFullOrder) 8 else 1,
+                        maxLines = if (editFullOrder) 14 else 1,
+                        label = { Text(if (editFullOrder) "Full WhatsApp order text" else "Postal code") }
                     )
+                    if (isWhatsApp) TextButton(onClick = {
+                        editFullOrder = !editFullOrder
+                        editedText = if (editFullOrder) editing.originalMessage.orEmpty() else editing.postalCode
+                        editError = null
+                    }) { Text(if (editFullOrder) "EDIT POSTAL ONLY" else "EDIT FULL WHATSAPP ORDER") }
                     editError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
             },
@@ -281,17 +292,23 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     } else {
         AlertDialog(
             onDismissRequest = { vm.reviewFailedRoutePostals = false },
-            title = { Text("Review Failed Postal Codes") },
+            title = { Text(if (vm.reviewAllRoutePostals) "Review / Edit Postal Codes" else "Review Failed Postal Codes") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Only the affected orders are listed. No parcels have been removed.",
+                    Text(if (vm.reviewAllRoutePostals)
+                        "The routing server did not identify a wrong postal code. All orders below are editable, but only change an address if you confirm it is incorrect. No parcels have been removed."
+                        else "OneMap could not verify the postal codes below. Only affected orders are listed. No parcels have been removed.",
                         style = MaterialTheme.typography.bodySmall)
-                    if (vm.failedRoutePostalChecks.isEmpty()) {
+                    if (vm.reviewAllRoutePostals) {
+                        Text(vm.routingReviewReason, color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (reviewItems.isEmpty()) {
                         Text("All reported postal codes have been edited. Retry optimization to verify the route.",
                             color = MaterialTheme.colorScheme.primary)
                     }
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(vm.failedRoutePostalChecks, key = { it.postalCode }) { failure ->
+                        items(reviewItems, key = { it.postalCode }) { failure ->
                             val affected = orders.filter { it.postalCode == failure.postalCode }
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp),
@@ -312,16 +329,17 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                                             onClick = {
                                                 editingOrderId = order.orderId
-                                                editedText = order.originalMessage ?: order.postalCode
+                                                editFullOrder = false
+                                                editedText = order.postalCode
                                                 editError = null
                                             }
-                                        ) { Text(if (order.originalMessage.isNullOrBlank()) "Edit postal code" else "Edit text") }
+                                        ) { Text("Edit postal code") }
                                     }
                                 }
                             }
                         }
                     }
-                    Text("If the postal is correct but OneMap was unavailable, retry later. Do not guess or change a valid address just to bypass the error.",
+                    Text("If an address is correct, do not change it to bypass a server error. Retry first or change the routing server in Settings. Edited orders keep their own customer details.",
                         style = MaterialTheme.typography.bodySmall)
                 }
             },
