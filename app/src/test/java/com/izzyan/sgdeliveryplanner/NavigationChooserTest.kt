@@ -43,28 +43,28 @@ class NavigationChooserTest {
         assertNoPayload(intent)
     }
 
-    @Test fun wazeUsesOnlyCurrentStopCoordinatesAndStartsNavigation() {
+    @Test fun tomTomUsesOnlyTheCurrentDeliveryStopAndEncodesCoordinates() {
         val context = RecordingContext()
         val plan = plan()
-        installHandler(context, externalNavigationIntent(plan.stops[1].place, NavigationChoice.WAZE))
-        assertTrue(openDeliveryNavigation(context, plan, NavigationChoice.WAZE))
+        installHandler(context, externalNavigationIntent(plan.stops[1].place, NavigationChoice.TOMTOM))
+        assertTrue(openDeliveryNavigation(context, plan, NavigationChoice.TOMTOM))
         val intent = context.attempts.single()
-        assertEquals("com.waze", intent.`package`)
-        assertEquals("waze", intent.data!!.scheme)
-        assertEquals("1.352,103.8", intent.data!!.getQueryParameter("ll"))
-        assertEquals("yes", intent.data!!.getQueryParameter("navigate"))
-        assertEquals(setOf("ll", "navigate"), intent.data!!.queryParameterNames)
+        assertEquals("com.tomtom.speedcams.android.map", intent.`package`)
+        assertEquals("geo", intent.data!!.scheme)
+        assertEquals("geo:0,0?q=1.352%2C103.8", intent.data.toString())
+        assertEquals("0,0?q=1.352,103.8", intent.data!!.schemeSpecificPart)
         assertNoPayload(intent)
+        assertEquals(plan.stops[1].place.postal, "005002")
     }
 
     @Test fun missingCoordinatesFallBackToEncodedAddressOrPostalCode() {
         val stop = plan().stops[1].place.copy(lat = Double.NaN, lon = Double.NaN, address = "A & B Road #01-02")
         val maps = externalNavigationIntent(stop, NavigationChoice.GOOGLE_MAPS).data!!
         assertEquals("q=A%20%26%20B%20Road%20%2301-02%20Singapore%20005002&mode=d", maps.encodedSchemeSpecificPart)
-        val waze = externalNavigationIntent(stop.copy(address = ""), NavigationChoice.WAZE).data!!
-        assertEquals("Singapore 005002", waze.getQueryParameter("q"))
-        assertNull(waze.getQueryParameter("ll"))
-        assertEquals("yes", waze.getQueryParameter("navigate"))
+        val tomtom = externalNavigationIntent(stop.copy(address = ""), NavigationChoice.TOMTOM).data!!
+        assertEquals("geo", tomtom.scheme)
+        assertEquals("geo:0,0?q=Singapore%20005002", tomtom.toString())
+        assertFalse(tomtom.toString().contains("waze"))
     }
 
     @Test fun missingExternalAppsShowMessageAndNeverOpenAnotherAppOrBrowser() {
@@ -72,15 +72,15 @@ class NavigationChooserTest {
             val context = RecordingContext()
             assertFalse(openDeliveryNavigation(context, plan(), choice))
             assertTrue(context.attempts.isEmpty())
-            assertEquals("${choice.label} is not installed.", ShadowToast.getTextOfLatestToast())
+            assertEquals("${choice.label} is not installed or cannot open this destination.", ShadowToast.getTextOfLatestToast())
         }
     }
 
     @Test fun launchRaceAndSecurityDenialAreHandledWithoutFallback() {
         listOf(ActivityNotFoundException("Uninstalled"), SecurityException("Denied")).forEach { failure ->
             val context = RecordingContext(failure)
-            installHandler(context, externalNavigationIntent(plan().stops[1].place, NavigationChoice.WAZE))
-            assertFalse(openDeliveryNavigation(context, plan(), NavigationChoice.WAZE))
+            installHandler(context, externalNavigationIntent(plan().stops[1].place, NavigationChoice.TOMTOM))
+            assertFalse(openDeliveryNavigation(context, plan(), NavigationChoice.TOMTOM))
             assertEquals(1, context.attempts.size)
         }
     }

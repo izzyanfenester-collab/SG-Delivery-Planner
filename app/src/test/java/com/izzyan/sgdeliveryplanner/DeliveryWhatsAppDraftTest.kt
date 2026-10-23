@@ -61,7 +61,22 @@ class DeliveryWhatsAppDraftTest {
 
     @Test fun updatedEtaAndActualPriceUseExactRequestedWhatsAppTemplate() {
         val message = deliveryWhatsAppMessageDraft(stop())!!
-        assertTrue(message.startsWith("Hi! I’ll be delivering your COD parcel today.\nCOD Amount: S$75.00\nETA : 7.10pm - 7.20pm\nOrder Details :\n=================================\n"))
+        assertTrue(message.startsWith("Hi! I’ll be delivering your COD parcel today.\n\n*COD Amount: S$75.00*\n*ETA : 7.10pm - 7.20pm*\n\nOrder Details :\n=================================\n"))
+        val expected = buildString {
+            appendLine("Hi! I’ll be delivering your COD parcel today.")
+            appendLine()
+            appendLine("*COD Amount: S$75.00*")
+            appendLine("*ETA : 7.10pm - 7.20pm*")
+            appendLine()
+            appendLine("Order Details :")
+            appendLine("=================================")
+            appendLine(sampleMessage)
+            appendLine("=================================")
+            appendLine("To make the delivery process easier and faster, please have the exact cash ready.")
+            appendLine()
+            append("Thank you for your purchase with us! 🙏 We truly appreciate your support. We hope to serve you again for your next order. 😊")
+        }
+        assertEquals(expected, message)
         assertTrue(message.contains(sampleMessage))
         assertTrue(message.contains("No.telefon:\nhttps://wa.me/+6597298524"))
         assertTrue(message.contains("\n=================================\nTo make the delivery process easier and faster, please have the exact cash ready.\n\n"))
@@ -75,9 +90,9 @@ class DeliveryWhatsAppDraftTest {
 
     @Test fun plannedEtaFallbackWhenNoUpdatedEtaAndAcrossMidnight() {
         val planned = deliveryWhatsAppMessageDraft(stop(eta = null))!!
-        assertTrue(planned.contains("ETA : 7.21pm - 7.31pm"))
+        assertTrue(planned.contains("*ETA : 7.21pm - 7.31pm*"))
         val midnight = deliveryWhatsAppMessageDraft(stop(eta = "2026-10-13T23:55:00"))!!
-        assertTrue(midnight.contains("ETA : 11.55pm - 12.05am"))
+        assertTrue(midnight.contains("*ETA : 11.55pm - 12.05am*"))
     }
 
     @Test fun missingOriginalOrPriceNeverInventsCustomerOrderOrAmount() {
@@ -97,7 +112,7 @@ class DeliveryWhatsAppDraftTest {
         assertFalse(a.contains("Nama: Aminah"))
         assertTrue(b.contains("Nama: Aminah"))
         assertFalse(b.contains("Nama: Jaliah"))
-        assertTrue(b.contains("COD Amount: S$120.00"))
+        assertTrue(b.contains("*COD Amount: S$120.00*"))
         assertFalse(a.contains("1. GREEN"))
     }
 }

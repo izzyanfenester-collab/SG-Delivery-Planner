@@ -25,6 +25,14 @@ class NavigationPreferencesTest {
         context.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("defaultNavigation", "unknown").commit()
         assertNull(NavigationPreferences(context).default)
     }
+    @Test fun obsoleteWazeDefaultNeverSilentlyLaunchesTomTom() {
+        context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .edit().putString("defaultNavigation", "WAZE").commit()
+        assertNull(NavigationPreferences(context).default)
+        val choices=NavigationChoice.entries
+        assertTrue(choices.any { it.name=="TOMTOM" })
+        assertFalse(choices.any { it.name=="WAZE" })
+    }
     @Test fun defaultPersistsAcrossPreferenceRecreationAndAskEveryTimeClearsIt() {
         val prefs = NavigationPreferences(context)
         NavigationChoice.entries.forEach { choice ->
@@ -41,9 +49,9 @@ class NavigationPreferencesTest {
         assertTrue(prefs.launch(activity, plan(), NavigationChoice.BUILT_IN, false))
         assertNull(prefs.default)
         assertNull(NavigationPreferences(context).default)
-        prefs.updateDefault(NavigationChoice.WAZE)
+        prefs.updateDefault(NavigationChoice.TOMTOM)
         assertTrue(prefs.launch(activity, plan(), NavigationChoice.BUILT_IN, false))
-        assertEquals(NavigationChoice.WAZE, NavigationPreferences(context).default)
+        assertEquals(NavigationChoice.TOMTOM, NavigationPreferences(context).default)
     }
     @Test fun setDefaultLaunchesAndPersistsSelectedProvider() {
         val prefs = NavigationPreferences(context)
@@ -63,8 +71,8 @@ class NavigationPreferencesTest {
     }
     @Test fun explicitSetDefaultToUnavailableProviderPersistsUntilUserChangesIt() {
         val prefs = NavigationPreferences(context)
-        assertFalse(prefs.launch(activity, plan(), NavigationChoice.WAZE, true))
-        assertEquals(NavigationChoice.WAZE, NavigationPreferences(context).default)
+        assertFalse(prefs.launch(activity, plan(), NavigationChoice.TOMTOM, true))
+        assertEquals(NavigationChoice.TOMTOM, NavigationPreferences(context).default)
         prefs.updateDefault(null)
         assertNull(prefs.default)
     }
