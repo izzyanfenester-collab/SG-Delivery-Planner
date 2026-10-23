@@ -52,7 +52,7 @@ class NavigationChooserTest {
         assertEquals("com.tomtom.speedcams.android.map", intent.`package`)
         assertEquals("geo", intent.data!!.scheme)
         assertEquals("geo:0,0?q=1.352%2C103.8", intent.data.toString())
-        assertEquals("1.352,103.8", intent.data!!.getQueryParameter("q"))
+        assertEquals("0,0?q=1.352,103.8", intent.data!!.schemeSpecificPart)
         assertNoPayload(intent)
         assertEquals(plan.stops[1].place.postal, "005002")
     }
@@ -63,7 +63,7 @@ class NavigationChooserTest {
         assertEquals("q=A%20%26%20B%20Road%20%2301-02%20Singapore%20005002&mode=d", maps.encodedSchemeSpecificPart)
         val tomtom = externalNavigationIntent(stop.copy(address = ""), NavigationChoice.TOMTOM).data!!
         assertEquals("geo", tomtom.scheme)
-        assertEquals("Singapore 005002", tomtom.getQueryParameter("q"))
+        assertEquals("geo:0,0?q=Singapore%20005002", tomtom.toString())
         assertFalse(tomtom.toString().contains("waze"))
     }
 
