@@ -73,3 +73,76 @@ internal fun noDrivingConnection(from: Place, fromIndex: Int, to: Place, toIndex
     PlannerError("No drivable route found between ${routingLocationLabel(from,fromIndex)} and " +
         "${routingLocationLabel(to,toIndex)}. Check the road locations or another routing server. " +
         "This does not necessarily mean either postal code is invalid.")
+
+
+/** A bounded diagnostic for a generic NoRoute. Identify a stop ONLY when
+ * removing exactly that stop permits the original driving route to work.
+ * Ambiguous results or mapping-server outages leave the generic error intact.
+ */
+internal suspend fun isolateNoRoutePostal(
+    api: Api,
+    root: String,
+    routePlaces: List<Place>
+): PostalLookupFailure? {
+    if (routePlaces.size < 3 || routePlaces.size > 52) return null
+    val start = routePlaces.first()
+    val end = routePlaces.last()
+    if (start.postal != end.postal || start.lat != end.lat || start.lon != end.lon) return null
+    val candidates = (1 until routePlaces.lastIndex).toList()
+    if (candidates.isEmpty()) return null
+
+    // true = route works, false = NoRoute / NoSegment, null = service or connection error.
+    suspend fun connects(without: Set<Int>): Boolean? {
+        val subset = routePlaces.filterIndexed { index, _ -> index !in without }
+        val coordinates = subset.joinToString(";") { "${it.lon},${it.lat}" }
+        val url = "${root.trimEnd('/')}/route/v1/driving/$coordinates?overview=false&steps=false"
+        return try {
+            when (api.get(url).get("code")?.asString) {
+                "Ok" -> true
+                "NoRoute", "NoSegment" -> false
+                else -> null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() != 400) return null
+            val code = runCatching {
+                e.response()?.errorBody()?.string()?.let {
+                    com.google.gson.JsonParser.parseString(it).asJsonObject.get("code")?.asString
+                }
+            }.getOrNull()
+            when (code) {
+                "NoRoute", "NoSegment" -> false
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    var remaining = candidates
+    while (remaining.size > 1) {
+        val half = remaining.size / 2
+        val firstHalf = remaining.take(half)
+        val secondHalf = remaining.drop(half)
+        // Success after removing a group suggests the blocker is in that group.
+        val withoutFirst = connects(firstHalf.toSet()) ?: return null
+        val withoutSecond = connects(secondHalf.toSet()) ?: return null
+        if (withoutFirst == withoutSecond) return null // Either both or neither: ambiguous.
+        remaining = if (withoutFirst) firstHalf else secondHalf
+    }
+    val index = remaining.single()
+    if (connects(setOf(index)) != true) return null // Confirm removing one stop fixes original route.
+    return PostalLookupFailure(
+        routePlaces[index].postal,
+        "This stop blocked the full driving route. Its address was located but the routing server could not connect it by road. Check the postal code/address, edit or remove this order, and retry."
+    )
+}
+
+internal suspend fun isolateNoRouteIfNeeded(
+    original: PlannerError, api: Api, root: String, path: List<Place>
+): PlannerError {
+    if (original is RoutingPostalException || !original.message.orEmpty().contains("NoRoute")) return original
+    val found = isolateNoRoutePostal(api, root, path) ?: return original
+    return RoutingPostalException(listOf(found), original)
+}
