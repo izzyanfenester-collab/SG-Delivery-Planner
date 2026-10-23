@@ -49,6 +49,41 @@ class PostalResolutionException(val failures: List<PostalLookupFailure>) : Plann
     "Could not check ${failures.size} postal code(s). Review affected orders, correct any errors, or retry if OneMap was temporarily unavailable."
 )
 
+/** The whole OneMap lookup succeeded, but road routing failed. Never blame a particular
+ * postal unless the provider actually identifies a failing link. */
+class RoadRoutingException(
+    val stage: String,
+    val verifiedPostals: List<String>,
+    val details: String,
+    cause: Throwable? = null
+) : PlannerError(
+    "Routing server problem during $stage for ${verifiedPostals.size} OneMap-verified postal code(s): $details " +
+    "The server did not identify a wrong postal code. Review/edit your entries only if needed, retry or choose another routing server in Settings.",
+    cause
+)
+
+class RoadConnectionException(val fromPostal: String, val toPostal: String) : PlannerError(
+    "No driving route was returned between postal $fromPostal and $toPostal. " +
+    "These locations may be inaccessible by road; neither postal code is confirmed wrong. " +
+    "Review both entries or try another routing server."
+)
+
+private fun safeRoutingCode(value: String?): String =
+    value?.takeIf { it.matches(Regex("[A-Za-z_]{1,28}")) } ?: "unexpected response"
+
+internal fun routingFailure(stage: String, codes: List<String>, error: Throwable): RoadRoutingException {
+    val detail = when (error) {
+        is retrofit2.HttpException -> {
+            val status = error.code()
+            "HTTP $status was returned by the road-routing server." +
+                if (status == 400 || status == 413) " The server may reject the request size or coordinates." else ""
+        }
+        else -> englishError(error, "The road-routing server did not respond correctly.")
+    }
+    return RoadRoutingException(stage, codes, detail, error)
+}
+
+
 class Repository(context:Context) {
  private val gson=Gson()
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
@@ -92,11 +127,17 @@ class Repository(context:Context) {
    meters=Array(n) { i -> DoubleArray(n) { j -> cached[i][j]!!.km*1000 } }
    seconds=Array(n) { i -> DoubleArray(n) { j -> cached[i][j]!!.baseSeconds } }
   } else {
-   val table=api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
-   checkPlanning(table.get("code")?.asString == "Ok") { "The routing service could not calculate driving times. Try again or change the routing server in Settings." }
+   val table=try {
+    api.get("$root/table/v1/driving/$coordinates?annotations=distance,duration")
+   } catch (e: CancellationException) { throw e }
+   catch (e: Exception) { throw routingFailure("driving-time matrix", codes, e) }
+   checkPlanning(table.get("code")?.asString == "Ok") {
+    RoadRoutingException("driving-time matrix", codes,
+        "The road-routing server returned ${safeRoutingCode(table.get("code")?.takeIf { it.isJsonPrimitive }?.asString)}.").englishMessage
+   }
    fun matrix(name:String):Array<DoubleArray> = Array(n) { i -> DoubleArray(n) { j ->
     val cell=table.getAsJsonArray(name)[i].asJsonArray[j]
-    checkPlanning(!cell.isJsonNull) { "No driving route was found between ${places[i].address} and ${places[j].address}. Check the locations or change the routing server in Settings." }
+    if (cell.isJsonNull) throw RoadConnectionException(places[i].postal, places[j].postal)
     cell.asDouble.also { checkPlanning(it.isFinite() && it>=0) { "The routing service returned invalid travel information. Please try again." } }
    } }
    meters=matrix("distances"); seconds=matrix("durations")
@@ -112,8 +153,14 @@ class Repository(context:Context) {
    dao.leg(CachedLeg(key,gson.toJson(leg),System.currentTimeMillis())); leg
   }
   progress("Loading the route map…")
-  val route=api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
-  checkPlanning(route.get("code")?.asString == "Ok") { "The route map is unavailable. Please try planning the route again." }
+  val route=try {
+   api.get("$root/route/v1/driving/${path.joinToString(";") { "${places[it].lon},${places[it].lat}" }}?overview=full&geometries=geojson&steps=false")
+  } catch (e: CancellationException) { throw e }
+  catch (e: Exception) { throw routingFailure("route map", codes, e) }
+  checkPlanning(route.get("code")?.asString == "Ok") {
+   RoadRoutingException("route map", codes,
+       "The road-routing server returned ${safeRoutingCode(route.get("code")?.takeIf { it.isJsonPrimitive }?.asString)}.").englishMessage
+  }
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
   val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location)
   (if (orders.isEmpty()) scheduled else expandCustomerOrders(scheduled, orders)).also { save(it) }
