@@ -65,6 +65,60 @@ class RoutingDiagnosticsTest {
         assertEquals(listOf("680573"),(result as RoutingPostalException).failures.map { it.postalCode })
     }
 
+
+    @Test fun genericNoRouteRunsRealDiagnosticAndIdentifiesOnlyBlockingPostal680573() = kotlinx.coroutines.runBlocking {
+        val depot=stops[0]
+        val routePlaces=listOf(depot,stops[1],stops[2],stops[3],depot)
+        var probes=0
+        val api=object : Api {
+            override suspend fun get(url:String):com.google.gson.JsonObject {
+                probes++
+                // 680573 corresponds to longitude 103.75, latitude 1.39 in this example.
+                val blocked=url.contains("103.75,1.39")
+                return json(if(blocked) """{"code":"NoRoute"}""" else """{"code":"Ok"}""")
+            }
+        }
+        val original=routingProblem(json("""{"code":"NoRoute","message":"No route found"}"""),
+            routePlaces,"route map",400)
+        val isolated=isolateNoRouteIfNeeded(original,api,"https://router.example",routePlaces)
+        assertTrue(isolated is RoutingPostalException)
+        val codes=(isolated as RoutingPostalException).failures.map { it.postalCode }
+        assertEquals(listOf("680573"),codes)
+        assertTrue(formattedPostalFailures(isolated.failures).contains("Postal code 680573:"))
+        assertFalse(formattedPostalFailures(isolated.failures).contains("431011:"))
+        assertTrue("Diagnostic should use bounded route calls",probes<=7)
+    }
+
+    @Test fun noRouteWithTwoBlockingStopsDoesNotGuessOnePostal() = kotlinx.coroutines.runBlocking {
+        val depot=stops[0]
+        val routePlaces=listOf(depot,stops[1],stops[2],stops[3],depot)
+        val api=object:Api {
+            override suspend fun get(url:String)=json(
+                if(url.contains("103.75,1.39") || url.contains("103.92,1.4"))
+                    """{"code":"NoRoute"}""" else """{"code":"Ok"}"""
+            )
+        }
+        val original=routingProblem(json("""{"code":"NoRoute"}"""),routePlaces,"route map",400)
+        val checked=isolateNoRouteIfNeeded(original,api,"https://router.example",routePlaces)
+        assertSame("Ambiguous failure should retain safe generic error",original,checked)
+    }
+
+    @Test fun globalNoRouteOrServerOutageNeverMislabelsPostal() = kotlinx.coroutines.runBlocking {
+        val depot=stops[0]
+        val routePlaces=listOf(depot,stops[1],stops[2],stops[3],depot)
+        val original=routingProblem(json("""{"code":"NoRoute"}"""),routePlaces,"route map",400)
+        val alwaysFail=object:Api {
+            override suspend fun get(url:String)=json("""{"code":"NoRoute"}""")
+        }
+        assertSame(original,isolateNoRouteIfNeeded(original,alwaysFail,"https://router.example",routePlaces))
+        val outage=object:Api {
+            override suspend fun get(url:String):com.google.gson.JsonObject {
+                throw java.io.IOException("Network down")
+            }
+        }
+        assertSame(original,isolateNoRouteIfNeeded(original,outage,"https://router.example",routePlaces))
+    }
+
     @Test fun unstructuredHttp400ReportsServerIssueNotRandomPostal() {
         val error=HttpException(Response.error<Any>(400,"server says no".toResponseBody("text/plain".toMediaType())))
         val problem=routingHttpFailure(error,stops,"route map")
