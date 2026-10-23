@@ -22,6 +22,18 @@ class CustomerDraftTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() {store.clear();Dispatchers.resetMain()}
     private fun model(key:String) = PlannerViewModel(app).also {store.put(key,it)}
+    @Test fun errorBannerNamesThePostalAndPreservesTheRealOneMapReason() {
+        val vm = model("specific-postal")
+        val error = PostalLookupFailure("680573",
+            "680573: Postal code 680573 was not found. Check the code and try again.")
+        val actual = vm.postalValidationMessage(listOf(error))
+        assertTrue(actual.contains("680573"))
+        assertTrue(actual.contains("was not found"))
+        assertTrue(actual.contains("Review Failed Orders"))
+        assertFalse(actual.contains("routing server in Settings"))
+        assertEquals(listOf(error), PostalResolutionException(listOf(error)).failures)
+    }
+
     @Test fun importedDuplicateCustomersSurviveRestartAndClearDoesNotTouchSavedRoute() {
         val vm=model("one")
         val orders=listOf(CustomerOrder(postalCode="650417",customerName="Helen"),CustomerOrder(postalCode="650417",customerName="Aminah"))
