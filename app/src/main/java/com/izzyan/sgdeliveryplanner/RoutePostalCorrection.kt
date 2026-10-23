@@ -23,7 +23,7 @@ fun correctRoutePostalOrder(
         // Postal-only editing works for WhatsApp imports too. Keep order identity,
         // payment, price and proofs, and only replace the old six-digit code in
         // customer-supplied address/original message. Do not touch other orders.
-        val oldPostal = Regex("(?<!\\\\d)${Regex.escape(old.postalCode)}(?!\\\\d)")
+        val oldPostal = Regex("""(?<!\d)${Regex.escape(old.postalCode)}(?!\d)""")
         old.copy(
             postalCode = text,
             fullAddress = old.fullAddress?.replace(oldPostal, text),
