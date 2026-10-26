@@ -54,7 +54,7 @@ class PaymentTest {
         assertEquals("66.53", effectivePaymentTaxRm(reportValue, null))
         assertEquals("0.00", effectivePaymentTaxRm(null, null))
         assertEquals("12.75", effectivePaymentTaxRm(null, "12.75"))
-        assertNull(calculatePayment("10", "30.00", effectivePaymentTaxRm(reportValue, ""), ""))
+        assertEquals(PaymentCalculation("300.00", "300.00"), calculatePayment("10", "30.00", effectivePaymentTaxRm(reportValue, ""), ""))
     }
 
     @Test fun taxUsesOnlyLatestSavedReportForSelectedHomeDate() {
