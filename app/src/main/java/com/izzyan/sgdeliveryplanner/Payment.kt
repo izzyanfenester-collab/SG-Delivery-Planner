@@ -100,6 +100,23 @@ fun monthlyPaymentTotals(records: List<PaymentRecord>, year: Int, month: Int): P
     return PaymentCalculation(total { it.totalPaymentRm }, total { it.grandTotalPaymentRm })
 }
 
+/** Only display months with actual payouts in either amount column. */
+fun nonZeroMonthlyPaymentRows(records: List<PaymentRecord>, year: Int): List<Pair<Int, PaymentCalculation>> =
+    (1..12).map { month -> month to monthlyPaymentTotals(records, year, month) }
+        .filter { (_, totals) ->
+            BigDecimal(totals.totalPaymentRm).signum() != 0 ||
+                BigDecimal(totals.grandTotalPaymentRm).signum() != 0
+        }
+
+/** Full January–December annual totals, including any months not shown in the compact table. */
+fun yearlyPaymentTotals(records: List<PaymentRecord>, year: Int): PaymentCalculation {
+    val totals = (1..12).map { month -> monthlyPaymentTotals(records, year, month) }
+    fun sum(select: (PaymentCalculation) -> String): String =
+        totals.fold(BigDecimal.ZERO) { acc, month -> acc.add(BigDecimal(select(month))) }
+            .setScale(2, RoundingMode.HALF_UP).toPlainString()
+    return PaymentCalculation(sum { it.totalPaymentRm }, sum { it.grandTotalPaymentRm })
+}
+
 /** A separate preference file avoids changing the version-1 Room route database. */
 class PaymentLedger(context: Context) {
     private val prefs = context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE)
@@ -208,11 +225,13 @@ private fun PaymentInput(
 
 @Composable
 private fun PaymentTableRow(
-    dateOrMonth: String, totalPayment: String, grandTotal: String, isHeader: Boolean = false
+    dateOrMonth: String, totalPayment: String, grandTotal: String,
+    isHeader: Boolean = false, isTotal: Boolean = false
 ) {
     val colors = MaterialTheme.colorScheme
-    val cellBackground = if (isHeader) colors.primaryContainer else colors.surface
-    val cellText = if (isHeader) colors.onPrimaryContainer else colors.onSurface
+    val emphasized = isHeader || isTotal
+    val cellBackground = if (emphasized) colors.primaryContainer else colors.surface
+    val cellText = if (emphasized) colors.onPrimaryContainer else colors.onSurface
     val gridLine = colors.outlineVariant
     Row(Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
@@ -225,7 +244,7 @@ private fun PaymentTableRow(
                 Text(
                     value, color = cellText, fontSize = if (isHeader) 11.sp else 12.sp,
                     lineHeight = 15.sp,
-                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal
                 )
             }
         }
@@ -347,15 +366,25 @@ fun PaymentScreen(vm: PlannerViewModel) {
         )
         val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
         Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
+        val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
+        val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
         Column {
             PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
-            (1..12).forEach { month ->
-                val totals = monthlyPaymentTotals(vm.paymentRecords, currentYear, month)
+            monthsWithPayment.forEach { (month, totals) ->
                 PaymentTableRow(
                     java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
                     totals.totalPaymentRm, totals.grandTotalPaymentRm
                 )
             }
+            if (monthsWithPayment.isEmpty()) {
+                Text(
+                    "No payment records for $currentYear.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            }
+            PaymentTableRow("Total", yearTotal.totalPaymentRm, yearTotal.grandTotalPaymentRm, isTotal = true)
         }
     }
 }
