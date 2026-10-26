@@ -109,7 +109,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             } }
             val header=JsonParser.parseString(requireNotNull(manifest) { "Not an SG Delivery backup." }.toString(Charsets.UTF_8)).asJsonObject
             val version=header.get("version")?.asInt
-            require(header.get("format")?.asString=="sg-delivery-history"&&version in 1..2) { "Unsupported backup format." }
+            require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..2) { "Unsupported backup format." }
             // v1 archives have routes and proofs only; v2 requires a payments.json entry.
             val payments=if(version==2) {
                 val bytes=requireNotNull(paymentsJson) { "Payment history missing from backup." }
