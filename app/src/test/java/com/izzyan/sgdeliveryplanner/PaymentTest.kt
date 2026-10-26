@@ -55,6 +55,31 @@ class PaymentTest {
         assertNull(savedReportTaxRm(date, listOf(unsaved)))
     }
 
+    @Test fun monthlyTotalsUseSavedValuesAndNeverMixYears() {
+        val octOne = PaymentRecord("2026-10-26", 3, "10.00", "30.00", "3.00", "2.00", "35.00")
+        val octTwo = PaymentRecord("2026-10-31", 2, "12.00", "24.00", "4.00", "1.00", "29.00")
+        val nov = PaymentRecord("2026-11-01", 1, "20.00", "20.00", "0.00", "0.00", "20.00")
+        val previousYear = PaymentRecord("2025-10-26", 1, "99.00", "99.00", "0.00", "0.00", "99.00")
+        val all = listOf(octOne, octTwo, nov, previousYear)
+        assertEquals(PaymentCalculation("54.00", "64.00"), monthlyPaymentTotals(all, 2026, 10))
+        assertEquals(PaymentCalculation("20.00", "20.00"), monthlyPaymentTotals(all, 2026, 11))
+        assertEquals(PaymentCalculation("99.00", "99.00"), monthlyPaymentTotals(all, 2025, 10))
+        assertEquals(PaymentCalculation("0.00", "0.00"), monthlyPaymentTotals(all, 2026, 9))
+    }
+
+    @Test fun repeatedRestoreKeepsExistingPaymentsAndDuplicatesFromSameBackup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
+        val a = PaymentRecord("2026-10-26", 1, "10.00", "10.00", "0.00", "0.00", "10.00")
+        val b = PaymentRecord("2026-10-27", 1, "9.00", "9.00", "0.00", "0.00", "9.00")
+        val ledger = PaymentLedger(context)
+        assertTrue(ledger.append(a))
+        assertEquals(2, ledger.mergeRestored(listOf(a, a, b)))
+        assertEquals(listOf(a, a, b), ledger.read())
+        assertEquals(0, ledger.mergeRestored(listOf(a, a, b)))
+        assertEquals(listOf(a, a, b), ledger.read())
+    }
+
     @Test fun paymentsRemainStoredInSaveOrderAfterNewLedgerIsOpened() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
