@@ -123,7 +123,7 @@ fun App(vm: PlannerViewModel) {
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
                         Spacer(Modifier.weight(1f))
-                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
+                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History", "Payment")) {
                             IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
                                 Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
                             }
@@ -140,7 +140,7 @@ fun App(vm: PlannerViewModel) {
                         Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "History").forEach { label ->
+                        listOf("Home", "Route", "Delivery", "Map", "Payment").forEach { label ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
@@ -194,6 +194,7 @@ fun App(vm: PlannerViewModel) {
                     "Home" -> Home(vm)
                     "Settings" -> Settings(vm)
                     "History" -> History(vm)
+                    "Payment" -> PaymentScreen(vm)
                     "LocationPicker" -> StartLocationPicker(vm)
                     else -> {
                         val p = vm.route
@@ -337,6 +338,7 @@ fun Home(vm: PlannerViewModel) {
             SecondaryAction("Clear postal code", vm::clearPostalCodes, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
         }
         TaxDeclareButton()
+        SecondaryAction("View route history", { vm.screen = "History" }, enabled = !vm.busy)
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 }
