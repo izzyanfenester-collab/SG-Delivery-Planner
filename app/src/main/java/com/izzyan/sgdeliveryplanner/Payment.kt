@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -260,11 +261,14 @@ fun PaymentScreen(vm: PlannerViewModel) {
         active + historical
     }
     val reportTax = savedReportTaxRm(vm.deliveryDate, matchingReports)
-    val taxRm = reportTax ?: "0.00"
 
     var quantity by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
     var commission by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
     var others by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
+    // Null means use the newest saved report value. Manual edits take priority until Reset.
+    // Keeping an override separate avoids overwriting an in-progress edit when reports refresh.
+    var manualTaxRm by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf<String?>(null) }
+    val taxRm = manualTaxRm ?: (reportTax ?: "0.00")
     val amounts = calculatePayment(quantity, commission, taxRm, others)
 
     Column(
@@ -291,7 +295,21 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 Text(amounts?.totalPaymentRm ?: "—", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             }
             PaymentRow("Tax (RM)") {
-                Text(taxRm, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PaymentInput(taxRm, "Enter tax (RM)", KeyboardType.Decimal) {
+                        if (validCurrencyInput(it)) manualTaxRm = it
+                    }
+                    if (reportTax != null && manualTaxRm != null) {
+                        TextButton(onClick = { manualTaxRm = null }) {
+                            Text("Use report tax: RM $reportTax", fontSize = 12.sp)
+                        }
+                    } else if (reportTax != null) {
+                        Text(
+                            "From Delivery Report Summary",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
             PaymentRow("Others (RM)") {
                 PaymentInput(others, "Enter RM (optional)", KeyboardType.Decimal) {
@@ -307,7 +325,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
-                    onClick = { quantity = ""; commission = ""; others = "" },
+                    onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     colors = ButtonDefaults.outlinedButtonColors(
@@ -345,7 +363,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         if (reportTax == null) {
             Text(
-                "Tax (RM) is 0.00 until the Delivery Report Summary for this date is saved.",
+                "No saved Delivery Report Summary for this date. Tax defaults to RM 0.00; you can edit it manually.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
