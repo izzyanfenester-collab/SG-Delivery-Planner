@@ -110,7 +110,7 @@ class NavigationChooserTest {
             assertEquals("Private text", clipboard.primaryClip!!.getItemAt(0).text.toString())
         }
         assertFalse(openDeliveryNavigation(context, plan.copy(current = 3), NavigationChoice.GOOGLE_MAPS))
-        assertEquals(3, context.attempts.size)
+        assertEquals(NavigationChoice.entries.size, context.attempts.size)
     }
 
     private fun assertNoPayload(intent: Intent) {
