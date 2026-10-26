@@ -151,7 +151,6 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
         grand == recalculated.grandTotalPaymentRm
 }.getOrDefault(false)
 
-private val tableBlack = Color(0xFF242424)
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
 
 private fun displayPaymentDate(value: String): String = runCatching {
@@ -160,19 +159,23 @@ private fun displayPaymentDate(value: String): String = runCatching {
 
 @Composable
 private fun PaymentRow(label: String, strong: Boolean = false, content: @Composable () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val cellBackground = if (strong) colors.primaryContainer else colors.surface
+    val cellText = if (strong) colors.onPrimaryContainer else colors.onSurface
+    val gridLine = colors.outlineVariant
     Row(
-        Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, tableBlack)).background(Color.White),
+        Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.weight(0.42f).heightIn(min = 54.dp).padding(8.dp), contentAlignment = Alignment.CenterStart) {
             Text(
-                label, color = tableBlack, fontSize = 13.sp,
+                label, color = cellText, fontSize = 13.sp,
                 lineHeight = 17.sp, fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal
             )
         }
         Box(
             Modifier.weight(0.58f).heightIn(min = 54.dp)
-                .border(BorderStroke(0.5.dp, tableBlack)).padding(8.dp),
+                .border(BorderStroke(0.5.dp, gridLine)).padding(8.dp),
             contentAlignment = Alignment.CenterStart
         ) { content() }
     }
@@ -190,11 +193,11 @@ private fun PaymentInput(
         onValueChange = onChange,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        textStyle = TextStyle(color = tableBlack, fontSize = 14.sp),
+        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { input ->
             Box {
-                if (value.isEmpty()) Text(hint, color = Color(0xFF707070), fontSize = 13.sp)
+                if (value.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 input()
             }
         }
@@ -205,16 +208,20 @@ private fun PaymentInput(
 private fun PaymentTableRow(
     dateOrMonth: String, totalPayment: String, grandTotal: String, isHeader: Boolean = false
 ) {
-    Row(Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, tableBlack)).background(Color.White)) {
+    val colors = MaterialTheme.colorScheme
+    val cellBackground = if (isHeader) colors.primaryContainer else colors.surface
+    val cellText = if (isHeader) colors.onPrimaryContainer else colors.onSurface
+    val gridLine = colors.outlineVariant
+    Row(Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 0.88f else 1.16f)
                     .heightIn(min = if (isHeader) 54.dp else 30.dp)
-                    .border(BorderStroke(0.5.dp, tableBlack)).padding(5.dp),
+                    .border(BorderStroke(0.5.dp, gridLine)).padding(5.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    value, color = tableBlack, fontSize = if (isHeader) 11.sp else 12.sp,
+                    value, color = cellText, fontSize = if (isHeader) 11.sp else 12.sp,
                     lineHeight = 15.sp,
                     fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
                 )
@@ -247,7 +254,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text("Payment", style = MaterialTheme.typography.headlineMedium)
         Column {
             PaymentRow("Date") {
-                Text(displayPaymentDate(vm.deliveryDate.toString()), color = tableBlack, fontSize = 14.sp)
+                Text(displayPaymentDate(vm.deliveryDate.toString()), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             }
             PaymentRow("Qty parcel") {
                 PaymentInput(quantity, "Enter quantity", KeyboardType.Number) {
@@ -260,10 +267,10 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             }
             PaymentRow("Total payment (RM)") {
-                Text(amounts?.totalPaymentRm ?: "—", color = tableBlack, fontSize = 14.sp)
+                Text(amounts?.totalPaymentRm ?: "—", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             }
             PaymentRow("Tax (RM)") {
-                Text(taxRm, color = tableBlack, fontSize = 14.sp)
+                Text(taxRm, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             }
             PaymentRow("Others (RM)") {
                 PaymentInput(others, "Enter RM (optional)", KeyboardType.Decimal) {
@@ -273,15 +280,18 @@ fun PaymentScreen(vm: PlannerViewModel) {
             PaymentRow("Grand total payment", strong = true) {
                 Text(
                     if (amounts == null) "—" else "RM " + amounts.grandTotalPaymentRm,
-                    color = tableBlack, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                    color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
                 )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = "" },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    border = BorderStroke(1.dp, tableBlack),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White, contentColor = tableBlack)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 ) { Text("Reset", fontWeight = FontWeight.Bold) }
                 OutlinedButton(
                     onClick = {
@@ -301,8 +311,13 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     },
                     enabled = amounts != null && !vm.busy,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    border = BorderStroke(1.dp, tableBlack),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White, contentColor = tableBlack)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 ) { Text("Save", fontWeight = FontWeight.Bold) }
             }
         }
@@ -324,23 +339,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Monthly totals are calculated from saved payments. Years are shown separately.",
+            "Totals for the current calendar year, calculated from saved payment records.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
-        val years = (vm.paymentRecords.mapNotNull { runCatching { LocalDate.parse(it.date).year }.getOrNull() }
-            .toSet() + vm.deliveryDate.year + (vm.deliveryDate.year - 1)).sorted()
-        years.forEach { year ->
-            Text(year.toString(), style = MaterialTheme.typography.titleMedium)
-            Column {
-                PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
-                (1..12).forEach { month ->
-                    val totals = monthlyPaymentTotals(vm.paymentRecords, year, month)
-                    PaymentTableRow(
-                        java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
-                        totals.totalPaymentRm, totals.grandTotalPaymentRm
-                    )
-                }
+        val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
+        Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
+        Column {
+            PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
+            (1..12).forEach { month ->
+                val totals = monthlyPaymentTotals(vm.paymentRecords, currentYear, month)
+                PaymentTableRow(
+                    java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
+                    totals.totalPaymentRm, totals.grandTotalPaymentRm
+                )
             }
         }
     }
