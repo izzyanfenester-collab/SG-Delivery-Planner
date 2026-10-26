@@ -67,6 +67,27 @@ class PaymentTest {
         assertEquals(PaymentCalculation("0.00", "0.00"), monthlyPaymentTotals(all, 2026, 9))
     }
 
+    @Test fun compactMonthSummaryHidesZeroRowsAndAddsFullYearTotal() {
+        val october = PaymentRecord("2026-10-26", 2, "400.00", "800.00", "20.00", "0.00", "820.00")
+        val anotherOctober = PaymentRecord("2026-10-27", 1, "40.00", "40.00", "0.00", "0.00", "40.00")
+        val december = PaymentRecord("2026-12-15", 1, "30.00", "30.00", "5.00", "0.00", "35.00")
+        val priorYear = PaymentRecord("2025-10-26", 1, "999.00", "999.00", "0.00", "0.00", "999.00")
+        val records = listOf(october, anotherOctober, december, priorYear)
+        val visible = nonZeroMonthlyPaymentRows(records, 2026)
+        assertEquals(listOf(10, 12), visible.map { it.first })
+        assertEquals(PaymentCalculation("840.00", "860.00"), visible[0].second)
+        assertEquals(PaymentCalculation("870.00", "895.00"), yearlyPaymentTotals(records, 2026))
+        assertEquals(PaymentCalculation("999.00", "999.00"), yearlyPaymentTotals(records, 2025))
+    }
+
+    @Test fun monthlySummaryCanShowGrandTotalOnlyAndAlwaysCalculateZeroYearTotal() {
+        val otherOnly = PaymentRecord("2026-03-03", 1, "0.00", "0.00", "2.50", "0.00", "2.50")
+        assertEquals(listOf(3), nonZeroMonthlyPaymentRows(listOf(otherOnly), 2026).map { it.first })
+        assertEquals(PaymentCalculation("0.00", "2.50"), yearlyPaymentTotals(listOf(otherOnly), 2026))
+        assertTrue(nonZeroMonthlyPaymentRows(emptyList(), 2026).isEmpty())
+        assertEquals(PaymentCalculation("0.00", "0.00"), yearlyPaymentTotals(emptyList(), 2026))
+    }
+
     @Test fun repeatedRestoreKeepsExistingPaymentsAndDuplicatesFromSameBackup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
