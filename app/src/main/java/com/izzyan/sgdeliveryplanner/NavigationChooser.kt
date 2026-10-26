@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 internal enum class NavigationChoice(val label: String, val packageName: String? = null) {
-    BUILT_IN("Built-in GPS"), GOOGLE_MAPS("Google Maps", "com.google.android.apps.maps"), TOMTOM("TomTom - Maps & Traffic", "com.tomtom.speedcams.android.map")
+    BUILT_IN("Built-in GPS"), GOOGLE_MAPS("Google Maps", "com.google.android.apps.maps"),
+    TOMTOM("TomTom - Maps & Traffic", "com.tomtom.speedcams.android.map"),
+    SYGIC("Sygic: GPS Navigation & Maps", "com.sygic.aura")
 }
 
 /** Stored independently of route/history data; unknown legacy values safely mean Ask every time. */
@@ -75,6 +77,12 @@ internal fun externalNavigationIntent(stop: Place, choice: NavigationChoice): In
         // Geo deep link is the standard Android map destination request. TomTom's
         // consumer app may not support it on every version; handled below.
         NavigationChoice.TOMTOM -> Uri.parse("geo:0,0?q=" + Uri.encode(destination))
+        // Sygic consumer app accepts longitude then latitude in its coordinate handoff.
+        // Its legacy custom URI may not start routing on every newer Sygic release.
+        NavigationChoice.SYGIC -> {
+            require(GpsPoint(stop.lat, stop.lon).valid()) { "Sygic needs valid GPS coordinates." }
+            Uri.parse("com.sygic.aura://coordinate|${stop.lon}|${stop.lat}|drive")
+        }
         else -> error("Internal navigation uses the existing activity")
     }
     return Intent(Intent.ACTION_VIEW, uri).setPackage(choice.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -87,14 +95,14 @@ internal fun openDeliveryNavigation(context: Context, plan: Plan, choice: Naviga
         val intent = if (choice == NavigationChoice.BUILT_IN) builtInNavigationIntent(context, plan) ?: return false
             else externalNavigationIntent(stop, choice)
         if (choice != NavigationChoice.BUILT_IN && intent.resolveActivity(context.packageManager) == null) {
-            if (choice == NavigationChoice.TOMTOM) {
+            if (choice == NavigationChoice.TOMTOM || choice == NavigationChoice.SYGIC) {
                 // Not all releases of the consumer TomTom app accept a geo deep link.
                 // Open TomTom directly if installed; never send the destination to a
                 // different maps app or misleadingly report it as uninstalled.
                 val launch = context.packageManager.getLaunchIntentForPackage(choice.packageName!!)
                 if (launch != null) {
                     context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    Toast.makeText(context, "TomTom opened. If the stop does not appear, enter its postal code in TomTom.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "${choice.label} opened. If the stop does not appear, enter its postal code in the navigation app.", Toast.LENGTH_LONG).show()
                     return true
                 }
             }
