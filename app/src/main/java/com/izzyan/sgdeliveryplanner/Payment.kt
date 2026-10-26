@@ -144,7 +144,7 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
     LocalDate.parse(record.date)
     val recalculated = calculatePayment(
         record.quantity.toString(), record.commissionPerParcelRm, record.taxRm, record.othersRm
-    ) ?: return false
+    ) ?: return@runCatching false
     val total = normalizedCurrency(record.totalPaymentRm)
     val grand = normalizedCurrency(record.grandTotalPaymentRm)
     total != null && grand != null && total == recalculated.totalPaymentRm &&
