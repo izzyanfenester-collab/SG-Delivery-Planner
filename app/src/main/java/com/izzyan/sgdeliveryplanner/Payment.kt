@@ -89,6 +89,10 @@ fun savedReportTaxRm(deliveryDate: LocalDate, plans: List<Plan>): String? {
     return taxMyr(report.tax, report.exchangeRate)
 }
 
+/** A manual tax entry overrides the report only on the selected date. Null restores auto-source. */
+fun effectivePaymentTaxRm(reportTaxRm: String?, manualTaxRm: String?): String =
+    manualTaxRm ?: (reportTaxRm ?: "0.00")
+
 /** Aggregate exact values, never sum rounded floating-point doubles. */
 fun monthlyPaymentTotals(records: List<PaymentRecord>, year: Int, month: Int): PaymentCalculation {
     val matching = records.filter { record ->
@@ -268,7 +272,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
     // Null means use the newest saved report value. Manual edits take priority until Reset.
     // Keeping an override separate avoids overwriting an in-progress edit when reports refresh.
     var manualTaxRm by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf<String?>(null) }
-    val taxRm = manualTaxRm ?: (reportTax ?: "0.00")
+    val taxRm = effectivePaymentTaxRm(reportTax, manualTaxRm)
     val amounts = calculatePayment(quantity, commission, taxRm, others)
 
     Column(
