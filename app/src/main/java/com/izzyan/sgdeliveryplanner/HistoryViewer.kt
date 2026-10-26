@@ -49,13 +49,13 @@ fun HistoryBackupActions(vm:PlannerViewModel) {
         OutlinedButton(onClick={restoreConfirmation=true},enabled=!vm.busy,
             modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text("Restore Backup") }
     }
-    Text("Your backup ZIP contains routes, customer details, proof photos and all Payment records. Keep it private; it is not encrypted.",
+    Text("Your backup ZIP contains customer addresses, phone numbers and proof photos. Keep it private; it is not encrypted.",
         style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     if(vm.backupNotice.isNotBlank()) Text(vm.backupNotice,style=MaterialTheme.typography.bodyMedium)
     if(restoreConfirmation) AlertDialog(
         onDismissRequest={restoreConfirmation=false},
         title={Text("Restore SG Delivery History?")},
-        text={Text("Import saved routes, proof photos and Payment history from an SG Delivery backup ZIP. Existing routes, proofs and payments will be preserved; matching payment entries will not be duplicated. Older backups without payments remain supported.")},
+        text={Text("Import saved routes and proof photos from an SG Delivery backup ZIP. Existing route IDs, proof photos and the current delivery will NOT be overwritten.")},
         confirmButton={Button(onClick={
             restoreConfirmation=false
             open.launch(arrayOf("application/zip","application/x-zip-compressed","application/octet-stream"))
