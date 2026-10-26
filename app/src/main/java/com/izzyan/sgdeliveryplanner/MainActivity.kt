@@ -352,6 +352,12 @@ fun Settings(vm: PlannerViewModel) {
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
         PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)
+                BackupRestoreActions(vm)
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Default WhatsApp App", style = MaterialTheme.typography.titleLarge)
                 (listOf<WhatsAppChoice?>(null) + WhatsAppChoice.entries).forEach { choice ->
@@ -882,7 +888,6 @@ fun History(vm: PlannerViewModel) {
     ) {
         item {
             PageTitle("Route history", "Tap a date to view customer details and proof photos without changing today's route.")
-            HistoryBackupActions(vm)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { selecting = !selecting; selected = emptyList() }, enabled = !vm.busy) {
                     Text(if (selecting) "Cancel selection" else "Select history")
