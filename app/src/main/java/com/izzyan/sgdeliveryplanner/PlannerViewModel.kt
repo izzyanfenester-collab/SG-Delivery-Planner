@@ -150,7 +150,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         viewModelScope.launch {
             try {
                 val result = HistoryBackup(getApplication(), repo.dao).export(destination)
-                backupNotice = "Backup saved: "+result.routes+" routes, "+result.photos+" proof photos."+
+                backupNotice = "Backup saved: "+result.routes+" routes, "+result.photos+" proof photos, "+
+                    result.payments+" payment records."+
                     (if(result.missing>0) " Warning: "+result.missing+" older proof photos are missing." else "")
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { backupNotice = "Backup failed: "+(e.message ?: "Could not save ZIP.") }
@@ -165,8 +166,11 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         viewModelScope.launch {
             try {
                 val result = HistoryBackup(getApplication(), repo.dao).restore(source)
+                // Payments were written by the restore service; refresh observable Compose state.
+                paymentRecords = paymentLedger.read()
                 backupNotice = "Restore complete: "+result.restored+" new routes, "+
-                    result.skipped+" existing routes unchanged, "+result.photos+" proof photos added."
+                    result.skipped+" existing routes unchanged, "+result.photos+" proof photos, "+
+                    result.payments+" payment records added."
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { backupNotice = "Restore failed: "+(e.message ?: "Invalid backup.") }
             finally { busy = false }
