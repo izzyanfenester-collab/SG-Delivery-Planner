@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -283,7 +285,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
                 )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = "" },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -335,7 +338,6 @@ fun PaymentScreen(vm: PlannerViewModel) {
             entries.forEach { record ->
                 PaymentTableRow(displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm)
             }
-            repeat((10 - entries.size).coerceAtLeast(0)) { PaymentTableRow("", "", "") }
         }
         Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
         Text(
