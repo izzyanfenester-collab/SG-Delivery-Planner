@@ -57,6 +57,17 @@ class NavigationChooserTest {
         assertEquals(plan.stops[1].place.postal, "005002")
     }
 
+    @Test fun sygicUsesCurrentStopLongitudeLatitudeAndDrivingMode() {
+        val context = RecordingContext()
+        val plan = plan()
+        installHandler(context, externalNavigationIntent(plan.stops[1].place, NavigationChoice.SYGIC))
+        assertTrue(openDeliveryNavigation(context, plan, NavigationChoice.SYGIC))
+        val intent = context.attempts.single()
+        assertEquals("com.sygic.aura", intent.`package`)
+        assertEquals("com.sygic.aura://coordinate|103.8|1.352|drive", intent.data.toString())
+        assertNoPayload(intent)
+    }
+
     @Test fun missingCoordinatesFallBackToEncodedAddressOrPostalCode() {
         val stop = plan().stops[1].place.copy(lat = Double.NaN, lon = Double.NaN, address = "A & B Road #01-02")
         val maps = externalNavigationIntent(stop, NavigationChoice.GOOGLE_MAPS).data!!
@@ -99,7 +110,7 @@ class NavigationChooserTest {
             assertEquals("Private text", clipboard.primaryClip!!.getItemAt(0).text.toString())
         }
         assertFalse(openDeliveryNavigation(context, plan.copy(current = 3), NavigationChoice.GOOGLE_MAPS))
-        assertEquals(3, context.attempts.size)
+        assertEquals(NavigationChoice.entries.size, context.attempts.size)
     }
 
     private fun assertNoPayload(intent: Intent) {

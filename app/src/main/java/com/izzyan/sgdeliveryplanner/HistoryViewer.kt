@@ -35,7 +35,7 @@ import java.util.Locale
 
 /** Safely export/restore archive using the Android document picker, never broad file permissions. */
 @Composable
-fun HistoryBackupActions(vm:PlannerViewModel) {
+fun BackupRestoreActions(vm:PlannerViewModel) {
     var restoreConfirmation by remember { mutableStateOf(false) }
     val create=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if(uri!=null) vm.exportHistory(uri)
@@ -49,13 +49,13 @@ fun HistoryBackupActions(vm:PlannerViewModel) {
         OutlinedButton(onClick={restoreConfirmation=true},enabled=!vm.busy,
             modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text("Restore Backup") }
     }
-    Text("Your backup ZIP contains customer addresses, phone numbers and proof photos. Keep it private; it is not encrypted.",
+    Text("Your backup ZIP includes route history, customer details, proof photos and Payment records. Keep it private; it is not encrypted.",
         style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     if(vm.backupNotice.isNotBlank()) Text(vm.backupNotice,style=MaterialTheme.typography.bodyMedium)
     if(restoreConfirmation) AlertDialog(
         onDismissRequest={restoreConfirmation=false},
-        title={Text("Restore SG Delivery History?")},
-        text={Text("Import saved routes and proof photos from an SG Delivery backup ZIP. Existing route IDs, proof photos and the current delivery will NOT be overwritten.")},
+        title={Text("Restore SG Delivery Backup?")},
+        text={Text("Restore routes, proof photos and Payment records from your backup ZIP. Existing routes and payments will be preserved without overwriting them. Older backup ZIPs are also supported.")},
         confirmButton={Button(onClick={
             restoreConfirmation=false
             open.launch(arrayOf("application/zip","application/x-zip-compressed","application/octet-stream"))

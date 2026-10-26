@@ -123,7 +123,7 @@ fun App(vm: PlannerViewModel) {
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
                         Spacer(Modifier.weight(1f))
-                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History")) {
+                        if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History", "Payment")) {
                             IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
                                 Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
                             }
@@ -137,21 +137,22 @@ fun App(vm: PlannerViewModel) {
             if (vm.screen != "LocationPicker") {
                 Surface(color = PremiumNavy, shadowElevation = 6.dp) {
                     Row(
-                        Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "History").forEach { label ->
+                        listOf("Home", "Route", "Delivery", "Map", "History", "Payment").forEach { label ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
-                                modifier = Modifier.heightIn(min = 64.dp).widthIn(min = 80.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 64.dp),
+                                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 8.dp),
                                 shape = RoundedCornerShape(18.dp),
                                 colors = ButtonDefaults.textButtonColors(
                                     containerColor = if (selected) PremiumRoyal else Color.Transparent,
                                     contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
                                     disabledContentColor = Color(0xFF8292AC)
                                 )
-                            ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+                            ) { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) }
                         }
                     }
                 }
@@ -194,6 +195,7 @@ fun App(vm: PlannerViewModel) {
                     "Home" -> Home(vm)
                     "Settings" -> Settings(vm)
                     "History" -> History(vm)
+                    "Payment" -> PaymentScreen(vm)
                     "LocationPicker" -> StartLocationPicker(vm)
                     else -> {
                         val p = vm.route
@@ -349,6 +351,12 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)
+                BackupRestoreActions(vm)
+            }
+        }
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Default WhatsApp App", style = MaterialTheme.typography.titleLarge)
@@ -880,7 +888,6 @@ fun History(vm: PlannerViewModel) {
     ) {
         item {
             PageTitle("Route history", "Tap a date to view customer details and proof photos without changing today's route.")
-            HistoryBackupActions(vm)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { selecting = !selecting; selected = emptyList() }, enabled = !vm.busy) {
                     Text(if (selecting) "Cancel selection" else "Select history")

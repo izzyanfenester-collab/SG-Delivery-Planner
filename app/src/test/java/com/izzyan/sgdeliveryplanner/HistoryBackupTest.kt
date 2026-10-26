@@ -77,6 +77,62 @@ class HistoryBackupTest {
         } finally {out.delete();payment.delete();delivery.delete()}
     }
 
+    @Test fun backupAndRestoreIncludePaymentHistoryWithoutDuplicatingOnRetry()=runBlocking {
+        val prefs = app.getSharedPreferences("payment_ledger", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val ledger = PaymentLedger(app)
+        val firstPayment = PaymentRecord("2026-10-26", 2, "15.00", "30.00", "2.00", "3.00", "35.00")
+        val secondPayment = PaymentRecord("2026-10-27", 1, "10.00", "10.00", "0.00", "0.00", "10.00")
+        assertTrue(ledger.append(firstPayment))
+        assertTrue(ledger.append(secondPayment))
+        val archive = File(app.cacheDir, "payment-backup-" + UUID.randomUUID() + ".zip")
+        try {
+            val source = db()
+            val summary = HistoryBackup(app, source.dao()).export(Uri.fromFile(archive))
+            assertEquals(2, summary.payments)
+            ZipFile(archive).use { zip ->
+                assertNotNull(zip.getEntry("payments.json"))
+                assertTrue(zip.getInputStream(zip.getEntry("manifest.json"))
+                    .bufferedReader().readText().contains("\"version\":2"))
+            }
+            prefs.edit().clear().commit()
+            assertTrue(ledger.read().isEmpty())
+            val destination = db()
+            val restored = HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive))
+            assertEquals(2, restored.payments)
+            assertEquals(listOf(firstPayment, secondPayment), ledger.read())
+            assertEquals(0, HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive)).payments)
+            assertEquals(listOf(firstPayment, secondPayment), ledger.read())
+        } finally {
+            archive.delete()
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test fun legacyV1HistoryZipWithoutPaymentFileStillRestores()=runBlocking {
+        val source = db()
+        val route = plan().copy(stops = plan().stops.map {
+            it.copy(order = null)
+        })
+        source.dao().save(SavedRoute(route.id, PlanJson.encode(route), route.created))
+        val backup = File(app.cacheDir,"legacy-history-" + UUID.randomUUID() + ".zip")
+        try {
+            java.util.zip.ZipOutputStream(backup.outputStream()).use { zip ->
+                val header = """{"format":"sg-delivery-history","version":1,"routeCount":1}"""
+                zip.putNextEntry(java.util.zip.ZipEntry("manifest.json"))
+                zip.write(header.toByteArray()); zip.closeEntry()
+                zip.putNextEntry(java.util.zip.ZipEntry("routes.json"))
+                zip.write(com.google.gson.Gson().toJson(listOf(SavedRoute(route.id, PlanJson.encode(route), route.created))).toByteArray())
+                zip.closeEntry()
+            }
+            val output = db()
+            val result = HistoryBackup(app, output.dao()).restore(Uri.fromFile(backup))
+            assertEquals(1, result.restored)
+            assertEquals(0, result.payments)
+            assertNotNull(output.dao().route(route.id))
+        } finally { backup.delete() }
+    }
+
     @Test fun maliciousArchiveEntryIsRejectedWithoutTouchingExistingProof()=runBlocking {
         val existing=createProof("payment_backup_test.jpg",Color.BLUE)
         val dest=db()
