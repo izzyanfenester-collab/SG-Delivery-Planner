@@ -86,22 +86,70 @@ fun savedReportTaxRm(deliveryDate: LocalDate, plans: List<Plan>): String? {
     return taxMyr(report.tax, report.exchangeRate)
 }
 
+/** Aggregate exact values, never sum rounded floating-point doubles. */
+fun monthlyPaymentTotals(records: List<PaymentRecord>, year: Int, month: Int): PaymentCalculation {
+    val matching = records.filter { record ->
+        val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
+        date?.year == year && date.monthValue == month
+    }
+    fun total(selector: (PaymentRecord) -> String): String = matching
+        .fold(BigDecimal.ZERO) { sum, record -> sum.add(BigDecimal(selector(record))) }
+        .setScale(2, RoundingMode.HALF_UP).toPlainString()
+    return PaymentCalculation(total { it.totalPaymentRm }, total { it.grandTotalPaymentRm })
+}
+
 /** A separate preference file avoids changing the version-1 Room route database. */
 class PaymentLedger(context: Context) {
     private val prefs = context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE)
     private val gson = Gson()
     private val type = object : TypeToken<List<PaymentRecord>>() {}.type
 
-    fun read(): List<PaymentRecord> = runCatching {
-        gson.fromJson<List<PaymentRecord>>(prefs.getString("records", "[]"), type)
-            ?: emptyList()
-    }.getOrDefault(emptyList())
+    fun read(): List<PaymentRecord> {
+        // Never silently interpret corrupted storage as an empty list (that would lose records).
+        val rows = gson.fromJson<List<PaymentRecord>>(prefs.getString("records", "[]"), type)
+            ?: error("Saved payment data is invalid.")
+        require(rows.size <= 10000 && rows.all(::validPaymentRecord)) { "Saved payment data is invalid." }
+        return rows
+    }
 
     fun append(record: PaymentRecord): Boolean {
+        require(validPaymentRecord(record)) { "Invalid payment values." }
         val current = read()
+        require(current.size < 10000) { "Payment history is full. Back up your records." }
         return prefs.edit().putString("records", gson.toJson(current + record)).commit()
     }
+
+    /** Merge instead of overwriting; keep real duplicate entries while making repeated restores idempotent. */
+    fun mergeRestored(imported: List<PaymentRecord>): Int {
+        require(imported.size <= 10000 && imported.all(::validPaymentRecord)) { "Invalid backed-up payments." }
+        val current = read()
+        val currentCounts = current.groupingBy { it }.eachCount()
+        val seen = mutableMapOf<PaymentRecord, Int>()
+        val extra = imported.filter { record ->
+            val number = (seen[record] ?: 0) + 1
+            seen[record] = number
+            number > (currentCounts[record] ?: 0)
+        }
+        if (extra.isEmpty()) return 0
+        require(current.size + extra.size <= 10000) { "Too many payment records to restore." }
+        check(prefs.edit().putString("records", gson.toJson(current + extra)).commit()) {
+            "Payment history could not be saved. Retry restore."
+        }
+        return extra.size
+    }
 }
+
+/** Validate imported records so a corrupt ZIP cannot alter saved payment history. */
+fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
+    LocalDate.parse(record.date)
+    val recalculated = calculatePayment(
+        record.quantity.toString(), record.commissionPerParcelRm, record.taxRm, record.othersRm
+    ) ?: return false
+    val total = normalizedCurrency(record.totalPaymentRm)
+    val grand = normalizedCurrency(record.grandTotalPaymentRm)
+    total != null && grand != null && total == recalculated.totalPaymentRm &&
+        grand == recalculated.grandTotalPaymentRm
+}.getOrDefault(false)
 
 private val tableBlack = Color(0xFF242424)
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
@@ -154,19 +202,23 @@ private fun PaymentInput(
 }
 
 @Composable
-private fun PaymentHistoryRow(date: String, payment: String, isHeader: Boolean = false) {
+private fun PaymentTableRow(
+    dateOrMonth: String, totalPayment: String, grandTotal: String, isHeader: Boolean = false
+) {
     Row(Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, tableBlack)).background(Color.White)) {
-        Box(
-            Modifier.weight(1f).heightIn(min = 34.dp).padding(7.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(date, color = tableBlack, fontSize = 12.sp, fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal)
-        }
-        Box(
-            Modifier.weight(1f).heightIn(min = 34.dp).border(BorderStroke(0.5.dp, tableBlack)).padding(7.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(payment, color = tableBlack, fontSize = 12.sp, fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal)
+        listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
+            Box(
+                Modifier.weight(if (index == 0) 0.88f else 1.16f)
+                    .heightIn(min = if (isHeader) 54.dp else 30.dp)
+                    .border(BorderStroke(0.5.dp, tableBlack)).padding(5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    value, color = tableBlack, fontSize = if (isHeader) 11.sp else 12.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
+                )
+            }
         }
     }
 }
@@ -263,14 +315,32 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         Text("Payment history", style = MaterialTheme.typography.titleLarge)
         Column {
-            PaymentHistoryRow("Date", "Payment (RM)", isHeader = true)
-            // Newest saved payment first; retain all records, even multiple for one date.
+            PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
             val entries = vm.paymentRecords.asReversed()
             entries.forEach { record ->
-                PaymentHistoryRow(displayPaymentDate(record.date), "RM " + record.grandTotalPaymentRm)
+                PaymentTableRow(displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm)
             }
-            repeat((10 - entries.size).coerceAtLeast(0)) {
-                PaymentHistoryRow("", "")
+            repeat((10 - entries.size).coerceAtLeast(0)) { PaymentTableRow("", "", "") }
+        }
+        Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Monthly totals are calculated from saved payments. Years are shown separately.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+        val years = (vm.paymentRecords.mapNotNull { runCatching { LocalDate.parse(it.date).year }.getOrNull() }
+            .toSet() + vm.deliveryDate.year + (vm.deliveryDate.year - 1)).sorted()
+        years.forEach { year ->
+            Text(year.toString(), style = MaterialTheme.typography.titleMedium)
+            Column {
+                PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
+                (1..12).forEach { month ->
+                    val totals = monthlyPaymentTotals(vm.paymentRecords, year, month)
+                    PaymentTableRow(
+                        java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
+                        totals.totalPaymentRm, totals.grandTotalPaymentRm
+                    )
+                }
             }
         }
     }
