@@ -137,21 +137,22 @@ fun App(vm: PlannerViewModel) {
             if (vm.screen != "LocationPicker") {
                 Surface(color = PremiumNavy, shadowElevation = 6.dp) {
                     Row(
-                        Modifier.fillMaxWidth().navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "Payment").forEach { label ->
+                        listOf("Home", "Route", "Delivery", "Map", "History", "Payment").forEach { label ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
-                                modifier = Modifier.heightIn(min = 64.dp).widthIn(min = 80.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 64.dp),
+                                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 8.dp),
                                 shape = RoundedCornerShape(18.dp),
                                 colors = ButtonDefaults.textButtonColors(
                                     containerColor = if (selected) PremiumRoyal else Color.Transparent,
                                     contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
                                     disabledContentColor = Color(0xFF8292AC)
                                 )
-                            ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+                            ) { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) }
                         }
                     }
                 }
@@ -338,7 +339,6 @@ fun Home(vm: PlannerViewModel) {
             SecondaryAction("Clear postal code", vm::clearPostalCodes, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
         }
         TaxDeclareButton()
-        SecondaryAction("View route history", { vm.screen = "History" }, enabled = !vm.busy)
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 }
