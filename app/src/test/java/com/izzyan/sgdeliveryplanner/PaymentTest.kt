@@ -45,6 +45,18 @@ class PaymentTest {
         assertNull(calculatePayment("2", "1.234", "0.00", ""))
     }
 
+    @Test fun manualTaxOverridesSavedDeliveryReportAndResetReturnsToReport() {
+        val reportValue = "66.53"
+        assertEquals(reportValue, effectivePaymentTaxRm(reportValue, null))
+        assertEquals("40.00", effectivePaymentTaxRm(reportValue, "40.00"))
+        val changed = calculatePayment("10", "30.00", effectivePaymentTaxRm(reportValue, "40.00"), "5.00")
+        assertEquals(PaymentCalculation("300.00", "345.00"), changed)
+        assertEquals("66.53", effectivePaymentTaxRm(reportValue, null))
+        assertEquals("0.00", effectivePaymentTaxRm(null, null))
+        assertEquals("12.75", effectivePaymentTaxRm(null, "12.75"))
+        assertNull(calculatePayment("10", "30.00", effectivePaymentTaxRm(reportValue, ""), ""))
+    }
+
     @Test fun taxUsesOnlyLatestSavedReportForSelectedHomeDate() {
         val old = route(date, "1.00", "2026-10-26T12:00")
         val latest = route(date, "5.00", "2026-10-26T13:00")
