@@ -138,6 +138,9 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     var rateNotice by mutableStateOf("")
         private set
     val history = repo.dao.history()
+    private val paymentLedger = PaymentLedger(app)
+    var paymentRecords by mutableStateOf(paymentLedger.read())
+        private set
     var backupNotice by mutableStateOf("")
 
     fun exportHistory(destination: android.net.Uri) {
@@ -220,6 +223,25 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not restore your saved route. Try opening it from History.") }
             finally { busy = false }
+        }
+    }
+
+    /** Append-only payment history: Save records the selected Home date and calculated RM total. */
+    fun savePayment(record: PaymentRecord): Boolean {
+        if (busy) return false
+        return try {
+            if (!paymentLedger.append(record)) {
+                message = "Could not save your payment. Please try again."
+                false
+            } else {
+                paymentRecords = paymentLedger.read()
+                message = ""
+                notice = "Payment saved: " + record.date + " · RM " + record.grandTotalPaymentRm
+                true
+            }
+        } catch (e: Exception) {
+            message = englishError(e, "Could not save your payment. Please try again.")
+            false
         }
     }
 
