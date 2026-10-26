@@ -345,7 +345,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                             quantity = quantity.toInt(),
                             commissionPerParcelRm = normalizedCurrency(commission) ?: "0.00",
                             totalPaymentRm = value.totalPaymentRm,
-                            taxRm = taxRm,
+                            taxRm = normalizedCurrency(taxRm) ?: "0.00",
                             othersRm = normalizedCurrency(others) ?: "0.00",
                             grandTotalPaymentRm = value.grandTotalPaymentRm
                         )
