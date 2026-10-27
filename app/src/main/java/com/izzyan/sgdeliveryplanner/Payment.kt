@@ -63,6 +63,25 @@ data class PaymentCalculation(
     val grandTotalPaymentRm: String
 )
 
+data class PaymentRecordRef(val index: Int, val record: PaymentRecord)
+
+/** Create a balanced replacement record from editable fields, without losing past payments. */
+fun revisedPaymentRecord(
+    dateText: String, quantityText: String, commissionText: String, taxText: String, othersText: String
+): PaymentRecord? {
+    val date = runCatching { LocalDate.parse(dateText.trim()).toString() }.getOrNull() ?: return null
+    val quantity = quantityText.toIntOrNull() ?: return null
+    val amounts = calculatePayment(quantityText, commissionText, taxText, othersText) ?: return null
+    return PaymentRecord(
+        date = date, quantity = quantity,
+        commissionPerParcelRm = normalizedCurrency(commissionText) ?: return null,
+        totalPaymentRm = amounts.totalPaymentRm,
+        taxRm = normalizedCurrency(taxText) ?: return null,
+        othersRm = normalizedCurrency(othersText) ?: return null,
+        grandTotalPaymentRm = amounts.grandTotalPaymentRm
+    )
+}
+
 /** All payment maths use decimal amounts, with rounding to exactly two RM decimals. */
 fun calculatePayment(
     quantityText: String,
@@ -141,6 +160,26 @@ class PaymentLedger(context: Context) {
         val current = read()
         require(current.size < 10000) { "Payment history is full. Back up your records." }
         return prefs.edit().putString("records", gson.toJson(current + record)).commit()
+    }
+
+    /** Check both position and value: identical payments on the same date remain distinct. */
+    fun replaceAt(index: Int, original: PaymentRecord, updated: PaymentRecord): Boolean {
+        require(validPaymentRecord(updated)) { "Invalid payment values." }
+        val records = read().toMutableList()
+        require(index in records.indices && records[index] == original) {
+            "Payment record changed. Close and reopen it before editing."
+        }
+        records[index] = updated
+        return prefs.edit().putString("records", gson.toJson(records)).commit()
+    }
+
+    fun deleteAt(index: Int, original: PaymentRecord): Boolean {
+        val records = read().toMutableList()
+        require(index in records.indices && records[index] == original) {
+            "Payment record changed. Close and reopen it before deleting."
+        }
+        records.removeAt(index)
+        return prefs.edit().putString("records", gson.toJson(records)).commit()
     }
 
     /** Merge instead of overwriting; keep real duplicate entries while making repeated restores idempotent. */
