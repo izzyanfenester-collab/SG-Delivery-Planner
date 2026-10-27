@@ -100,6 +100,48 @@ class PaymentTest {
         assertEquals(PaymentCalculation("0.00", "0.00"), yearlyPaymentTotals(emptyList(), 2026))
     }
 
+    @Test fun editingSelectedPaymentRecalculatesAndPersistsWithOriginalRecordOrder() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
+        val first = PaymentRecord("2026-10-26", 1, "100.00", "100.00", "10.00", "0.00", "110.00")
+        val second = PaymentRecord("2026-10-27", 2, "25.00", "50.00", "0.00", "0.00", "50.00")
+        val ledger = PaymentLedger(context)
+        assertTrue(ledger.append(first))
+        assertTrue(ledger.append(second))
+        val revised = revisedPaymentRecord("2026-11-01", "2", "45.50", "5.75", "3.25")
+        assertEquals("91.00", revised?.totalPaymentRm)
+        assertEquals("100.00", revised?.grandTotalPaymentRm)
+        assertTrue(ledger.replaceAt(0, first, requireNotNull(revised)))
+        assertEquals(listOf(revised, second), PaymentLedger(context).read())
+        assertEquals(PaymentCalculation("50.00", "50.00"), yearlyPaymentTotals(
+            ledger.read().filter { it.date.startsWith("2026-10") }, 2026
+        ))
+        assertEquals(listOf(10,11), nonZeroMonthlyPaymentRows(ledger.read(), 2026).map { it.first })
+        context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    @Test fun deleteIsIndexSpecificForIdenticalEntriesAndNeedsCurrentRecord() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
+        val duplicate = PaymentRecord("2026-10-26", 1, "50.00", "50.00", "0.00", "0.00", "50.00")
+        val other = PaymentRecord("2026-11-01", 1, "20.00", "20.00", "0.00", "0.00", "20.00")
+        val ledger = PaymentLedger(context)
+        assertTrue(ledger.append(duplicate))
+        assertTrue(ledger.append(duplicate))
+        assertTrue(ledger.append(other))
+        assertTrue(ledger.deleteAt(1, duplicate))
+        assertEquals(listOf(duplicate, other), PaymentLedger(context).read())
+        assertEquals(PaymentCalculation("70.00", "70.00"), yearlyPaymentTotals(ledger.read(), 2026))
+        try {
+            ledger.deleteAt(1, duplicate)
+            org.junit.Assert.fail("Mismatched payment was allowed to delete")
+        } catch (_: IllegalArgumentException) { }
+        assertEquals(2, ledger.read().size)
+        assertNull(revisedPaymentRecord("bad date", "1", "25.00", "0.00", "0.00"))
+        assertNull(revisedPaymentRecord("2026-10-26", "0", "25.00", "0.00", "0.00"))
+        context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
     @Test fun repeatedRestoreKeepsExistingPaymentsAndDuplicatesFromSameBackup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("payment_ledger", Context.MODE_PRIVATE).edit().clear().commit()

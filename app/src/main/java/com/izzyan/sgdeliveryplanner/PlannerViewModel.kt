@@ -249,6 +249,44 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         }
     }
 
+    /** Edit a saved payment without touching its neighboring entries or route history. */
+    fun revisePayment(index: Int, expected: PaymentRecord, updated: PaymentRecord): Boolean {
+        if (busy) return false
+        return try {
+            if (!paymentLedger.replaceAt(index, expected, updated)) {
+                message = "Could not update payment. Please try again."
+                false
+            } else {
+                paymentRecords = paymentLedger.read()
+                message = ""
+                notice = "Payment updated: " + updated.date + " · RM " + updated.grandTotalPaymentRm
+                true
+            }
+        } catch (e: Exception) {
+            message = englishError(e, "Payment update failed. No records were changed.")
+            false
+        }
+    }
+
+    /** UI must request explicit confirmation before invoking this deletion. */
+    fun deletePayment(index: Int, expected: PaymentRecord): Boolean {
+        if (busy) return false
+        return try {
+            if (!paymentLedger.deleteAt(index, expected)) {
+                message = "Could not delete payment. Please try again."
+                false
+            } else {
+                paymentRecords = paymentLedger.read()
+                message = ""
+                notice = "Payment removed: " + expected.date
+                true
+            }
+        } catch (e: Exception) {
+            message = englishError(e, "Payment deletion failed. No records were changed.")
+            false
+        }
+    }
+
     fun persist() {
         prefs.edit().apply {
             if (draftOrders.isEmpty()) remove("draftCustomerOrders")

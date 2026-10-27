@@ -2,6 +2,8 @@ package com.izzyan.sgdeliveryplanner
 
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +21,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
@@ -62,6 +66,25 @@ data class PaymentCalculation(
     val totalPaymentRm: String,
     val grandTotalPaymentRm: String
 )
+
+data class PaymentRecordRef(val index: Int, val record: PaymentRecord)
+
+/** Create a balanced replacement record from editable fields, without losing past payments. */
+fun revisedPaymentRecord(
+    dateText: String, quantityText: String, commissionText: String, taxText: String, othersText: String
+): PaymentRecord? {
+    val date = runCatching { LocalDate.parse(dateText.trim()).toString() }.getOrNull() ?: return null
+    val quantity = quantityText.toIntOrNull() ?: return null
+    val amounts = calculatePayment(quantityText, commissionText, taxText, othersText) ?: return null
+    return PaymentRecord(
+        date = date, quantity = quantity,
+        commissionPerParcelRm = normalizedCurrency(commissionText) ?: return null,
+        totalPaymentRm = amounts.totalPaymentRm,
+        taxRm = normalizedCurrency(taxText) ?: return null,
+        othersRm = normalizedCurrency(othersText) ?: return null,
+        grandTotalPaymentRm = amounts.grandTotalPaymentRm
+    )
+}
 
 /** All payment maths use decimal amounts, with rounding to exactly two RM decimals. */
 fun calculatePayment(
@@ -141,6 +164,26 @@ class PaymentLedger(context: Context) {
         val current = read()
         require(current.size < 10000) { "Payment history is full. Back up your records." }
         return prefs.edit().putString("records", gson.toJson(current + record)).commit()
+    }
+
+    /** Check both position and value: identical payments on the same date remain distinct. */
+    fun replaceAt(index: Int, original: PaymentRecord, updated: PaymentRecord): Boolean {
+        require(validPaymentRecord(updated)) { "Invalid payment values." }
+        val records = read().toMutableList()
+        require(index in records.indices && records[index] == original) {
+            "Payment record changed. Close and reopen it before editing."
+        }
+        records[index] = updated
+        return prefs.edit().putString("records", gson.toJson(records)).commit()
+    }
+
+    fun deleteAt(index: Int, original: PaymentRecord): Boolean {
+        val records = read().toMutableList()
+        require(index in records.indices && records[index] == original) {
+            "Payment record changed. Close and reopen it before deleting."
+        }
+        records.removeAt(index)
+        return prefs.edit().putString("records", gson.toJson(records)).commit()
     }
 
     /** Merge instead of overwriting; keep real duplicate entries while making repeated restores idempotent. */
@@ -229,16 +272,21 @@ private fun PaymentInput(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
     dateOrMonth: String, totalPayment: String, grandTotal: String,
-    isHeader: Boolean = false, isTotal: Boolean = false
+    isHeader: Boolean = false, isTotal: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val emphasized = isHeader || isTotal
     val cellBackground = if (emphasized) colors.primaryContainer else colors.surface
     val cellText = if (emphasized) colors.onPrimaryContainer else colors.onSurface
     val gridLine = colors.outlineVariant
-    Row(Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
+    val gesture = if (onLongClick != null) {
+        Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
+    } else Modifier
+    Row(Modifier.fillMaxWidth().then(gesture).border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 0.88f else 1.16f)
@@ -254,6 +302,82 @@ private fun PaymentTableRow(
             }
         }
     }
+}
+
+
+/** Edit one entry rather than an aggregate; calculated totals stay consistent with the fields. */
+@Composable
+private fun PaymentEditDialog(
+    target: PaymentRecordRef,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (PaymentRecord) -> Unit
+) {
+    var date by remember(target) { mutableStateOf(target.record.date) }
+    var quantity by remember(target) { mutableStateOf(target.record.quantity.toString()) }
+    var commission by remember(target) { mutableStateOf(target.record.commissionPerParcelRm) }
+    var tax by remember(target) { mutableStateOf(target.record.taxRm) }
+    var others by remember(target) { mutableStateOf(target.record.othersRm) }
+    val updated = revisedPaymentRecord(date, quantity, commission, tax, others)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit saved payment") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Original: ${displayPaymentDate(target.record.date)} · RM ${target.record.grandTotalPaymentRm}",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { if (it.length <= 10) date = it },
+                    label = { Text("Date (YYYY-MM-DD)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) quantity = it },
+                    label = { Text("Qty parcel") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = commission,
+                    onValueChange = { if (validCurrencyInput(it)) commission = it },
+                    label = { Text("Commission per parcel (RM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = tax,
+                    onValueChange = { if (validCurrencyInput(it)) tax = it },
+                    label = { Text("Tax (RM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = others,
+                    onValueChange = { if (validCurrencyInput(it)) others = it },
+                    label = { Text("Others (RM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    if (updated != null) "New total: RM ${updated.totalPaymentRm} · Grand total: RM ${updated.grandTotalPaymentRm}"
+                    else "Enter a valid date, quantity and RM amounts.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { updated?.let(onSave) }, enabled = !busy && updated != null) {
+                Text("Save changes")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -274,6 +398,12 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var manualTaxRm by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf<String?>(null) }
     val taxRm = effectivePaymentTaxRm(reportTax, manualTaxRm)
     val amounts = calculatePayment(quantity, commission, taxRm, others)
+    val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
+
+    var selectedRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
+    var editingRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
+    var deletionPending by remember { mutableStateOf<PaymentRecordRef?>(null) }
+    var selectedMonth by remember { mutableStateOf<Int?>(null) }
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
@@ -373,11 +503,17 @@ fun PaymentScreen(vm: PlannerViewModel) {
             )
         }
         Text("Payment history", style = MaterialTheme.typography.titleLarge)
+        Text("Press and hold a saved date to edit or delete its payment.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
         Column {
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
-            val entries = vm.paymentRecords.asReversed()
-            entries.forEach { record ->
-                PaymentTableRow(displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm)
+            vm.paymentRecords.indices.reversed().forEach { index ->
+                val record = vm.paymentRecords[index]
+                PaymentTableRow(
+                    displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm,
+                    onLongClick = { selectedRecord = PaymentRecordRef(index, record) }
+                )
             }
         }
         Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
@@ -386,7 +522,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
-        val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
+        // Current year is captured by the Payment screen and its month-management dialog.
         Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
         val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
         val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
@@ -395,7 +531,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
             monthsWithPayment.forEach { (month, totals) ->
                 PaymentTableRow(
                     java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
-                    totals.totalPaymentRm, totals.grandTotalPaymentRm
+                    totals.totalPaymentRm, totals.grandTotalPaymentRm,
+                    onLongClick = { selectedMonth = month }
                 )
             }
             if (monthsWithPayment.isEmpty()) {
@@ -408,5 +545,96 @@ fun PaymentScreen(vm: PlannerViewModel) {
             }
             PaymentTableRow("Total", yearTotal.totalPaymentRm, yearTotal.grandTotalPaymentRm, isTotal = true)
         }
+        Text("Press and hold a month to manage the saved payments within it.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
+    }
+
+    selectedMonth?.let { month ->
+        val recordsInMonth = vm.paymentRecords.withIndex().filter { (_, record) ->
+            runCatching { LocalDate.parse(record.date) }.getOrNull()?.let {
+                it.year == currentYear && it.monthValue == month
+            } == true
+        }.asReversed()
+        AlertDialog(
+            onDismissRequest = { selectedMonth = null },
+            title = {
+                Text(java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH) +
+                    " $currentYear")
+            },
+            text = {
+                Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Select a saved date to edit or delete that individual payment.",
+                        style = MaterialTheme.typography.bodySmall)
+                    recordsInMonth.forEach { (index, record) ->
+                        OutlinedButton(
+                            onClick = {
+                                selectedMonth = null
+                                selectedRecord = PaymentRecordRef(index, record)
+                            },
+                            enabled = !vm.busy, modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("${displayPaymentDate(record.date)} · RM ${record.grandTotalPaymentRm}")
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedMonth = null }) { Text("Close") } }
+        )
+    }
+    selectedRecord?.let { target ->
+        AlertDialog(
+            onDismissRequest = { selectedRecord = null },
+            title = { Text("Saved payment: ${displayPaymentDate(target.record.date)}") },
+            text = {
+                Text("Total payment RM ${target.record.totalPaymentRm}\n" +
+                    "Grand total RM ${target.record.grandTotalPaymentRm}\n" +
+                    "Edit this payment or request deletion?")
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedRecord = null; editingRecord = target }, enabled = !vm.busy) {
+                    Text("Edit")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { selectedRecord = null; deletionPending = target }, enabled = !vm.busy) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                    TextButton(onClick = { selectedRecord = null }) { Text("Cancel") }
+                }
+            }
+        )
+    }
+    editingRecord?.let { target ->
+        PaymentEditDialog(
+            target = target,
+            busy = vm.busy,
+            onDismiss = { editingRecord = null },
+            onSave = { updated ->
+                if (vm.revisePayment(target.index, target.record, updated)) editingRecord = null
+            }
+        )
+    }
+    deletionPending?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deletionPending = null },
+            title = { Text("Delete this payment?") },
+            text = {
+                Text("${displayPaymentDate(target.record.date)} · RM ${target.record.grandTotalPaymentRm}\n" +
+                    "This permanently deletes only the selected payment and updates monthly totals. " +
+                    "This cannot be undone unless it exists in an earlier backup.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (vm.deletePayment(target.index, target.record)) deletionPending = null
+                    },
+                    enabled = !vm.busy
+                ) { Text("Confirm Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deletionPending = null }) { Text("Cancel") } }
+        )
     }
 }
