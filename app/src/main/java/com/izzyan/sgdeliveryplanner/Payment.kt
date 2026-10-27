@@ -398,6 +398,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var manualTaxRm by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf<String?>(null) }
     val taxRm = effectivePaymentTaxRm(reportTax, manualTaxRm)
     val amounts = calculatePayment(quantity, commission, taxRm, others)
+    val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
 
     var selectedRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
     var editingRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
@@ -521,7 +522,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
-        val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
+        // Current year is captured by the Payment screen and its month-management dialog.
         Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
         val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
         val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
