@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
@@ -220,6 +221,10 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
 
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
 
+// Keep only five payment history rows visible; older entries remain scrollable.
+private const val VISIBLE_PAYMENT_HISTORY_ROWS = 5
+private val PAYMENT_HISTORY_ROW_HEIGHT = 30.dp
+
 private fun displayPaymentDate(value: String): String = runCatching {
     LocalDate.parse(value).format(rowDate)
 }.getOrDefault(value)
@@ -230,19 +235,22 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
     val cellBackground = if (strong) colors.primaryContainer else colors.surface
     val cellText = if (strong) colors.onPrimaryContainer else colors.onSurface
     val gridLine = colors.outlineVariant
+    // Compact payment input table: reduce unused vertical space without changing fields.
+    val compactRowHeight = 46.dp
+    val compactCellPadding = 6.dp
     Row(
         Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.weight(0.42f).heightIn(min = 54.dp).padding(8.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.weight(0.42f).heightIn(min = compactRowHeight).padding(compactCellPadding), contentAlignment = Alignment.CenterStart) {
             Text(
                 label, color = cellText, fontSize = 13.sp,
                 lineHeight = 17.sp, fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal
             )
         }
         Box(
-            Modifier.weight(0.58f).heightIn(min = 54.dp)
-                .border(BorderStroke(0.5.dp, gridLine)).padding(8.dp),
+            Modifier.weight(0.58f).heightIn(min = compactRowHeight)
+                .border(BorderStroke(0.5.dp, gridLine)).padding(compactCellPadding),
             contentAlignment = Alignment.CenterStart
         ) { content() }
     }
@@ -276,7 +284,7 @@ private fun PaymentInput(
 private fun PaymentTableRow(
     dateOrMonth: String, totalPayment: String, grandTotal: String,
     isHeader: Boolean = false, isTotal: Boolean = false,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null, fixedRowHeight: Dp? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val emphasized = isHeader || isTotal
@@ -290,7 +298,8 @@ private fun PaymentTableRow(
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 0.88f else 1.16f)
-                    .heightIn(min = if (isHeader) 54.dp else 30.dp)
+                    .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight)
+                        else Modifier.heightIn(min = if (isHeader) 54.dp else 30.dp))
                     .border(BorderStroke(0.5.dp, gridLine)).padding(5.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -404,6 +413,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var editingRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
     var deletionPending by remember { mutableStateOf<PaymentRecordRef?>(null) }
     var selectedMonth by remember { mutableStateOf<Int?>(null) }
+    val paymentHistoryScrollState = rememberScrollState()
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
@@ -507,13 +517,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall)
         Column {
+            // Header stays visible while the records scroll in a five-row-high viewport.
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
-            vm.paymentRecords.indices.reversed().forEach { index ->
-                val record = vm.paymentRecords[index]
-                PaymentTableRow(
-                    displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm,
-                    onLongClick = { selectedRecord = PaymentRecordRef(index, record) }
-                )
+            Column(
+                Modifier.heightIn(max = PAYMENT_HISTORY_ROW_HEIGHT * VISIBLE_PAYMENT_HISTORY_ROWS)
+                    .verticalScroll(paymentHistoryScrollState)
+            ) {
+                vm.paymentRecords.indices.reversed().forEach { index ->
+                    val record = vm.paymentRecords[index]
+                    PaymentTableRow(
+                        displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm,
+                        onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
+                        fixedRowHeight = PAYMENT_HISTORY_ROW_HEIGHT
+                    )
+                }
             }
         }
         Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
