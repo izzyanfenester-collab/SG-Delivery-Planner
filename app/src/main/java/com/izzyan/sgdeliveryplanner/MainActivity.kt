@@ -694,6 +694,18 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
+        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
+            onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
+        if (scheduleExpanded) ScheduleTable(p)        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+        }
         PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.startLocation.displayName}")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -732,19 +744,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         } else {
             Text("Google Maps can open up to 3 delivery stops together in a mobile browser. Your full ${p.stops.size}-stop route is shown here in optimized order. Tap Navigate on the Delivery screen for directions to each stop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
-        }
-        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
-        }
-        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
-        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
-            onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
-        if (scheduleExpanded) ScheduleTable(p)
+
     }
 }
 
