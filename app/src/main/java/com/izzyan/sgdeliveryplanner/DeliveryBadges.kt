@@ -49,85 +49,14 @@ fun reportStatusBadge(status: String): DeliveryBadgeStyle = when (normalizedStat
  */
 @Composable
 private fun CashOnDeliveryLogo() {
-    Canvas(
-        modifier = Modifier
-            .size(width = 150.dp, height = 43.dp)
-            .clearAndSetSemantics { contentDescription = "Cash on Delivery" }
-    ) {
-        val graphic = drawContext.canvas.nativeCanvas
-        val saved = graphic.save()
-        graphic.scale(size.width / 300f, size.height / 86f)
-
-        val red = android.graphics.Color.rgb(229, 37, 43)
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            isFilterBitmap = true
-        }
-        // White interior with a neat delivery-label frame.
-        paint.color = android.graphics.Color.WHITE
-        paint.style = android.graphics.Paint.Style.FILL
-        graphic.drawRoundRect(2.5f, 2.5f, 297.5f, 83.5f, 11f, 11f, paint)
-        paint.color = red
-        paint.style = android.graphics.Paint.Style.STROKE
-        paint.strokeWidth = 4.5f
-        graphic.drawRoundRect(2.5f, 2.5f, 297.5f, 83.5f, 11f, 11f, paint)
-        paint.style = android.graphics.Paint.Style.FILL
-
-        // Red upper-right parcel-label corner and two white highlights.
-        graphic.drawRoundRect(256f, 3f, 296f, 24f, 4f, 4f, paint)
-        paint.color = android.graphics.Color.WHITE
-        graphic.drawRoundRect(268f, 9f, 277f, 15f, 2f, 2f, paint)
-        graphic.drawRoundRect(282f, 9f, 293f, 15f, 2f, 2f, paint)
-        paint.color = red
-        graphic.drawRoundRect(4f, 76.5f, 39f, 83.5f, 3f, 3f, paint)
-
-        // Speed streaks match the delivery theme without crossing the words.
-        paint.style = android.graphics.Paint.Style.STROKE
-        paint.strokeWidth = 3.5f
-        paint.strokeCap = android.graphics.Paint.Cap.ROUND
-        graphic.drawLine(18f, 28f, 58f, 28f, paint)
-        graphic.drawLine(8f, 39f, 52f, 39f, paint)
-        graphic.drawLine(27f, 49f, 55f, 49f, paint)
-        paint.style = android.graphics.Paint.Style.FILL
-
-        val boldItalic = android.graphics.Typeface.create(
-            "sans-serif-condensed", android.graphics.Typeface.BOLD_ITALIC
-        )
-        val cashPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = red
-            typeface = boldItalic
-            textSize = 53f
-            isSubpixelText = true
-            textSkewX = -0.06f
-        }
-        // Fill the main line instead of leaving a large blank white box.
-        cashPaint.textScaleX = (181f / cashPaint.measureText("CASH")).coerceIn(0.88f, 1.35f)
-        graphic.drawText("CASH", 74f, 49f, cashPaint)
-
-        val onPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = red
-            typeface = boldItalic
-            textSize = 31f
-            isSubpixelText = true
-        }
-        val deliveryPaint = android.graphics.Paint(onPaint).apply {
-            color = android.graphics.Color.rgb(18, 18, 18)
-            textSize = 31f
-        }
-        val on = "ON"
-        val delivery = "DELIVERY"
-        val gap = 7f
-        val width = onPaint.measureText(on) + gap + deliveryPaint.measureText(delivery)
-        if (width > 245f) {
-            val factor = 245f / width
-            onPaint.textScaleX = factor
-            deliveryPaint.textScaleX = factor
-        }
-        val totalWidth = onPaint.measureText(on) + gap + deliveryPaint.measureText(delivery)
-        val lineStart = (300f - totalWidth) / 2f + 7f
-        graphic.drawText(on, lineStart, 75f, onPaint)
-        graphic.drawText(delivery, lineStart + onPaint.measureText(on) + gap, 75f, deliveryPaint)
-        graphic.restoreToCount(saved)
-    }
+    // Watermark-free, compact bitmap of the approved premium COD design.
+    // Sized consistently for Route, Delivery and History cards.
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(R.drawable.cod_premium_logo),
+        contentDescription = "Cash on Delivery",
+        modifier = Modifier.size(width = 164.dp, height = 65.dp),
+        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+    )
 }
 
 @Composable
