@@ -61,7 +61,7 @@ private fun CashOnDeliveryLogo() {
             Box(
                 Modifier.align(Alignment.TopEnd)
                     .size(width = 27.dp, height = 5.dp)
-                    .background(red, RoundedCornerShape(bottomStart = 3.dp))
+                    .background(red, RoundedCornerShape(3.dp))
             )
             Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 3.dp),
@@ -75,7 +75,7 @@ private fun CashOnDeliveryLogo() {
                     lineHeight = 20.sp,
                     fontWeight = FontWeight.Black,
                     fontStyle = FontStyle.Italic,
-                    letterSpacing = (-0.6).sp,
+                    letterSpacing = (-0.6f).sp,
                     maxLines = 1
                 )
                 Row(
@@ -86,7 +86,7 @@ private fun CashOnDeliveryLogo() {
                         fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, maxLines = 1)
                     Text("DELIVERY", color = Color.Black, fontSize = 14.sp, lineHeight = 15.sp,
                         fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic,
-                        letterSpacing = (-0.4).sp, maxLines = 1)
+                        letterSpacing = (-0.4f).sp, maxLines = 1)
                 }
             }
         }
