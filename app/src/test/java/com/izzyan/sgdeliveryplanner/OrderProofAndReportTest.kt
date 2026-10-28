@@ -96,7 +96,8 @@ class OrderProofAndReportTest {
         assertTrue("Compact 1.5x report must include both photos",png.height > 1000)
         var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
         assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
-        for(y in 0 until png.height step 8) for(x in 0 until png.width step 8) {
+        // The COD logo is red too; scan only the lower proof-photo section.
+        for(y in (png.height / 2) until png.height step 8) for(x in 0 until png.width step 8) {
             val pixel=png.getPixel(x,y)
             if(Color.red(pixel)>200 && Color.green(pixel)<50 && Color.blue(pixel)<50) { red=true; if(redY<0) {redY=y;redX=x} }
             if(Color.blue(pixel)>200 && Color.red(pixel)<50) { blue=true; if(blueY<0) {blueY=y;blueX=x} }
@@ -109,9 +110,9 @@ class OrderProofAndReportTest {
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
         assertTrue(file.name.endsWith(".png"))
     }
-    @Test fun reportPngHasExactPaymentAndStatusCapsuleColorsForDeliveredAndHold() {
+    @Test fun reportPngHasApprovedPaymentLogosAndStatusCapsuleColorsForDeliveredAndHold() {
         val base = plan().stops[0]
-        fun report(mode: String, status: String, expectedPayment: Int, expectedStatus: Int): Bitmap {
+        fun report(mode: String, status: String): Bitmap {
             val stop = base.copy(
                 status = status,
                 holdReason = if (status == "ON_HOLD") "Customer not home | No answer" else null,
@@ -126,17 +127,39 @@ class OrderProofAndReportTest {
                     if (bitmap.getPixel(x,y) == color) count++
             return count
         }
-        val delivered = report("PAYNOW","DELIVERED",Color.rgb(153,0,204),Color.rgb(78,167,46))
+        // Confirm that report rendering uses the actual graphic colors, not the
+        // obsolete solid-purple / yellow payment capsules. These tests contain
+        // no proof photos, keeping the badge scan region unambiguous.
+        fun countBrandPixels(bitmap: Bitmap, payNow: Boolean): Int {
+            var count = 0
+            for (y in 275 until minOf(bitmap.height, 850) step 2)
+                for (x in 120 until minOf(bitmap.width, 820) step 2) {
+                    val pixel = bitmap.getPixel(x, y)
+                    val r = Color.red(pixel)
+                    val g = Color.green(pixel)
+                    val b = Color.blue(pixel)
+                    val matches = if (payNow) {
+                        r in 80..245 && b in 65..235 && g < 130 && b > g + 30
+                    } else {
+                        r > 165 && g < 120 && b < 125
+                    }
+                    if (matches) count++
+                }
+            return count
+        }
+        val delivered = report("PAYNOW","DELIVERED")
         assertTrue("Delivered green capsule missing top-right",countPixels(delivered,Color.rgb(78,167,46),760,50,1032,116)>100)
         assertTrue("1.5x Delivered badge must fill its lower half",
             countPixels(delivered,Color.rgb(78,167,46),760,125,1032,168)>100)
-        assertTrue("PayNow purple capsule missing in PNG",countPixels(delivered,Color.rgb(153,0,204),50,295,1030,delivered.height)>50)
+        assertTrue("Premium PayNow wordmark missing from Delivery Report PNG",
+            countBrandPixels(delivered, payNow = true) > 40)
         delivered.recycle()
-        val held = report("COD","ON_HOLD",Color.rgb(255,192,0),Color.rgb(233,113,50))
+        val held = report("COD","ON_HOLD")
         assertTrue("On Hold orange capsule missing top-right",countPixels(held,Color.rgb(233,113,50),760,50,1032,116)>100)
         assertTrue("1.5x On Hold badge must fill its lower half",
             countPixels(held,Color.rgb(233,113,50),760,125,1032,168)>100)
-        assertTrue("COD yellow capsule missing in PNG",countPixels(held,Color.rgb(255,192,0),50,295,1030,held.height)>50)
+        assertTrue("Premium red COD logo missing from Delivery Report PNG",
+            countBrandPixels(held, payNow = false) > 40)
         held.recycle()
         assertEquals("PayNow",paymentModeBadge(base.order!!.copy(paymentStatus="PAYNOW"))!!.label)
         assertEquals("Cash On Delivery",paymentModeBadge(base.order!!.copy(paymentStatus="COD"))!!.label)
