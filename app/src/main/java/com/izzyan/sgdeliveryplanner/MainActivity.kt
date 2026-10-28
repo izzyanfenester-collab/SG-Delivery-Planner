@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -525,6 +526,89 @@ fun holdDetails(stop: Stop): String? {
     return listOfNotNull(stop.holdReason?.takeIf { it.isNotBlank() }, stop.holdNote?.takeIf { it.isNotBlank() }).joinToString(" • ").takeIf { it.isNotBlank() }
 }
 
+// Compact, icon-led delivery controls. Only the active stop's action panel uses these;
+// other app buttons retain their existing size and behavior.
+@Composable
+private fun CompactDeliveryAction(
+    label: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    color: Color? = null,
+    compactText: Boolean = false,
+    completed: Boolean = false
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)
+    if (color == null) {
+        OutlinedButton(
+            onClick = onClick, enabled = enabled,
+            modifier = modifier.height(52.dp),
+            shape = shape, contentPadding = contentPadding,
+            border = BorderStroke(1.dp, Color(0xFF4B617C))
+        ) {
+            CompactDeliveryActionContent(label, iconRes, compactText, completed)
+        }
+    } else {
+        Button(
+            onClick = onClick, enabled = enabled,
+            modifier = modifier.height(52.dp),
+            shape = shape, contentPadding = contentPadding,
+            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
+        ) {
+            CompactDeliveryActionContent(label, iconRes, compactText, completed)
+        }
+    }
+}
+
+@Composable
+private fun CompactDeliveryActionContent(
+    label: String,
+    iconRes: Int,
+    compactText: Boolean,
+    completed: Boolean
+) {
+    val iconSize = if (compactText) 31.dp else 35.dp
+    val currentColor = LocalContentColor.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(iconRes),
+                contentDescription = if (completed) "$label attached" else null,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (completed) {
+                Box(
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                        .size(12.dp)
+                        .background(PremiumEmerald, RoundedCornerShape(50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("✓", fontSize = 9.sp, lineHeight = 10.sp, color = Color.White)
+                }
+            }
+        }
+        Spacer(Modifier.width(if (compactText) 4.dp else 7.dp))
+        Box(Modifier.width(1.dp).height(23.dp).background(currentColor.copy(alpha = 0.45f)))
+        Spacer(Modifier.width(if (compactText) 5.dp else 8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontSize = if (compactText) 11.sp else 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 @Composable
 fun Delivery(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
@@ -581,26 +665,62 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.DELIVERY,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.proofFileId != null) "✓ Proof of Delivery" else "Proof of Delivery")}
-                    OutlinedButton(onClick={vm.proofRequest=ProofRequest(p.id,stop.orderId,ProofKind.PAYMENT,chooseSource=true)},enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=56.dp)) {Text(if(stop.order?.paymentProofFileId != null) "✓ Proof of Payment" else "Proof of Payment")}
+                    CompactDeliveryAction(
+                        label = "Proof of Delivery", iconRes = R.drawable.ic_delivery_camera,
+                        onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.DELIVERY, chooseSource = true) },
+                        modifier = Modifier.weight(1f), enabled = !vm.busy,
+                        compactText = true, completed = stop.order?.proofFileId != null
+                    )
+                    CompactDeliveryAction(
+                        label = "Proof of Payment", iconRes = R.drawable.ic_delivery_receipt,
+                        onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.PAYMENT, chooseSource = true) },
+                        modifier = Modifier.weight(1f), enabled = !vm.busy,
+                        compactText = true, completed = stop.order?.paymentProofFileId != null
+                    )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryAction("Navigate", {
-                        val choice = vm.navigationPreferences.default
-                        showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
-                    }, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
-                    PrimaryAction("Delivered", { vm.progress("DELIVERED") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumEmerald, minHeight = 56.dp)
+                    CompactDeliveryAction(
+                        label = "Navigate", iconRes = R.drawable.ic_delivery_navigation,
+                        onClick = {
+                            val choice = vm.navigationPreferences.default
+                            showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
+                        },
+                        modifier = Modifier.weight(1f), enabled = !vm.busy, color = PremiumRoyal
+                    )
+                    CompactDeliveryAction(
+                        label = "Delivered", iconRes = R.drawable.ic_delivery_delivered,
+                        onClick = { vm.progress("DELIVERED") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
+                        color = PremiumEmerald
+                    )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryAction("On Hold", { holdStop = p.current }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = PremiumAmber, minHeight = 56.dp)
-                    PrimaryAction("Skipped", { vm.progress("SKIP") }, Modifier.weight(1f), enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED", color = Color(0xFF4F5E73), minHeight = 56.dp)
+                    CompactDeliveryAction(
+                        label = "On Hold", iconRes = R.drawable.ic_delivery_hold,
+                        onClick = { holdStop = p.current },
+                        modifier = Modifier.weight(1f),
+                        enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
+                        color = PremiumAmber
+                    )
+                    CompactDeliveryAction(
+                        label = "Skipped", iconRes = R.drawable.ic_delivery_skipped,
+                        onClick = { vm.progress("SKIP") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
+                        color = Color(0xFF4F5E73)
+                    )
                 }
             }
             if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
             if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
-            SecondaryAction("Next stop", { vm.progress("NEXT") }, enabled = !vm.busy)
+            CompactDeliveryAction(
+                label = "Next stop", iconRes = R.drawable.ic_delivery_next,
+                onClick = { vm.progress("NEXT") },
+                modifier = Modifier.fillMaxWidth(), enabled = !vm.busy
+            )
             Text("Next stop marks this stop as reviewed and keeps its current status. You can revisit deliveries that are on hold, skipped or pending from the summary or route.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
     }
