@@ -61,6 +61,55 @@ private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : androi
     }
 }
 
+/**
+ * Reuse the very same local PNG badges shown on Route, Delivery and History.
+ * ReplacementSpan keeps the image inline after "Payment Mode :" and expands
+ * that line's metrics so neither logo overlaps adjacent report text.
+ */
+private class PaymentLogoSpan(private val logo: Bitmap, private val payNow: Boolean) :
+    android.text.style.ReplacementSpan() {
+    private val badgeWidth = if (payNow) 264f else 268f
+    private val badgeHeight = if (payNow) 75f else 99f
+    private val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    override fun getSize(
+        paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?
+    ): Int {
+        fm?.let {
+            // Allow the taller COD graphic to fit without clipping the row.
+            val above = kotlin.math.ceil(badgeHeight * 0.78f).toInt()
+            val below = kotlin.math.ceil(badgeHeight * 0.22f).toInt()
+            it.ascent = minOf(it.ascent, -above)
+            it.top = minOf(it.top, it.ascent)
+            it.descent = maxOf(it.descent, below)
+            it.bottom = maxOf(it.bottom, it.descent)
+        }
+        return kotlin.math.ceil(badgeWidth).toInt()
+    }
+
+    override fun draw(
+        canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float,
+        top: Int, y: Int, bottom: Int, paint: Paint
+    ) {
+        // The drawing area follows the line metrics returned by getSize.
+        val topY = (top + bottom - badgeHeight) / 2f
+        val bounds = RectF(x, topY, x + badgeWidth, topY + badgeHeight)
+        if (payNow) {
+            // Match the white backdrop of the on-screen PayNow wordmark.
+            val whiteBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+            canvas.drawRoundRect(bounds, 12f, 12f, whiteBg)
+            canvas.drawBitmap(
+                logo, null,
+                RectF(x + 8f, topY + 11f, x + badgeWidth - 8f, topY + badgeHeight - 11f),
+                logoPaint
+            )
+        } else {
+            // COD PNG already includes its own premium red/white graphic.
+            canvas.drawBitmap(logo, null, bounds, logoPaint)
+        }
+    }
+}
+
 /** Render one dedicated report image, never a screenshot or another customer's card. */
 private class SingleDeliveryReportView(
     context: Context,
@@ -76,6 +125,13 @@ private class SingleDeliveryReportView(
     private val titleInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.titlePx; typeface = Typeface.DEFAULT_BOLD
     }
+    // Decode the exact icon assets already bundled in the installed app.
+    private val paymentLogo = when (paymentMode?.label) {
+        "Cash On Delivery" -> BitmapFactory.decodeResource(resources, R.drawable.cod_premium_logo)
+        "PayNow" -> BitmapFactory.decodeResource(resources, R.drawable.paynow_logo)
+        else -> null
+    }
+
     // Keep the compact title and status capsule aligned in the same top row.
     private val bodyText = text.substringAfter('\n').trimEnd('\n', '\r')
     private val styled = android.text.SpannableString(bodyText).apply {
@@ -83,8 +139,12 @@ private class SingleDeliveryReportView(
         setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, firstEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         paymentMode?.let { badge ->
             val start = bodyText.indexOf("Payment Mode : ").takeIf { it >= 0 }?.plus("Payment Mode : ".length)
-            if (start != null && bodyText.regionMatches(start, badge.label, 0, badge.label.length))
-                setSpan(PaymentCapsuleSpan(badge), start, start + badge.label.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (start != null && bodyText.regionMatches(start, badge.label, 0, badge.label.length)) {
+                val graphic = paymentLogo?.let { PaymentLogoSpan(it, badge.label == "PayNow") }
+                    ?: PaymentCapsuleSpan(badge)
+                setSpan(graphic, start, start + badge.label.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
         }
     }
     // Bring the Stop line directly below the one-line title (normal 1.0 line spacing).
