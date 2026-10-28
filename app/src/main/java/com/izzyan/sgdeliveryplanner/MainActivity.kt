@@ -140,7 +140,16 @@ fun App(vm: PlannerViewModel) {
                         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        listOf("Home", "Route", "Delivery", "Map", "History", "Payment").forEach { label ->
+                        // Icon-only navigation, based on official Build #669.
+                        // Keep tab targets and touch dimensions identical to the original.
+                        listOf(
+                            "Home" to R.drawable.ic_nav_home,
+                            "Route" to R.drawable.ic_nav_route,
+                            "Delivery" to R.drawable.ic_nav_delivery,
+                            "Map" to R.drawable.ic_nav_map,
+                            "History" to R.drawable.ic_nav_history,
+                            "Payment" to R.drawable.ic_nav_payment
+                        ).forEach { (label, iconRes) ->
                             val selected = vm.screen == label
                             TextButton(
                                 onClick = { vm.screen = label }, enabled = !vm.busy,
@@ -149,10 +158,16 @@ fun App(vm: PlannerViewModel) {
                                 shape = RoundedCornerShape(18.dp),
                                 colors = ButtonDefaults.textButtonColors(
                                     containerColor = if (selected) PremiumRoyal else Color.Transparent,
-                                    contentColor = if (selected) PremiumGold else Color(0xFFD0DBEC),
+                                    contentColor = if (selected) Color.White else Color(0xFFD0DBEC),
                                     disabledContentColor = Color(0xFF8292AC)
                                 )
-                            ) { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) }
+                            ) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(iconRes),
+                                    contentDescription = label,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
                         }
                     }
                 }
