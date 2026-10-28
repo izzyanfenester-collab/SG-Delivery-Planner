@@ -698,7 +698,8 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
             onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
-        if (scheduleExpanded) ScheduleTable(p)        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
+        if (scheduleExpanded) ScheduleTable(p)
+        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
