@@ -59,6 +59,29 @@ private fun CashOnDeliveryLogo() {
     )
 }
 
+/**
+ * PayNow wordmark taken from the user-provided reference image.
+ * The PNG is transparent; a compact white backing preserves the original
+ * brand contrast on SG Delivery's dark navy cards.
+ */
+@Composable
+private fun PayNowLogo() {
+    Surface(
+        modifier = Modifier
+            .size(width = 165.dp, height = 39.dp)
+            .clearAndSetSemantics { contentDescription = "PayNow" },
+        color = Color.White,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.paynow_logo),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
+    }
+}
+
 @Composable
 fun PaymentModeRow(order: CustomerOrder?, useCodLogo: Boolean = true) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -68,6 +91,8 @@ fun PaymentModeRow(order: CustomerOrder?, useCodLogo: Boolean = true) {
             Text("—", style = MaterialTheme.typography.bodyMedium)
         } else if (useCodLogo && order?.paymentStatus?.equals("COD", ignoreCase = true) == true) {
             CashOnDeliveryLogo()
+        } else if (order?.paymentStatus?.equals("PAYNOW", ignoreCase = true) == true) {
+            PayNowLogo()
         } else {
             Surface(
                 color = Color(badge.backgroundArgb),
