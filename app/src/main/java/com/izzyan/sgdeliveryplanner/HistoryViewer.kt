@@ -111,7 +111,7 @@ fun HistoryViewOnly(plan:Plan,onClose:()->Unit) {
                             Text("Phone : "+(stop.order?.phoneNumber?:"—"))
                             Text("Address : "+(stop.order?.fullAddress?:stop.place.address))
                             Text("Parcel Price : "+orderPrice(stop.order))
-                            PaymentModeRow(stop.order)
+                            PaymentModeRow(stop.order, useCodLogo = false)
                             if(stop.holdReason!=null) Text("Hold reasons : "+stop.holdReason)
                             if(stop.holdNote!=null) Text("Hold notes : "+stop.holdNote)
                             // Keep both proof types visible in the same row, even when one is missing.

@@ -1,6 +1,15 @@
 package com.izzyan.sgdeliveryplanner
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,24 +40,82 @@ fun reportStatusBadge(status: String): DeliveryBadgeStyle = when (normalizedStat
     else -> DeliveryBadgeStyle("Pending", 0xFF183C78.toInt(), 0xFFFFFFFF.toInt())
 }
 
+/**
+ * Watermark-free COD logo styled after the supplied red/white/black reference.
+ * Only the on-screen Route and Delivery cards use it. Payment data, reports
+ * and other payment methods stay as before.
+ */
 @Composable
-fun PaymentModeRow(order: CustomerOrder?) {
+private fun CashOnDeliveryLogo() {
+    val red = Color(0xFFE6272C)
+    Surface(
+        modifier = Modifier
+            .size(width = 152.dp, height = 49.dp)
+            .clearAndSetSemantics { contentDescription = "Cash on Delivery" },
+        shape = RoundedCornerShape(7.dp),
+        border = BorderStroke(2.dp, red),
+        color = Color.White
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            // A small red corner panel echoes the COD delivery-frame icon.
+            Box(
+                Modifier.align(Alignment.TopEnd)
+                    .size(width = 27.dp, height = 5.dp)
+                    .background(red, RoundedCornerShape(bottomStart = 3.dp))
+            )
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 3.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "CASH",
+                    color = red,
+                    fontSize = 21.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    fontStyle = FontStyle.Italic,
+                    letterSpacing = (-0.6).sp,
+                    maxLines = 1
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text("ON", color = red, fontSize = 12.sp, lineHeight = 14.sp,
+                        fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, maxLines = 1)
+                    Text("DELIVERY", color = Color.Black, fontSize = 14.sp, lineHeight = 15.sp,
+                        fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic,
+                        letterSpacing = (-0.4).sp, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PaymentModeRow(order: CustomerOrder?, useCodLogo: Boolean = true) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Text("Payment Mode : ", style = MaterialTheme.typography.bodyMedium)
         val badge = paymentModeBadge(order)
-        if (badge == null) Text("—", style = MaterialTheme.typography.bodyMedium)
-        else Surface(
-            color = Color(badge.backgroundArgb),
-            contentColor = Color(badge.foregroundArgb),
-            shape = RoundedCornerShape(50)
-        ) {
-            Text(
-                badge.label,
-                Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
+        if (badge == null) {
+            Text("—", style = MaterialTheme.typography.bodyMedium)
+        } else if (useCodLogo && order?.paymentStatus?.equals("COD", ignoreCase = true) == true) {
+            CashOnDeliveryLogo()
+        } else {
+            Surface(
+                color = Color(badge.backgroundArgb),
+                contentColor = Color(badge.foregroundArgb),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    badge.label,
+                    Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
