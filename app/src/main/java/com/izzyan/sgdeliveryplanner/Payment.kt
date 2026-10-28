@@ -235,19 +235,22 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
     val cellBackground = if (strong) colors.primaryContainer else colors.surface
     val cellText = if (strong) colors.onPrimaryContainer else colors.onSurface
     val gridLine = colors.outlineVariant
+    // Compact payment input table: reduce unused vertical space without changing fields.
+    val compactRowHeight = 46.dp
+    val compactCellPadding = 6.dp
     Row(
         Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.weight(0.42f).heightIn(min = 54.dp).padding(8.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.weight(0.42f).heightIn(min = compactRowHeight).padding(compactCellPadding), contentAlignment = Alignment.CenterStart) {
             Text(
                 label, color = cellText, fontSize = 13.sp,
                 lineHeight = 17.sp, fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal
             )
         }
         Box(
-            Modifier.weight(0.58f).heightIn(min = 54.dp)
-                .border(BorderStroke(0.5.dp, gridLine)).padding(8.dp),
+            Modifier.weight(0.58f).heightIn(min = compactRowHeight)
+                .border(BorderStroke(0.5.dp, gridLine)).padding(compactCellPadding),
             contentAlignment = Alignment.CenterStart
         ) { content() }
     }
