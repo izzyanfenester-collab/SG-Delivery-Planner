@@ -68,8 +68,8 @@ private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : androi
  */
 private class PaymentLogoSpan(private val logo: Bitmap, private val payNow: Boolean) :
     android.text.style.ReplacementSpan() {
-    private val badgeWidth = if (payNow) 198f else 202f
-    private val badgeHeight = if (payNow) 56f else 74f
+    private val badgeWidth = if (payNow) 158f else 162f
+    private val badgeHeight = if (payNow) 45f else 59f
     private val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     override fun getSize(
@@ -97,10 +97,10 @@ private class PaymentLogoSpan(private val logo: Bitmap, private val payNow: Bool
         if (payNow) {
             // Match the white backdrop of the on-screen PayNow wordmark.
             val whiteBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-            canvas.drawRoundRect(bounds, 9f, 9f, whiteBg)
+            canvas.drawRoundRect(bounds, 7f, 7f, whiteBg)
             canvas.drawBitmap(
                 logo, null,
-                RectF(x + 6f, topY + 8f, x + badgeWidth - 6f, topY + badgeHeight - 8f),
+                RectF(x + 5f, topY + 6f, x + badgeWidth - 5f, topY + badgeHeight - 6f),
                 logoPaint
             )
         } else {
