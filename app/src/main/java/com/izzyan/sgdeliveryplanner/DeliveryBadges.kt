@@ -54,7 +54,7 @@ private fun CashOnDeliveryLogo() {
     androidx.compose.foundation.Image(
         painter = androidx.compose.ui.res.painterResource(R.drawable.cod_premium_logo),
         contentDescription = "Cash on Delivery",
-        modifier = Modifier.size(width = 164.dp, height = 65.dp),
+        modifier = Modifier.size(width = 124.dp, height = 49.dp),
         contentScale = androidx.compose.ui.layout.ContentScale.Fit
     )
 }
@@ -68,15 +68,15 @@ private fun CashOnDeliveryLogo() {
 private fun PayNowLogo() {
     Surface(
         modifier = Modifier
-            .size(width = 165.dp, height = 39.dp)
+            .size(width = 125.dp, height = 30.dp)
             .clearAndSetSemantics { contentDescription = "PayNow" },
         color = Color.White,
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(6.dp)
     ) {
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(R.drawable.paynow_logo),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 3.dp),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit
         )
     }
