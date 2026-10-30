@@ -1077,7 +1077,7 @@ fun RouteMap(p: Plan) {
     } }
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
-        Text("Red marker: Next Delivery / Current Target • © OpenStreetMap contributors", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Red dots: Delivery stops • © OpenStreetMap contributors", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().weight(1f), update = { view ->
             view.overlays.clear()
             val line = Polyline().apply {
@@ -1086,13 +1086,18 @@ fun RouteMap(p: Plan) {
                 outlinePaint.strokeWidth = 7f
             }
             view.overlays.add(line)
-            p.stops.getOrNull(p.current)?.let { stop ->
+            // Show all delivery stops as compact red dots, not a single oversized pin.
+            // Center the drawable on each actual GPS coordinate to avoid visual offset.
+            // Route line stays underneath the markers, preserving the existing blue route.
+            p.stops.forEachIndexed { index, stop ->
                 view.overlays.add(Marker(view).apply {
                     position = GeoPoint(stop.place.lat, stop.place.lon)
-                    title = "Next Delivery / Current Target: ${stop.place.postal}"
+                    title = if (index == p.current)
+                        "Current Target - Stop ${index + 1}: ${stop.place.postal}"
+                    else "Stop ${index + 1}: ${stop.place.postal}"
                     snippet = stop.place.address
                     icon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_current_delivery)
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 })
             }
             val startPlace = p.startLocation.asPlace()
