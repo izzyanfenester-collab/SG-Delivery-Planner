@@ -111,7 +111,8 @@ fun App(vm: PlannerViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(color = PremiumNavy, shadowElevation = 4.dp) {
-                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                // Keep the safe-area inset and 48dp touch targets, but reclaim 20dp vertically on every page.
+                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (vm.canGoBack) {
                             TextButton(

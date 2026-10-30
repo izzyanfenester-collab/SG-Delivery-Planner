@@ -73,6 +73,38 @@ class OrderProofAndReportTest {
         try {store.import(Uri.fromFile(bad),ProofKind.PAYMENT);fail("Invalid image accepted")}catch(_:Exception){}
         assertNotNull(store.file(id)); assertTrue(store.decode(store.file(id)!!,256)!!.width>0)
     }
+    @Test fun deliveredHistoryReportKeepsOriginalDateAndTimeAcrossRepeatedOpens() {
+        val original = plan().stops[0].copy(
+            status = "DELIVERED", completedAt = "2026-10-29T19:01:00",
+            reviewedAt = "2026-10-29T19:01:00"
+        )
+        val saved = PlanJson.decode(PlanJson.encode(plan().copy(stops = listOf(original))))
+            .stops[0]
+        val firstOpen = deliveryReportGeneratedTime(saved, LocalDateTime.of(2026, 10, 30, 7, 44))
+        val laterOpen = deliveryReportGeneratedTime(saved, LocalDateTime.of(2026, 11, 8, 15, 30))
+        assertEquals("29 Oct 2026, 7:01 PM", firstOpen)
+        assertEquals(firstOpen, laterOpen)
+        assertTrue(singleDeliveryReportText(saved, 0, laterOpen)
+            .contains("Report generated: 29 Oct 2026, 7:01 PM (Singapore)"))
+        // Re-marking an already delivered stop must not reset its recorded time.
+        val untouched = reviewStop(plan().copy(stops = listOf(saved), current = 0),
+            "DELIVERED", "2026-11-08T15:30:00")
+        assertEquals(saved.completedAt, untouched.stops[0].completedAt)
+    }
+
+    @Test fun historyReportUsesReviewedTimeAndNeverFabricatesMissingDeliveredTime() {
+        val stop = plan().stops[0]
+        val reviewed = stop.copy(status = "ON_HOLD", reviewedAt = "2026-10-29T20:22:00")
+        assertEquals("29 Oct 2026, 8:22 PM",
+            deliveryReportGeneratedTime(reviewed, LocalDateTime.of(2026, 11, 10, 8, 0)))
+        val legacyDelivered = stop.copy(status = "DELIVERED", completedAt = null)
+        assertEquals("Original time not recorded",
+            deliveryReportGeneratedTime(legacyDelivered, LocalDateTime.of(2026, 11, 10, 8, 0)))
+        val newPending = stop.copy(status = "PENDING")
+        assertEquals("10 Nov 2026, 8:00 AM",
+            deliveryReportGeneratedTime(newPending, LocalDateTime.of(2026, 11, 10, 8, 0)))
+    }
+
     @Test fun reportContainsActualBothImagesAndOnlySelectedCustomerAndUsesPngShareIntent() {
         val store=OrderProofStore(app)
         val payment=store.import(Uri.fromFile(image(Color.RED)),ProofKind.PAYMENT)

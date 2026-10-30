@@ -110,6 +110,26 @@ private class PaymentLogoSpan(private val logo: Bitmap, private val payNow: Bool
     }
 }
 
+/**
+ * Keep the original event timestamp on historical delivery reports. Previously
+ * every preview/re-share used LocalDateTime.now(), silently changing the date.
+ * DELIVERED uses the immutable completedAt set when runner marked delivery;
+ * other reviewed stops use reviewedAt. Never invent a time for an old delivered
+ * record whose original completedAt was not saved.
+ */
+internal fun deliveryReportGeneratedTime(stop: Stop, currentTime: LocalDateTime): String {
+    val recorded = if (normalizedStatus(stop.status) == "DELIVERED") stop.completedAt
+        else stop.reviewedAt
+    val savedTime = recorded?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+    return when {
+        savedTime != null -> savedTime.format(REPORT_GENERATED_FORMAT)
+        normalizedStatus(stop.status) == "DELIVERED" -> "Original time not recorded"
+        else -> currentTime.format(REPORT_GENERATED_FORMAT)
+    }
+}
+private val REPORT_GENERATED_FORMAT =
+    DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", java.util.Locale.ENGLISH)
+
 /** Render one dedicated report image, never a screenshot or another customer's card. */
 private class SingleDeliveryReportView(
     context: Context,
@@ -237,7 +257,7 @@ fun generateSingleDeliveryReport(context: Context, stop: Stop, index: Int): File
     val payment = store.file(stop.order?.paymentProofFileId)?.let { store.decode(it,1024) }
     val delivery = store.file(stop.order?.proofFileId)?.let { store.decode(it,1024) }
     try {
-        val generated = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a",java.util.Locale.ENGLISH))
+        val generated = deliveryReportGeneratedTime(stop, LocalDateTime.now(ZoneId.of("Asia/Singapore")))
         val report = SingleDeliveryReportView(context,singleDeliveryReportText(stop,index,generated),reportStatusBadge(stop.status),paymentModeBadge(stop.order),payment,delivery)
         require(report.reportHeight in 1..16000) { "Report is too long to render safely." }
         val bitmap = Bitmap.createBitmap(1080,report.reportHeight,Bitmap.Config.ARGB_8888)
