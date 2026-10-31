@@ -64,81 +64,19 @@ fun BackupRestoreActions(vm:PlannerViewModel) {
     )
 }
 
-/** Route history is displayed as an immutable local snapshot. The active route ID is never touched. */
+/** Route history is displayed as a read-only snapshot; the active route stays untouched. */
 @Composable
-fun HistoryViewOnly(plan:Plan,onClose:()->Unit) {
+fun HistoryViewOnly(plan: Plan, onClose: () -> Unit) {
     var reportIndex by remember(plan.id) { mutableStateOf<Int?>(null) }
     var summaryReport by remember(plan.id) { mutableStateOf(false) }
-    Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                Text("History · "+plan.deliveryDate,Modifier.weight(1f),color=PremiumGold,
-                    style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-                TextButton(onClick=onClose){Text("Close")}
-            }
-            LazyColumn(contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                item {
-                    PremiumCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Text("VIEW ONLY · Saved route",color=PremiumGold,fontWeight=FontWeight.Bold)
-                            val sum=deliverySummary(plan)
-                            Text("Date: "+plan.deliveryDate)
-                            Text("Total Parcel: "+sum.totalParcel+" · Delivered: "+sum.delivered)
-                            Text("On Hold: "+sum.onHold+" · Skipped: "+sum.skipped+" · Pending: "+sum.pending)
-                            Text("Success Rate: "+String.format(Locale.ENGLISH,"%.1f%%",sum.successRate))
-                            Text("Cash on Hand: "+formatCurrency(plan.cashOnHand)+" · Tax: "+plan.tax)
-                            Text("Remark: "+plan.remark.ifBlank { "—" })
-                            OutlinedButton(onClick={summaryReport=true},modifier=Modifier.fillMaxWidth()) {
-                                Text("View / Share Summary Report")
-                            }
-                        }
-                    }
-                }
-                itemsIndexed(plan.stops,key={_,stop->stop.orderId}) { index,stop ->
-                    PremiumCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text("Stop "+(index+1)+" · "+stop.place.postal,
-                                    Modifier.weight(1f),fontWeight=FontWeight.Bold,color=PremiumGold)
-                                val badge=reportStatusBadge(stop.status)
-                                Surface(color=Color(badge.backgroundArgb),contentColor=Color(badge.foregroundArgb),
-                                    shape=RoundedCornerShape(40.dp)) {
-                                    Text(badge.label,Modifier.padding(horizontal=9.dp,vertical=5.dp),
-                                        style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold)
-                                }
-                            }
-                            Text("Customer : "+(stop.order?.customerName?:"—"))
-                            Text("Phone : "+(stop.order?.phoneNumber?:"—"))
-                            Text("Address : "+(stop.order?.fullAddress?:stop.place.address))
-                            Text("Parcel Price : "+orderPrice(stop.order))
-                            if(stop.holdReason!=null) Text("Hold reasons : "+stop.holdReason)
-                            if(stop.holdNote!=null) Text("Hold notes : "+stop.holdNote)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                PaymentModeStamp(stop.order, size = 78.dp)
-                            }
-                            // Keep both proof types visible in the same row, even when one is missing.
-                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),
-                                verticalAlignment=Alignment.Top) {
-                                Column(Modifier.weight(1f)) {
-                                    ReadOnlyHistoryProof(stop.order?.paymentProofFileId,"Proof of Payment")
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    ReadOnlyHistoryProof(stop.order?.proofFileId,"Proof of Delivery")
-                                }
-                            }
-                            OutlinedButton(onClick={reportIndex=index},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {
-                                Text("View / Share Delivery Report")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    reportIndex?.let { index ->
-        HistoryReportImageDialog(plan,index){reportIndex=null}
-    }
-    if(summaryReport) HistoryReportImageDialog(plan,null){summaryReport=false}
+    HistoryViewV6(
+        plan = plan,
+        onClose = onClose,
+        onReport = { index -> reportIndex = index },
+        onSummaryReport = { summaryReport = true }
+    )
+    reportIndex?.let { index -> HistoryReportImageDialog(plan, index) { reportIndex = null } }
+    if (summaryReport) HistoryReportImageDialog(plan, null) { summaryReport = false }
 }
 
 @Composable
