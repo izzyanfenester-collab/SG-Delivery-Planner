@@ -47,9 +47,9 @@ private val V6Secondary = Color(0xFFB5CAE3)
 private val V6CodRed = Color(0xFFFF3758)
 private val V6PayNowMagenta = Color(0xFFE34BE4)
 
-private fun savedDateLabel(raw: String): String = runCatching {
-    LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-}.getOrDefault(raw)
+private fun savedDateLabel(raw: LocalDate): String = runCatching {
+    raw.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+}.getOrDefault(raw.toString())
 
 /** Modern history-only layout, based on official #717. All content remains read-only. */
 @Composable
