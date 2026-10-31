@@ -111,9 +111,11 @@ fun HistoryViewOnly(plan:Plan,onClose:()->Unit) {
                             Text("Phone : "+(stop.order?.phoneNumber?:"—"))
                             Text("Address : "+(stop.order?.fullAddress?:stop.place.address))
                             Text("Parcel Price : "+orderPrice(stop.order))
-                            PaymentModeRow(stop.order)
                             if(stop.holdReason!=null) Text("Hold reasons : "+stop.holdReason)
                             if(stop.holdNote!=null) Text("Hold notes : "+stop.holdNote)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                PaymentModeStamp(stop.order, size = 78.dp)
+                            }
                             // Keep both proof types visible in the same row, even when one is missing.
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),
                                 verticalAlignment=Alignment.Top) {
