@@ -111,8 +111,8 @@ class OrderProofAndReportTest {
         val delivery=store.import(Uri.fromFile(image(Color.BLUE)),ProofKind.DELIVERY)
         val stop=plan().stops[0].copy(status="DELIVERED",completedAt="2026-10-10T10:30:00",order=plan().stops[0].order!!.copy(paymentProofFileId=payment,proofFileId=delivery))
         val text=singleDeliveryReportText(stop,0,"10 Oct 2026, 10:35 AM")
-        assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertTrue(text.contains("Payment Mode : Cash On Delivery")); assertFalse(text.contains("\n\n"));
-        assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertTrue(text.contains("Cash On Delivery"));assertFalse(text.contains(" · DELIVERED"))
+        assertFalse(text.contains("Runner Route Planning")); assertTrue(text.startsWith("Delivery Report\n")); assertFalse(text.contains("Payment Mode")); assertFalse(text.contains("\n\n"));
+        assertTrue(text.contains("Helen"));assertTrue(text.contains("$55.00"));assertFalse(text.contains("Cash On Delivery"));assertFalse(text.contains(" · DELIVERED"))
         assertFalse(text.contains("OtherCustomer"));assertFalse(text.contains("+65 8198"));assertFalse(text.contains("Other address"));assertFalse(text.contains("$99.00"))
         for (removed in listOf("Planned arrival", "Updated ETA", "Actual / Delivered", "Distance from previous stop"))
             assertFalse("Removed report field: $removed", text.contains(removed))
@@ -165,7 +165,7 @@ class OrderProofAndReportTest {
         fun countBrandPixels(bitmap: Bitmap, payNow: Boolean): Int {
             var count = 0
             for (y in 275 until minOf(bitmap.height, 850) step 2)
-                for (x in 120 until minOf(bitmap.width, 820) step 2) {
+                for (x in 790 until minOf(bitmap.width, 1035) step 2) {
                     val pixel = bitmap.getPixel(x, y)
                     val r = Color.red(pixel)
                     val g = Color.green(pixel)

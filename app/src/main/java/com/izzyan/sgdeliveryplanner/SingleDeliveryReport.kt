@@ -22,7 +22,6 @@ fun singleDeliveryReportText(stop: Stop, index: Int, generated: String): String 
     appendLine("Phone : ${displayCustomerPhone(stop.order?.phoneNumber)}")
     appendLine("Address : ${customerAddress(stop)}")
     appendLine("Parcel Price : ${orderPrice(stop.order)}")
-    appendLine("Payment Mode : ${paymentModeBadge(stop.order)?.label ?: "—"}")
     holdDetails(stop)?.let { appendLine("On hold: $it") }
     appendLine("Report generated: $generated (Singapore)")
 }
@@ -36,78 +35,6 @@ internal object DeliveryReportTypography {
     const val statusPx = 46.5f // original 31
     const val titlePx = statusPx
     const val bodySp = 16 // 48px body at the report preview scale
-}
-
-/** True inline payment capsule; StaticLayout can move the whole span to the next
- * line when a large Cash On Delivery label won't fit after "Payment Mode : ".
- */
-private class PaymentCapsuleSpan(private val badge: DeliveryBadgeStyle) : android.text.style.ReplacementSpan() {
-    private val horizontalPadding = 30f
-    private fun labelPaint(paint: Paint) = Paint(paint).apply { typeface = Typeface.DEFAULT_BOLD }
-
-    override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int =
-        kotlin.math.ceil(labelPaint(paint).measureText(badge.label) + 2f * horizontalPadding).toInt()
-
-    override fun draw(canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float,
-                      top: Int, y: Int, bottom: Int, paint: Paint) {
-        val width = getSize(paint, text, start, end, null).toFloat()
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = badge.backgroundArgb }
-        val capsuleTop = top + 4f
-        val capsuleBottom = bottom - 4f
-        val radius = (capsuleBottom - capsuleTop) / 2f
-        canvas.drawRoundRect(RectF(x, capsuleTop, x + width, capsuleBottom), radius, radius, bg)
-        val textPaint = labelPaint(paint).apply { color = badge.foregroundArgb; isAntiAlias = true }
-        canvas.drawText(badge.label, x + horizontalPadding, y.toFloat(), textPaint)
-    }
-}
-
-/**
- * Reuse the very same local PNG badges shown on Route, Delivery and History.
- * ReplacementSpan keeps the image inline after "Payment Mode :" and expands
- * that line's metrics so neither logo overlaps adjacent report text.
- */
-private class PaymentLogoSpan(private val logo: Bitmap, private val payNow: Boolean) :
-    android.text.style.ReplacementSpan() {
-    private val badgeWidth = if (payNow) 158f else 162f
-    private val badgeHeight = if (payNow) 45f else 59f
-    private val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
-    override fun getSize(
-        paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?
-    ): Int {
-        fm?.let {
-            // Allow the taller COD graphic to fit without clipping the row.
-            val above = kotlin.math.ceil(badgeHeight * 0.78f).toInt()
-            val below = kotlin.math.ceil(badgeHeight * 0.22f).toInt()
-            it.ascent = minOf(it.ascent, -above)
-            it.top = minOf(it.top, it.ascent)
-            it.descent = maxOf(it.descent, below)
-            it.bottom = maxOf(it.bottom, it.descent)
-        }
-        return kotlin.math.ceil(badgeWidth).toInt()
-    }
-
-    override fun draw(
-        canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float,
-        top: Int, y: Int, bottom: Int, paint: Paint
-    ) {
-        // The drawing area follows the line metrics returned by getSize.
-        val topY = (top + bottom - badgeHeight) / 2f
-        val bounds = RectF(x, topY, x + badgeWidth, topY + badgeHeight)
-        if (payNow) {
-            // Match the white backdrop of the on-screen PayNow wordmark.
-            val whiteBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-            canvas.drawRoundRect(bounds, 7f, 7f, whiteBg)
-            canvas.drawBitmap(
-                logo, null,
-                RectF(x + 5f, topY + 6f, x + badgeWidth - 5f, topY + badgeHeight - 6f),
-                logoPaint
-            )
-        } else {
-            // COD PNG already includes its own premium red/white graphic.
-            canvas.drawBitmap(logo, null, bounds, logoPaint)
-        }
-    }
 }
 
 /**
@@ -130,6 +57,15 @@ internal fun deliveryReportGeneratedTime(stop: Stop, currentTime: LocalDateTime)
 private val REPORT_GENERATED_FORMAT =
     DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", java.util.Locale.ENGLISH)
 
+/** Rasterize the transparent vector stamp for the exported report PNG. */
+private fun reportStampBitmap(context: Context, drawableId: Int): Bitmap? {
+    val drawable = androidx.core.content.ContextCompat.getDrawable(context, drawableId) ?: return null
+    val bitmap = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888)
+    drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+    drawable.draw(Canvas(bitmap))
+    return bitmap
+}
+
 /** Render one dedicated report image, never a screenshot or another customer's card. */
 private class SingleDeliveryReportView(
     context: Context,
@@ -147,8 +83,8 @@ private class SingleDeliveryReportView(
     }
     // Decode the exact icon assets already bundled in the installed app.
     private val paymentLogo = when (paymentMode?.label) {
-        "Cash On Delivery" -> BitmapFactory.decodeResource(resources, R.drawable.cod_premium_logo)
-        "PayNow" -> BitmapFactory.decodeResource(resources, R.drawable.paynow_logo)
+        "Cash On Delivery" -> reportStampBitmap(context, R.drawable.cod_circle_stamp)
+        "PayNow" -> reportStampBitmap(context, R.drawable.paynow_circle_stamp)
         else -> null
     }
 
@@ -157,19 +93,14 @@ private class SingleDeliveryReportView(
     private val styled = android.text.SpannableString(bodyText).apply {
         val firstEnd = bodyText.indexOf('\n').takeIf { it >= 0 } ?: bodyText.length
         setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, firstEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        paymentMode?.let { badge ->
-            val start = bodyText.indexOf("Payment Mode : ").takeIf { it >= 0 }?.plus("Payment Mode : ".length)
-            if (start != null && bodyText.regionMatches(start, badge.label, 0, badge.label.length)) {
-                val graphic = paymentLogo?.let { PaymentLogoSpan(it, badge.label == "PayNow") }
-                    ?: PaymentCapsuleSpan(badge)
-                setSpan(graphic, start, start + badge.label.length,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-        }
     }
-    // Bring the Stop line directly below the one-line title (normal 1.0 line spacing).
+    // Reserve the right-hand side for the circular badge without hiding any text.
     private val bodyStartY = 132f
-    private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, 960)
+    private val stampSize = 220f
+    private val stampLeft = 800f
+    private val stampTop = bodyStartY + 160f
+    private val layoutWidth = if (paymentLogo == null) 960 else 720
+    private val layout = StaticLayout.Builder.obtain(styled, 0, styled.length, bodyInk, layoutWidth)
         .setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0f, 1f).build()
     private val twoColumns = (payment != null && delivery != null) || (payment == null && delivery == null)
     private val imageWidth = if (twoColumns) 468f else 960f
@@ -177,7 +108,8 @@ private class SingleDeliveryReportView(
         if (bitmap == null) 100f else (imageWidth * bitmap.height.toFloat() / bitmap.width.toFloat()).coerceAtMost(900f)
     private val proofHeight = maxOf(photoHeight(payment), photoHeight(delivery))
     // No extra blank vertical gap after the report-generated line.
-    private val proofStartY = bodyStartY + layout.height
+    private val proofStartY = maxOf(bodyStartY + layout.height,
+        if (paymentLogo == null) 0f else stampTop + stampSize + 22f)
     private val proofLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.proofPx; typeface = Typeface.DEFAULT_BOLD
     }
@@ -215,6 +147,11 @@ private class SingleDeliveryReportView(
         canvas.translate(60f, bodyStartY)
         layout.draw(canvas)
         canvas.restore()
+        paymentLogo?.let {
+            canvas.drawBitmap(it, null,
+                RectF(stampLeft, stampTop, stampLeft + stampSize, stampTop + stampSize),
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        }
 
         fun proof(label: String, bitmap: Bitmap?, x: Float, width: Float) {
             // Keep both proof labels on one line at 1.5x whenever they fit.

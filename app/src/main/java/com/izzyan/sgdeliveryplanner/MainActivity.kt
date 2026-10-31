@@ -656,7 +656,11 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
-                    StatusBadge(stop.status)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        StatusBadge(stop.status)
+                        Spacer(Modifier.weight(1f))
+                        PaymentModeStamp(stop.order, size = 78.dp)
+                    }
                     holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
                     HorizontalDivider(color = Color(0xFF31486B))
                     Text("Planned arrival: ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -808,8 +812,27 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
                 Text("Block ${stop.place.block} • ${stop.place.area}", style = MaterialTheme.typography.titleMedium)
                 CustomerDetails(vm,stop)
             }
-            OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
-            OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
+            val hasProofPhoto = stop.order?.paymentProofFileId != null ||
+                stop.order?.proofFileId != null
+            if (hasProofPhoto) {
+                // Keep uploaded proof photos at full card width.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    PaymentModeStamp(stop.order, size = 78.dp)
+                }
+                OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
+                OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
+            } else {
+                // Use the right-hand blank space for the stamp when no proof exists.
+                Box(Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
+                        OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
+                    }
+                    PaymentModeStamp(stop.order,
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp),
+                        size = 82.dp)
+                }
+            }
             Text("Planned arrival: ${time(stop.arrival)} • Departure: ${time(stop.leave)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", style = MaterialTheme.typography.bodyMedium) }
             stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
