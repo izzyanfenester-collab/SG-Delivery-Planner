@@ -57,10 +57,18 @@ internal fun deliveryReportGeneratedTime(stop: Stop, currentTime: LocalDateTime)
 private val REPORT_GENERATED_FORMAT =
     DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", java.util.Locale.ENGLISH)
 
-/** Use the exact same 35-degree stamp renderer as Route, Delivery and History. */
-private fun reportStampBitmap(paymentMode: String): Bitmap {
+/** Restore the exact Build #717 COD vector in exported reports. */
+private fun reportStampBitmap(context: Context, paymentMode: String): Bitmap? {
     val bitmap = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888)
-    drawSlantedPaymentStamp(Canvas(bitmap), paymentMode, 240f)
+    if (paymentMode == "COD") {
+        val drawable = androidx.core.content.ContextCompat.getDrawable(
+            context, R.drawable.cod_circle_stamp
+        ) ?: return null
+        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+        drawable.draw(Canvas(bitmap))
+    } else {
+        drawSlantedPaymentStamp(Canvas(bitmap), paymentMode, 240f)
+    }
     return bitmap
 }
 
@@ -81,8 +89,8 @@ private class SingleDeliveryReportView(
     }
     // Decode the exact icon assets already bundled in the installed app.
     private val paymentLogo = when (paymentMode?.label) {
-        "Cash On Delivery" -> reportStampBitmap("COD")
-        "PayNow" -> reportStampBitmap("PAYNOW")
+        "Cash On Delivery" -> reportStampBitmap(context, "COD")
+        "PayNow" -> reportStampBitmap(context, "PAYNOW")
         else -> null
     }
 
