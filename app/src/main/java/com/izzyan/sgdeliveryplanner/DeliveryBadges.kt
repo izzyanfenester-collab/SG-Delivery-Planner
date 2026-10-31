@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
@@ -39,7 +40,7 @@ fun PaymentModeStamp(order: CustomerOrder?, modifier: Modifier = Modifier, size:
             painter = painterResource(image),
             contentDescription = if (order?.paymentStatus?.uppercase(Locale.ENGLISH) == "COD")
                 "Cash on Delivery" else "PayNow",
-            modifier = modifier.then(Modifier.size(size)),
+            modifier = modifier.size(size).graphicsLayer(rotationZ = 35f),
             contentScale = ContentScale.Fit
         )
     }

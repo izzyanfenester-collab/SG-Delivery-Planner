@@ -62,7 +62,11 @@ private fun reportStampBitmap(context: Context, drawableId: Int): Bitmap? {
     val drawable = androidx.core.content.ContextCompat.getDrawable(context, drawableId) ?: return null
     val bitmap = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888)
     drawable.setBounds(0, 0, bitmap.width, bitmap.height)
-    drawable.draw(Canvas(bitmap))
+    val canvas = Canvas(bitmap)
+    canvas.save()
+    canvas.rotate(35f, bitmap.width / 2f, bitmap.height / 2f)
+    drawable.draw(canvas)
+    canvas.restore()
     return bitmap
 }
 

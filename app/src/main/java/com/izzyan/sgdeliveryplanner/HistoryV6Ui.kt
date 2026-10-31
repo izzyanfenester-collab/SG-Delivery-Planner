@@ -78,8 +78,8 @@ internal fun HistoryViewV6(
                     Text("‹", fontSize = 35.sp, lineHeight = 36.sp, color = V6Gold)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text("SG DELIVERY", color = V6Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("History", color = V6White, fontSize = 26.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
+                    Text("SG DELIVERY", color = V6Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("History", color = V6White, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp)
                 }
                 Column(
                     Modifier.background(Color(0xFF102F51), RoundedCornerShape(13.dp))
@@ -87,8 +87,8 @@ internal fun HistoryViewV6(
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(savedDateLabel(plan.deliveryDate), color = V6White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Saved route", color = V6Secondary, fontSize = 10.sp)
+                    Text(savedDateLabel(plan.deliveryDate), color = V6White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Saved route", color = V6Secondary, fontSize = 12.sp)
                 }
             }
             LazyColumn(
@@ -111,10 +111,10 @@ internal fun HistoryViewV6(
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { detailsOpen = !detailsOpen }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                                Text(if (detailsOpen) "Hide route details" else "Route details", fontSize = 12.sp, color = V6Secondary)
+                                Text(if (detailsOpen) "Hide route details" else "Route details", fontSize = 13.sp, color = V6Secondary)
                             }
                             TextButton(onClick = onSummaryReport, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
-                                Text("View / Share Summary Report", fontSize = 12.sp, color = V6Gold)
+                                Text("View / Share Summary Report", fontSize = 13.sp, color = V6Gold)
                             }
                         }
                         if (detailsOpen) {
@@ -124,7 +124,7 @@ internal fun HistoryViewV6(
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
-                                Text("VIEW ONLY · Saved route", color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("VIEW ONLY · Saved route", color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text("Date: " + plan.deliveryDate)
                                 Text("Total Parcel: " + summary.totalParcel + " · Delivered: " + summary.delivered)
                                 Text("On Hold: " + summary.onHold + " · Skipped: " + summary.skipped + " · Pending: " + summary.pending)
@@ -151,10 +151,10 @@ private fun V6StatBox(symbol: String, count: String, label: String, tint: Color,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(symbol, color = tint, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Text(symbol, color = tint, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(count, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 22.sp, color = V6White)
-            Text(label, fontSize = 10.sp, maxLines = 1, color = V6Secondary)
+            Text(count, fontSize = 22.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp, color = V6White)
+            Text(label, fontSize = 12.sp, maxLines = 1, color = V6Secondary)
         }
     }
 }
@@ -196,7 +196,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                                     .padding(horizontal = 8.dp, vertical = 5.dp)
                             ) {
                                 Text("STOP " + (index + 1).toString().padStart(2, '0'),
-                                    color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp, maxLines = 1)
+                                    color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
                             }
                             Box(
                                 Modifier.background(statusBackground, RoundedCornerShape(50))
@@ -204,41 +204,41 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                                     .padding(horizontal = 7.dp, vertical = 5.dp)
                             ) {
                                 Text((if (delivered) "✓ " else if (onHold) "◷ " else "") + status.label,
-                                    color = statusTint, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, maxLines = 1)
+                                    color = statusTint, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                             }
                         }
-                        Text(stop.place.postal, color = V6White, fontWeight = FontWeight.Bold, fontSize = 25.sp, lineHeight = 28.sp)
+                        Text(stop.place.postal, color = V6White, fontWeight = FontWeight.Bold, fontSize = 29.sp, lineHeight = 33.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("●", color = V6Secondary, fontSize = 13.sp)
-                            Text(stop.order?.customerName ?: "—", color = V6White, fontSize = 15.sp,
+                            Text(stop.order?.customerName ?: "—", color = V6White, fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold, maxLines = 2)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.Top) {
                             Text("⌖", color = Color(0xFFA8C5F3), fontSize = 18.sp, lineHeight = 19.sp)
                             Text(stop.order?.fullAddress ?: stop.place.address, color = V6Secondary,
-                                fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3)
+                                fontSize = 14.sp, lineHeight = 20.sp, maxLines = 3)
                         }
                     }
                     Column(Modifier.width(91.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         PaymentModeStamp(stop.order, size = 88.dp)
-                        Text("Payment Mode", color = V6Secondary, fontSize = 10.sp, maxLines = 1)
+                        Text("Payment Mode", color = V6Secondary, fontSize = 12.sp, maxLines = 1)
                         TextButton(
                             onClick = { extraOpen = !extraOpen },
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                         ) {
                             Text(if (extraOpen) "Hide details ‹" else "Details ›",
-                                color = Color(0xFFADCFF8), fontSize = 11.sp, maxLines = 1)
+                                color = Color(0xFFADCFF8), fontSize = 13.sp, maxLines = 1)
                         }
                     }
                 }
-                Text("PARCEL AMOUNT", color = V6Secondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                Text(orderPrice(stop.order), color = V6Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp)
+                Text("PARCEL AMOUNT", color = V6Secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(orderPrice(stop.order), color = V6Gold, fontSize = 27.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
                 if (extraOpen) {
                     HorizontalDivider(color = V6Outline, thickness = 1.dp)
-                    Text("Phone : " + (stop.order?.phoneNumber ?: "—"), color = V6White, fontSize = 13.sp)
-                    Text("Address : " + (stop.order?.fullAddress ?: stop.place.address), color = V6White, fontSize = 13.sp)
-                    if (stop.holdReason != null) Text("Hold reasons : " + stop.holdReason, color = V6White, fontSize = 13.sp)
-                    if (stop.holdNote != null) Text("Hold notes : " + stop.holdNote, color = V6White, fontSize = 13.sp)
+                    Text("Phone : " + (stop.order?.phoneNumber ?: "—"), color = V6White, fontSize = 15.sp)
+                    Text("Address : " + (stop.order?.fullAddress ?: stop.place.address), color = V6White, fontSize = 15.sp)
+                    if (stop.holdReason != null) Text("Hold reasons : " + stop.holdReason, color = V6White, fontSize = 15.sp)
+                    if (stop.holdNote != null) Text("Hold notes : " + stop.holdNote, color = V6White, fontSize = 15.sp)
                 }
             }
             // Full-height stripe inside this card's upper portion only.
@@ -248,7 +248,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         }
         HorizontalDivider(color = V6Outline, thickness = 1.dp)
         Row(
-            modifier = Modifier.fillMaxWidth().height(68.dp).background(V6Action),
+            modifier = Modifier.fillMaxWidth().height(76.dp).background(V6Action),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -273,7 +273,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
             ) {
                 Icon(painterResource(R.drawable.ic_customs_document), null, tint = V6Gold, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("Report", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
+                Text("Report", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
             }
         }
     }
@@ -301,7 +301,7 @@ private fun V6ProofAction(id: String?, label: String, iconRes: Int, modifier: Mo
             Image(
                 thumbnail!!.asImageBitmap(),
                 label.replace("\n", " "),
-                Modifier.size(30.dp).clip(RoundedCornerShape(6.dp)),
+                Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
                 contentScale = ContentScale.Crop
             )
         } else {
@@ -315,8 +315,8 @@ private fun V6ProofAction(id: String?, label: String, iconRes: Int, modifier: Mo
         Spacer(Modifier.width(5.dp))
         Text(
             if (id == null) label.replace("\n", "\n") else label,
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
             textAlign = TextAlign.Start,
             color = if (id == null) Color(0xFF8CA0BA) else V6White,
             maxLines = 2,
