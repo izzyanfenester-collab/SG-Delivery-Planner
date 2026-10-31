@@ -220,7 +220,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                         }
                     }
                     Column(Modifier.width(91.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        V6SlantedPaymentSeal(payment, 88.dp)
+                        PaymentModeStamp(stop.order, size = 88.dp)
                         Text("Payment Mode", color = V6Secondary, fontSize = 10.sp, maxLines = 1)
                         TextButton(
                             onClick = { extraOpen = !extraOpen },
@@ -276,61 +276,6 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 Text("Report", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
             }
         }
-    }
-}
-
-/**
- * Text in the circular seals goes 35 degrees clockwise: upper left to lower right.
- * The circles themselves are drawn upright. Only History uses these new stamps;
- * Route/Delivery and the shared report retain their existing approved graphics.
- */
-@Composable
-private fun V6SlantedPaymentSeal(payment: String?, diameter: Dp) {
-    if (payment != "COD" && payment != "PAYNOW") {
-        Box(Modifier.size(diameter))
-        return
-    }
-    val isCod = payment == "COD"
-    Canvas(Modifier.size(diameter)) {
-        val native = drawContext.canvas.nativeCanvas
-        val saved = native.save()
-        native.scale(size.width / 240f, size.height / 240f)
-        val ink = if (isCod) android.graphics.Color.rgb(255, 55, 88)
-                  else android.graphics.Color.rgb(227, 75, 228)
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ink
-            style = Paint.Style.STROKE
-            strokeWidth = 7f
-        }
-        native.drawCircle(120f, 120f, 109f, stroke)
-        stroke.strokeWidth = 2.5f
-        stroke.alpha = 150
-        native.drawCircle(120f, 120f, 99f, stroke)
-        stroke.alpha = 255
-        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ink
-            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
-            textAlign = Paint.Align.CENTER
-            isSubpixelText = true
-        }
-        native.save()
-        native.rotate(35f, 120f, 120f) // clockwise is down to the right in Android coordinates
-        if (isCod) {
-            labelPaint.textSize = 25f
-            native.drawText("CASH ON", 120f, 90f, labelPaint)
-            labelPaint.textSize = 73f
-            native.drawText("COD", 120f, 148f, labelPaint)
-            labelPaint.textSize = 24f
-            native.drawText("DELIVERY", 120f, 180f, labelPaint)
-        } else {
-            labelPaint.textSize = 58f
-            labelPaint.textScaleX = 0.90f
-            native.drawText("PayNow", 120f, 137f, labelPaint)
-            stroke.strokeWidth = 5f
-            native.drawLine(48f, 151f, 192f, 151f, stroke)
-        }
-        native.restore()
-        native.restoreToCount(saved)
     }
 }
 
