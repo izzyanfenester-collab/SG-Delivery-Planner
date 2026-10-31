@@ -4,10 +4,13 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint as AndroidPaint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.util.Locale
@@ -85,12 +88,17 @@ internal fun drawSlantedPaymentStamp(
     canvas.restoreToCount(outer)
 }
 
-/** Shared 35-degree slanted payment icons displayed on all three app pages. */
+/** Preserve the original Build #717 circular COD stamp; PayNow styling is unchanged. */
 @Composable
 fun PaymentModeStamp(order: CustomerOrder?, modifier: Modifier = Modifier, size: Dp = 82.dp) {
-    val mode = order?.paymentStatus?.uppercase(Locale.ENGLISH)
-    if (mode == "COD" || mode == "PAYNOW") {
-        Canvas(modifier = modifier.size(size)) {
+    when (val mode = order?.paymentStatus?.uppercase(Locale.ENGLISH)) {
+        "COD" -> Image(
+            painter = painterResource(R.drawable.cod_circle_stamp),
+            contentDescription = "Cash on Delivery",
+            modifier = modifier.size(size),
+            contentScale = ContentScale.Fit
+        )
+        "PAYNOW" -> Canvas(modifier = modifier.size(size)) {
             drawSlantedPaymentStamp(drawContext.canvas.nativeCanvas, mode, this.size.width)
         }
     }
