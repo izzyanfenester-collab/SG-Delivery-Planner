@@ -250,98 +250,70 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         }
         HorizontalDivider(color = V6Outline, thickness = 1.dp)
         Row(
-            modifier = Modifier.fillMaxWidth().height(76.dp).background(V6Action),
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            modifier = Modifier.fillMaxWidth().background(V6Action).padding(9.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            V6InlineProof(
+                id = stop.order?.paymentProofFileId,
+                label = "Payment Proof",
+                modifier = Modifier.weight(1f)
+            )
+            V6InlineProof(
+                id = stop.order?.proofFileId,
+                label = "Delivery Proof",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        HorizontalDivider(color = V6Outline, thickness = 1.dp)
+        Row(
+            Modifier.fillMaxWidth().height(52.dp).background(V6Action)
+                .clickable(onClick = onReport),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            V6ProofAction(
-                id = stop.order?.paymentProofFileId,
-                label = "Payment\nProof",
-                iconRes = R.drawable.ic_delivery_receipt,
-                modifier = Modifier.weight(1f)
-            )
-            Box(Modifier.width(1.dp).fillMaxHeight().background(V6Outline))
-            V6ProofAction(
-                id = stop.order?.proofFileId,
-                label = "Delivery\nProof",
-                iconRes = R.drawable.ic_delivery_camera,
-                modifier = Modifier.weight(1f)
-            )
-            Box(Modifier.width(1.dp).fillMaxHeight().background(V6Outline))
-            Row(
-                Modifier.weight(1f).fillMaxHeight().clickable(onClick = onReport).padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(painterResource(R.drawable.ic_customs_document), null, tint = V6Gold, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("Report", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
-            }
+            Icon(painterResource(R.drawable.ic_customs_document), null,
+                tint = V6Gold, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Report", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
         }
     }
 }
 
-/** Compact, read-only proof shortcut. The uploaded image still opens full screen. */
+/** Always-visible proof previews in saved History; never require a tap to display. */
 @Composable
-private fun V6ProofAction(id: String?, label: String, iconRes: Int, modifier: Modifier = Modifier) {
+private fun V6InlineProof(id: String?, label: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var enlarged by remember(id) { mutableStateOf(false) }
     val thumbnail by produceState<Bitmap?>(initialValue = null, id) {
         value = withContext(Dispatchers.IO) {
             val store = OrderProofStore(context)
-            store.file(id)?.let { store.decode(it, 180) }
+            store.file(id)?.let { store.decode(it, 900) }
         }
     }
-    Row(
-        modifier = modifier.fillMaxHeight()
-            .clickable(enabled = thumbnail != null) { enlarged = true }
-            .padding(horizontal = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+    Column(
+        modifier = modifier.background(Color(0xFF102E4F), RoundedCornerShape(12.dp))
+            .border(1.dp, V6Outline, RoundedCornerShape(12.dp))
+            .padding(7.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (thumbnail != null) {
-            Image(
-                thumbnail!!.asImageBitmap(),
-                label.replace("\n", " "),
-                Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = if (id == null) Color(0xFF8CA0BA) else V6Secondary,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-        Spacer(Modifier.width(5.dp))
-        Text(
-            if (id == null) label.replace("\n", "\n") else label,
-            fontSize = 12.sp,
-            lineHeight = 15.sp,
-            textAlign = TextAlign.Start,
-            color = if (id == null) Color(0xFF8CA0BA) else V6White,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-    if (enlarged) {
-        val fullSize by produceState<Bitmap?>(initialValue = null, id) {
-            value = withContext(Dispatchers.IO) {
-                val store = OrderProofStore(context)
-                store.file(id)?.let { store.decode(it, 2048) }
-            }
-        }
-        Dialog(onDismissRequest = { enlarged = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label.replace("\n", " "), Modifier.weight(1f), color = PremiumGold)
-                    TextButton(onClick = { enlarged = false }) { Text("Close") }
-                }
-                fullSize?.let {
-                    Image(it.asImageBitmap(), label.replace("\n", " "), Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit)
-                } ?: Text("Unable to load image.", color = Color.White)
+        Text(label, color = V6White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Box(
+            Modifier.fillMaxWidth().height(148.dp).clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF071C32)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (thumbnail != null) {
+                Image(
+                    thumbnail!!.asImageBitmap(),
+                    label,
+                    Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text(
+                    if (id == null) "No photo" else "Photo unavailable",
+                    color = V6Secondary, fontSize = 12.sp, textAlign = TextAlign.Center
+                )
             }
         }
     }
