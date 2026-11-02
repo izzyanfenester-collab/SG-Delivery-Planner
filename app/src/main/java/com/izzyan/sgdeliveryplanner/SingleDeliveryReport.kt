@@ -81,9 +81,13 @@ private class SingleDeliveryReportView(
 ) : View(context) {
     private val gold = Color.rgb(231,190,91)
     private val white = Color.rgb(232,240,255)
-    private val bodyInk = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = white; textSize = DeliveryReportTypography.bodyPx }
+    private val bodyInk = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = white; textSize = DeliveryReportTypography.bodyPx
+        setShadowLayer(3f, 0f, 2f, Color.BLACK)
+    }
     private val titleInk = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.titlePx; typeface = Typeface.DEFAULT_BOLD
+        setShadowLayer(3f, 0f, 2f, Color.BLACK)
     }
     // Decode the exact icon assets already bundled in the installed app.
     private val paymentLogo = when (paymentMode?.label) {
@@ -116,6 +120,7 @@ private class SingleDeliveryReportView(
         if (paymentLogo == null) 0f else stampTop + stampSize + 22f)
     private val proofLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = gold; textSize = DeliveryReportTypography.proofPx; typeface = Typeface.DEFAULT_BOLD
+        setShadowLayer(3f, 0f, 2f, Color.BLACK)
     }
     private val wrapProofLabels = twoColumns && maxOf(
         proofLabelPaint.measureText("Proof of Payment"),
@@ -126,8 +131,8 @@ private class SingleDeliveryReportView(
 
     override fun onDraw(canvas: Canvas) {
         drawMarinaBayReportBackground(context, canvas, 1080, reportHeight)
-        // 30% transparency (70% opacity): Marina Bay Sands remains visible behind the readable report.
-        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(179,16,39,68) }
+        // 70% transparency (30% opacity): show Marina Bay Sands; text shadows preserve legibility.
+        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(77,16,39,68) }
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
