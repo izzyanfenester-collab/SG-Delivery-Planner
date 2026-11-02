@@ -173,7 +173,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth().clip(shape)
-            .background(Color(0xFF102844).copy(alpha = 0.70f))
+            .background(Color(0xFF102844).copy(alpha = 0.30f))
             .border(1.dp, V6Outline.copy(alpha = .48f), shape)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
