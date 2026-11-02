@@ -459,40 +459,41 @@ fun Home(vm: PlannerViewModel) {
 fun Settings(vm: PlannerViewModel) {
     var serviceText by remember(vm.service) { mutableStateOf(vm.service.toString()) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)
                 BackupRestoreActions(vm)
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Default WhatsApp App", style = MaterialTheme.typography.titleLarge)
                 (listOf<WhatsAppChoice?>(null) + WhatsAppChoice.entries).forEach { choice ->
-                    Row(Modifier.fillMaxWidth().heightIn(min=52.dp).selectable(vm.whatsappPreferences.default == choice, enabled=!vm.busy, role=androidx.compose.ui.semantics.Role.RadioButton,
+                    Row(Modifier.fillMaxWidth().heightIn(min=48.dp).selectable(vm.whatsappPreferences.default == choice, enabled=!vm.busy, role=androidx.compose.ui.semantics.Role.RadioButton,
                         onClick={vm.whatsappPreferences.updateDefault(choice)}),verticalAlignment=Alignment.CenterVertically) {
                         RadioButton(vm.whatsappPreferences.default == choice,null,enabled=!vm.busy)
-                        Text(choice?.label ?: "Ask every time",Modifier.padding(start=8.dp))
+                        Text(choice?.label ?: "Ask every time",Modifier.padding(start=5.dp))
                     }
                 }
                 HorizontalDivider()
                 Text("Default Navigation", style = MaterialTheme.typography.titleLarge)
                 (listOf<NavigationChoice?>(null) + NavigationChoice.entries).forEach { choice ->
-                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .selectable(vm.navigationPreferences.default == choice, enabled = !vm.busy, role = androidx.compose.ui.semantics.Role.RadioButton,
                             onClick = { vm.navigationPreferences.updateDefault(choice) }), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(vm.navigationPreferences.default == choice, onClick = null, enabled = !vm.busy)
-                        Text(choice?.label ?: "Ask every time", Modifier.padding(start = 8.dp))
+                        Text(choice?.label ?: "Ask every time", Modifier.padding(start = 5.dp))
                     }
                 }
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text("Schedule", style = MaterialTheme.typography.titleLarge)
                 DeliveryDateControl(vm)
                 OutlinedTextField(
@@ -513,7 +514,7 @@ fun Settings(vm: PlannerViewModel) {
                 Text("Traffic estimate", style = MaterialTheme.typography.titleMedium)
                 listOf("Normal", "Light Traffic", "Heavy Traffic").forEach { mode ->
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { vm.traffic = mode; vm.persist() },
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { vm.traffic = mode; vm.persist() },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(vm.traffic == mode, { vm.traffic = mode; vm.persist() })
@@ -523,21 +524,21 @@ fun Settings(vm: PlannerViewModel) {
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Appearance", style = MaterialTheme.typography.titleLarge)
                 Text("Distance unit: kilometres (km)", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("System", "Light", "Dark").forEach { theme ->
                         FilterChip(
                             selected = vm.theme == theme, onClick = { vm.theme = theme; vm.persist() },
-                            label = { Text(if (theme == "System") "Use device setting" else theme) }, modifier = Modifier.weight(1f).heightIn(min = 64.dp)
+                            label = { Text(if (theme == "System") "Use device setting" else theme) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                         )
                     }
                 }
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Road routing", style = MaterialTheme.typography.titleLarge)
                 OutlinedTextField(
                     vm.endpoint, { vm.endpoint = it.trim(); vm.persist() }, label = { Text("Routing server address (HTTPS)") },
