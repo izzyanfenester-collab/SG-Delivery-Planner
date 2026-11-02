@@ -201,7 +201,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
             color = V6White, fontSize = 17.sp)
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
-            color = V6White, fontSize = 17.sp, lineHeight = 19.sp)
+            color = V6White, fontSize = 17.sp, lineHeight = 23.sp)
         Text("Parcel Price : " + orderPrice(stop.order),
             color = V6White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         // Both proof thumbnails sit directly below Parcel Price.
@@ -226,7 +226,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
             shape = RoundedCornerShape(24.dp),
             border = BorderStroke(1.dp, V6Outline)
         ) {
-            Text("View / Share Delivery Report", color = V6White, fontSize = 15.sp)
+            Text("View / Share Delivery Report", color = V6White, fontSize = 16.sp)
         }
     }
 
