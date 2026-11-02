@@ -20,7 +20,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,8 +72,8 @@ class MainActivity : ComponentActivity() {
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         setContent {
             val vm: PlannerViewModel = viewModel()
-            val dark = vm.theme == "Dark" || (vm.theme == "System" && isSystemInDarkTheme())
-            IzzDeliveryTheme(dark) { App(vm) }
+            // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
+            IzzDeliveryTheme(dark = true) { App(vm) }
         }
     }
 }
@@ -519,20 +518,6 @@ fun Settings(vm: PlannerViewModel) {
                     ) {
                         RadioButton(vm.traffic == mode, { vm.traffic = mode; vm.persist() })
                         Text(trafficLabel(mode))
-                    }
-                }
-            }
-        }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Appearance", style = MaterialTheme.typography.titleLarge)
-                Text("Distance unit: kilometres (km)", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("System", "Light", "Dark").forEach { theme ->
-                        FilterChip(
-                            selected = vm.theme == theme, onClick = { vm.theme = theme; vm.persist() },
-                            label = { Text(if (theme == "System") "Use device setting" else theme) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                        )
                     }
                 }
             }
