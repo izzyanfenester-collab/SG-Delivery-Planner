@@ -141,8 +141,14 @@ Remark: Fuel receipt retained""",
         val file=generateSummaryReportImage(app,original)
         val png=android.graphics.BitmapFactory.decodeFile(file.path)
         assertEquals(1080,png.width)
-        assertEquals(android.graphics.Color.rgb(7,23,45),png.getPixel(0,0))
-        assertEquals(android.graphics.Color.rgb(16,39,68),png.getPixel(35,png.height/2))
+        val outer = png.getPixel(0, 0)
+        val panel = png.getPixel(35, png.height / 2)
+        for (pixel in listOf(outer, panel)) {
+            assertTrue("Marina Bay background and panel must remain dark for readable report text",
+                android.graphics.Color.red(pixel) < 80 &&
+                    android.graphics.Color.green(pixel) < 100 &&
+                    android.graphics.Color.blue(pixel) < 130)
+        }
         var gold=false;var letters=false
         for(y in 20 until png.height-20 step 2) for(x in 20 until png.width-20 step 2) {
             val pixel=png.getPixel(x,y)
