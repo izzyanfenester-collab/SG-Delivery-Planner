@@ -173,85 +173,122 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
     val delivered = normalizedStatus(stop.status) == "DELIVERED"
     val onHold = normalizedStatus(stop.status) == "ON_HOLD"
     val statusTint = if (delivered) Color(0xFF5DE8A3) else if (onHold) V6Gold else V6Secondary
-    val statusBackground = if (delivered) Color(0xFF063C33) else if (onHold) Color(0xFF49371A) else Color(0xFF1A3754)
+    val statusBackground = if (delivered) Color(0xFF063C33)
+        else if (onHold) Color(0xFF49371A) else Color(0xFF1A3754)
     var extraOpen by remember(stop.orderId) { mutableStateOf(false) }
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(17.dp)
 
     Column(
         modifier = Modifier.fillMaxWidth().clip(shape).background(V6Panel)
-            .border(1.dp, V6Outline, shape)
+            .border(1.dp, V6Outline.copy(alpha = .8f), shape)
     ) {
         Box(Modifier.fillMaxWidth()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = 15.dp, end = 11.dp, top = 12.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                Modifier.fillMaxWidth()
+                    .padding(start = 16.dp, end = 13.dp, top = 12.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 Row(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier.border(1.dp, V6Gold.copy(alpha = .85f), RoundedCornerShape(50))
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                    ) {
+                        Text("STOP " + (index + 1).toString().padStart(2, '0'),
+                            color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Box(
+                        Modifier.background(statusBackground, RoundedCornerShape(50))
+                            .border(1.dp, statusTint.copy(alpha = .8f), RoundedCornerShape(50))
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                    ) {
+                        Text((if (delivered) "✓ " else if (onHold) "◷ " else "") + status.label,
+                            color = statusTint, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
+                }
+
+                Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier.border(1.dp, V6Gold, RoundedCornerShape(50))
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                            ) {
-                                Text("STOP " + (index + 1).toString().padStart(2, '0'),
-                                    color = V6Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-                            }
-                            Box(
-                                Modifier.background(statusBackground, RoundedCornerShape(50))
-                                    .border(1.dp, statusTint, RoundedCornerShape(50))
-                                    .padding(horizontal = 7.dp, vertical = 5.dp)
-                            ) {
-                                Text((if (delivered) "✓ " else if (onHold) "◷ " else "") + status.label,
-                                    color = statusTint, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
-                            }
-                        }
-                        Text(stop.place.postal, color = V6White, fontWeight = FontWeight.Bold, fontSize = 29.sp, lineHeight = 33.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("●", color = V6Secondary, fontSize = 13.sp)
-                            Text(stop.order?.customerName ?: "—", color = V6White, fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold, maxLines = 2)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.Top) {
-                            Text("⌖", color = Color(0xFFA8C5F3), fontSize = 18.sp, lineHeight = 19.sp)
-                            Text(stop.order?.fullAddress ?: stop.place.address, color = V6Secondary,
-                                fontSize = 14.sp, lineHeight = 20.sp, maxLines = 3)
-                        }
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(stop.place.postal, color = V6White, fontWeight = FontWeight.Bold,
+                            fontSize = 27.sp, lineHeight = 30.sp)
+                        Text(stop.order?.customerName ?: "—", color = V6White,
+                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(stop.order?.fullAddress ?: stop.place.address,
+                            color = V6Secondary, fontSize = 13.sp, lineHeight = 18.sp,
+                            maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    Column(Modifier.width(91.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PaymentModeStamp(stop.order, size = 88.dp)
-                        Text("Payment Mode", color = V6Secondary, fontSize = 12.sp, maxLines = 1)
-                        TextButton(
-                            onClick = { extraOpen = !extraOpen },
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                        ) {
-                            Text(if (extraOpen) "Hide details ‹" else "Details ›",
-                                color = Color(0xFFADCFF8), fontSize = 13.sp, maxLines = 1)
-                        }
+                    Column(
+                        Modifier.width(80.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Original COD / PayNow stamp keeps the 35-degree right tilt.
+                        PaymentModeStamp(stop.order, size = 72.dp)
+                        Text("Payment Mode", color = V6Secondary, fontSize = 10.sp,
+                            maxLines = 1)
                     }
                 }
-                Text("PARCEL AMOUNT", color = V6Secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(orderPrice(stop.order), color = V6Gold, fontSize = 27.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
+
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(Color(0xFF123657), RoundedCornerShape(11.dp))
+                        .padding(start = 11.dp, end = 5.dp, top = 7.dp, bottom = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("PARCEL AMOUNT", color = V6Secondary, fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(orderPrice(stop.order), color = V6Gold,
+                            fontSize = 24.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = { extraOpen = !extraOpen },
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 3.dp)
+                    ) {
+                        Text(if (extraOpen) "Hide details ⌃" else "Details ›",
+                            color = Color(0xFFC1DCFC), fontSize = 13.sp, maxLines = 1)
+                    }
+                }
+
                 if (extraOpen) {
-                    HorizontalDivider(color = V6Outline, thickness = 1.dp)
-                    Text("Phone : " + (stop.order?.phoneNumber ?: "—"), color = V6White, fontSize = 15.sp)
-                    Text("Address : " + (stop.order?.fullAddress ?: stop.place.address), color = V6White, fontSize = 15.sp)
-                    if (stop.holdReason != null) Text("Hold reasons : " + stop.holdReason, color = V6White, fontSize = 15.sp)
-                    if (stop.holdNote != null) Text("Hold notes : " + stop.holdNote, color = V6White, fontSize = 15.sp)
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .background(Color(0xFF102C4C), RoundedCornerShape(10.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("Phone: " + (stop.order?.phoneNumber ?: "—"),
+                            color = V6White, fontSize = 13.sp)
+                        Text("Address: " + (stop.order?.fullAddress ?: stop.place.address),
+                            color = V6White, fontSize = 13.sp)
+                        if (stop.holdReason != null) Text("Hold reasons: " + stop.holdReason,
+                            color = V6White, fontSize = 13.sp)
+                        if (stop.holdNote != null) Text("Hold notes: " + stop.holdNote,
+                            color = V6White, fontSize = 13.sp)
+                    }
                 }
             }
-            // Full-height stripe inside this card's upper portion only.
             Box(Modifier.matchParentSize()) {
-                Box(Modifier.width(5.dp).fillMaxHeight().background(accent))
+                Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
             }
         }
-        HorizontalDivider(color = V6Outline, thickness = 1.dp)
+
+        HorizontalDivider(color = V6Outline.copy(alpha = .65f), thickness = 1.dp)
         Row(
-            modifier = Modifier.fillMaxWidth().background(V6Action).padding(9.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp)
+            modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF103050))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp)
         ) {
             V6InlineProof(
                 id = stop.order?.paymentProofFileId,
@@ -264,22 +301,23 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
         }
-        HorizontalDivider(color = V6Outline, thickness = 1.dp)
+        HorizontalDivider(color = V6Outline.copy(alpha = .65f), thickness = 1.dp)
         Row(
-            Modifier.fillMaxWidth().height(52.dp).background(V6Action)
+            Modifier.fillMaxWidth().height(46.dp)
+                .background(Color(0xFF15395C))
                 .clickable(onClick = onReport),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(painterResource(R.drawable.ic_customs_document), null,
-                tint = V6Gold, modifier = Modifier.size(24.dp))
+                tint = V6Gold, modifier = Modifier.size(21.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Report", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
+            Text("Report", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = V6Gold)
         }
     }
 }
 
-/** Always-visible proof previews in saved History; never require a tap to display. */
+/** Always-visible, read-only proof images with a clean shared gallery layout. */
 @Composable
 private fun V6InlineProof(id: String?, label: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -290,23 +328,23 @@ private fun V6InlineProof(id: String?, label: String, modifier: Modifier = Modif
         }
     }
     Column(
-        modifier = modifier.background(Color(0xFF102E4F), RoundedCornerShape(12.dp))
-            .border(1.dp, V6Outline, RoundedCornerShape(12.dp))
-            .padding(7.dp),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(7.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(label, color = V6White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = V6White, fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold, maxLines = 1)
         Box(
-            Modifier.fillMaxWidth().height(148.dp).clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF071C32)),
+            Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF071C32))
+                .border(1.dp, V6Outline.copy(alpha = .75f), RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
                 Image(
                     thumbnail!!.asImageBitmap(),
                     label,
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().padding(3.dp),
                     contentScale = ContentScale.Fit
                 )
             } else {
