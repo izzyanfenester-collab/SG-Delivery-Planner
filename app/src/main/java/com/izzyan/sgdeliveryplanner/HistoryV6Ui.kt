@@ -173,7 +173,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth().clip(shape)
-            .background(Color(0xFF102844))
+            .background(Color(0xFF102844).copy(alpha = 0.70f))
             .border(1.dp, V6Outline.copy(alpha = .48f), shape)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -181,10 +181,17 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         // Payment logo retains the existing 35-degree tilt and sits next to Delivered.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Stop ${index + 1} · ${stop.place.postal}",
-                Modifier.weight(1f), color = V6Gold,
-                fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text("Stop ${index + 1} · ${stop.place.postal}",
+                    color = V6Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Customer : " + (stop.order?.customerName ?: "—"),
+                    color = V6White, fontSize = 17.sp,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
             Box(
                 Modifier.background(Color(badge.backgroundArgb), RoundedCornerShape(30.dp))
                     .padding(horizontal = 11.dp, vertical = 7.dp)
@@ -196,8 +203,6 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 PaymentModeStamp(stop.order, size = 70.dp)
             }
         }
-        Text("Customer : " + (stop.order?.customerName ?: "—"),
-            color = V6White, fontSize = 17.sp)
         Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
             color = V6White, fontSize = 17.sp)
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
