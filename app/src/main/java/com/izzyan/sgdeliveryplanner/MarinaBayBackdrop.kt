@@ -73,5 +73,7 @@ internal fun drawMarinaBayReportBackground(
     } finally {
         background.recycle()
     }
-    canvas.drawColor(AndroidColor.argb(85, 4, 14, 27))
+    // Reports need a brighter skyline than the app background; the card and text shadows
+    // keep the white/gold report details legible even when exporting the PNG.
+    canvas.drawColor(AndroidColor.argb(28, 4, 14, 27))
 }

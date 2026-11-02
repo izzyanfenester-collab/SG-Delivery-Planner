@@ -108,7 +108,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
         Surface(
             modifier = Modifier.fillMaxWidth(.94f).heightIn(max = maxHeight),
             shape = RoundedCornerShape(26.dp),
-            color = PremiumNavy,
+            color = PremiumNavy.copy(alpha = 0.30f),
             contentColor = Color.White,
             border = BorderStroke(1.dp, PremiumGold.copy(alpha = .7f)),
             tonalElevation = 0.dp

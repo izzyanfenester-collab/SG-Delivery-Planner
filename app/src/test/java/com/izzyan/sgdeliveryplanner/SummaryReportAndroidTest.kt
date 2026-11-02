@@ -141,14 +141,30 @@ Remark: Fuel receipt retained""",
         val file=generateSummaryReportImage(app,original)
         val png=android.graphics.BitmapFactory.decodeFile(file.path)
         assertEquals(1080,png.width)
-        val outer = png.getPixel(0, 0)
-        val panel = png.getPixel(35, png.height / 2)
-        for (pixel in listOf(outer, panel)) {
-            assertTrue("Marina Bay background and panel must remain dark for readable report text",
-                android.graphics.Color.red(pixel) < 80 &&
-                    android.graphics.Color.green(pixel) < 100 &&
-                    android.graphics.Color.blue(pixel) < 130)
+        // The exported card is 70% transparent over the brighter Marina Bay background.
+        // Check the actual alpha blend rather than requiring the old dark-navy pixels.
+        val backdrop = android.graphics.Bitmap.createBitmap(
+            png.width, png.height, android.graphics.Bitmap.Config.ARGB_8888
+        )
+        drawMarinaBayReportBackground(app, android.graphics.Canvas(backdrop), png.width, png.height)
+        assertEquals("The exported background must keep the original marina artwork",
+            backdrop.getPixel(0, 0), png.getPixel(0, 0))
+        val backgroundPixel = backdrop.getPixel(35, png.height / 2)
+        val panelPixel = png.getPixel(35, png.height / 2)
+        val navy = android.graphics.Color.rgb(16, 39, 68)
+        val alpha = 77 // 30% opaque panel, 70% transparent.
+        val navyChannels = intArrayOf(android.graphics.Color.red(navy),
+            android.graphics.Color.green(navy), android.graphics.Color.blue(navy))
+        val backdropChannels = intArrayOf(android.graphics.Color.red(backgroundPixel),
+            android.graphics.Color.green(backgroundPixel), android.graphics.Color.blue(backgroundPixel))
+        val panelChannels = intArrayOf(android.graphics.Color.red(panelPixel),
+            android.graphics.Color.green(panelPixel), android.graphics.Color.blue(panelPixel))
+        for (index in 0..2) {
+            val expected = (navyChannels[index] * alpha + backdropChannels[index] * (255 - alpha)) / 255
+            assertTrue("Report PNG panel must be 70% transparent over Marina Bay Sands",
+                kotlin.math.abs(panelChannels[index] - expected) <= 3)
         }
+        backdrop.recycle()
         var gold=false;var letters=false
         for(y in 20 until png.height-20 step 2) for(x in 20 until png.width-20 step 2) {
             val pixel=png.getPixel(x,y)
