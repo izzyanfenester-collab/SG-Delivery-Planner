@@ -62,7 +62,8 @@ internal fun HistoryViewV6(
     val summary = remember(plan) { deliverySummary(plan) }
     var detailsOpen by remember(plan.id) { mutableStateOf(false) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxSize().background(V6Background)) {
+        MarinaBayBackdrop(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().background(V6Background.copy(alpha = .12f))) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 13.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -138,6 +139,7 @@ internal fun HistoryViewV6(
                 itemsIndexed(plan.stops, key = { i, stop -> stop.orderId + "-history-" + i }) { index, stop ->
                     V6DeliveryCard(stop, index, onReport = { onReport(index) })
                 }
+            }
             }
         }
     }

@@ -176,7 +176,8 @@ fun App(vm: PlannerViewModel) {
             }
         }
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        MarinaBayBackdrop(Modifier.padding(padding).fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
             if (vm.busy) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (vm.message.isNotBlank()) Text(vm.message, Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
@@ -232,6 +233,7 @@ fun App(vm: PlannerViewModel) {
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1100,7 +1102,14 @@ fun RouteMap(p: Plan) {
     } }
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
-        Text("Red dots: Delivery stops • © OpenStreetMap contributors", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MarinaBayBackdrop(Modifier.fillMaxWidth().height(68.dp)) {
+            Text(
+                "Red dots: Delivery stops • © OpenStreetMap contributors",
+                Modifier.align(Alignment.CenterStart).padding(horizontal = 16.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
         AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().weight(1f), update = { view ->
             view.overlays.clear()
             val line = Polyline().apply {
