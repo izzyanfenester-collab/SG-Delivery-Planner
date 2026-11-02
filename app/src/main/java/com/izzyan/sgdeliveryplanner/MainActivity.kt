@@ -339,7 +339,8 @@ fun Home(vm: PlannerViewModel) {
             value = vm.input, onValueChange = vm::updatePostalInput,
             label = { Text("Singapore postal codes") },
             placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),
+            modifier = Modifier.fillMaxWidth().height(168.dp),
+            minLines = 5, maxLines = 5,
             shape = RoundedCornerShape(20.dp), enabled = !vm.busy
         )
         SecondaryAction("Import WhatsApp Orders", { vm.importOrdersDialog = true }, enabled = !vm.busy)
