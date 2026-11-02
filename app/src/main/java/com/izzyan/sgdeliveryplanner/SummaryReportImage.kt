@@ -18,7 +18,10 @@ fun generateSummaryReportImage(context: Context, plan: Plan): File {
     val text=buildSummaryReport(plan)
     val gold=Color.rgb(231,190,91)
     // Match the 1080px Delivery Report body; 72px preserves the preview's 24sp title hierarchy.
-    val ink=TextPaint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(232,240,255);textSize=DeliveryReportTypography.bodyPx}
+    val ink=TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color=Color.rgb(232,240,255);textSize=DeliveryReportTypography.bodyPx
+        setShadowLayer(3f,0f,2f,Color.BLACK)
+    }
     val styled=SpannableString(text).apply {
         val titleEnd=text.indexOf('\n')
         setSpan(StyleSpan(Typeface.BOLD),0,titleEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -36,8 +39,8 @@ fun generateSummaryReportImage(context: Context, plan: Plan): File {
     try {
         val canvas=Canvas(bitmap)
         drawMarinaBayReportBackground(context,canvas,1080,height)
-        // Match single-report card: 30% transparent, 70% opaque for readable text.
-        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.argb(179,16,39,68)}
+        // Match single-report card: 70% transparent, 30% opaque; use text shadow for readability.
+        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.argb(77,16,39,68)}
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)
         panel.color=gold;panel.style=Paint.Style.STROKE;panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)
