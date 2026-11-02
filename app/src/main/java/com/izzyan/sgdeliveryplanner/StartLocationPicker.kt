@@ -53,14 +53,29 @@ fun StartLocationControls(vm: PlannerViewModel) {
         Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
         containerColor = PremiumNavy
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Start & End", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
-            Text(selected.displayName, color = Color.White, style = MaterialTheme.typography.titleLarge)
-            if (selected.address.isNotBlank()) Text(selected.address, color = LocationMuted)
-            Text(locationCoordinates(selected), color = LocationMuted, style = MaterialTheme.typography.bodySmall)
-            Text("Your route returns to this location after the final delivery.", color = LocationMuted,
-                style = MaterialTheme.typography.bodySmall)
-            LocationGoldButton("Change", { showChoices = true }, enabled = !vm.busy)
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Start & End", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                    Text(selected.displayName, color = Color.White,
+                        style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                }
+                Button(
+                    onClick = { showChoices = true }, enabled = !vm.busy,
+                    modifier = Modifier.height(40.dp), shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 17.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PremiumGold, contentColor = PremiumNavy)
+                ) { Text("Change", fontWeight = FontWeight.Bold) }
+            }
+            if (selected.address.isNotBlank()) {
+                Text(selected.address, color = LocationMuted,
+                    style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            }
+            Text(locationCoordinates(selected) + " · Return after final delivery",
+                color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
         }
     }
 

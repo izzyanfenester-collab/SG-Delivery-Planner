@@ -35,8 +35,8 @@ fun generateSummaryReportImage(context: Context, plan: Plan): File {
     val file=File(directory,"delivery_summary_${UUID.randomUUID()}.png")
     try {
         val canvas=Canvas(bitmap)
-        canvas.drawColor(Color.rgb(7,23,45))
-        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.rgb(16,39,68)}
+        drawMarinaBayReportBackground(context,canvas,1080,height)
+        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.argb(210,16,39,68)}
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)
         panel.color=gold;panel.style=Paint.Style.STROKE;panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)

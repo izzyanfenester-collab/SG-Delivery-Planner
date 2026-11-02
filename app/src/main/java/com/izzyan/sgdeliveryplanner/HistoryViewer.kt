@@ -43,11 +43,11 @@ fun BackupRestoreActions(vm:PlannerViewModel) {
     val open=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if(uri!=null) vm.restoreHistory(uri)
     }
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Button(onClick={create.launch("SG-Delivery-History-"+LocalDate.now()+".zip")},
-            enabled=!vm.busy,modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text("Backup All History") }
+            enabled=!vm.busy, modifier=Modifier.weight(1f).heightIn(min=48.dp)) { Text("Backup All History") }
         OutlinedButton(onClick={restoreConfirmation=true},enabled=!vm.busy,
-            modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text("Restore Backup") }
+            modifier=Modifier.weight(1f).heightIn(min=48.dp)) { Text("Restore Backup") }
     }
     Text("Your backup ZIP includes route history, customer details, proof photos and Payment records. Keep it private; it is not encrypted.",
         style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)

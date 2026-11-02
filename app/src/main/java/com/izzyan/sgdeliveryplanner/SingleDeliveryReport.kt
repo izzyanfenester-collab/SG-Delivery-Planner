@@ -125,8 +125,8 @@ private class SingleDeliveryReportView(
     val reportHeight = kotlin.math.ceil(proofStartY + headerHeight + proofHeight + 90f).toInt()
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.rgb(7, 23, 45))
-        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,39,68) }
+        drawMarinaBayReportBackground(context, canvas, 1080, reportHeight)
+        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(210,16,39,68) }
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
