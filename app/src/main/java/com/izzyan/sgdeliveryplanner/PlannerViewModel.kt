@@ -129,7 +129,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
 
     fun scheduledStart(): LocalDateTime = deliveryDate.atStartOfDay().plusMinutes(startMinute.toLong())
     var traffic by mutableStateOf(prefs.getString("traffic", "Normal")!!)
-    var theme by mutableStateOf(prefs.getString("theme", "System")!!)
+    // Previous Light/System choices are ignored; the app now runs exclusively in Dark mode.
+    var theme by mutableStateOf("Dark")
     var endpoint by mutableStateOf(prefs.getString("endpoint", "https://router.project-osrm.org")!!)
     var latestExchangeRate by mutableStateOf(normalizedExchangeRate(prefs.getString("exchangeRate", "3.60")!!) ?: "3.60")
         private set
