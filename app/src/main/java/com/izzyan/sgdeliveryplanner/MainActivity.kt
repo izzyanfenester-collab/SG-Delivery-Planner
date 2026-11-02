@@ -319,44 +319,206 @@ fun Clock(vm: PlannerViewModel, modifier: Modifier = Modifier, compact: Boolean 
     )
 }
 
+
+private val HomeNavy = Color(0xFF06172A)
+private val HomeCard = Color(0xFF0C2948)
+private val HomeBorder = Color(0xFF305B80)
+private val HomeMuted = Color(0xFFB5CCE2)
+private val HomeBlue = Color(0xFF2563C7)
+private val HomeGreen = Color(0xFF68E3AB)
+
 @Composable
-fun Home(vm: PlannerViewModel) {
-    val parsed = parseInput(vm.input)
+private fun HomeSection(
+    title: String,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth()
+            .background(HomeCard, RoundedCornerShape(22.dp))
+            .border(1.dp, HomeBorder, RoundedCornerShape(22.dp))
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
-        StartLocationControls(vm)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DeliveryDateControl(vm, Modifier.weight(1f), compact = true)
-            Clock(vm, Modifier.weight(1f), compact = true)
-        }
-        Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(
-            value = vm.input, onValueChange = vm::updatePostalInput,
-            label = { Text("Singapore postal codes") },
-            placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp),
-            shape = RoundedCornerShape(20.dp), enabled = !vm.busy
-        )
-        SecondaryAction("Import WhatsApp Orders", { vm.importOrdersDialog = true }, enabled = !vm.busy)
-        if (vm.draftOrders.isNotEmpty()) Text("Orders found: ${vm.planningOrders().size} · Duplicate postals preserved: ${vm.planningOrders().size - vm.planningOrders().map { it.postalCode }.distinct().size}")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CountTile("Valid stops", if (vm.draftOrders.isEmpty()) parsed.valid.size else vm.planningOrders().size, Modifier.weight(1f))
-            CountTile(if (vm.draftOrders.isEmpty()) "Duplicates removed" else "Duplicate postals preserved", parsed.duplicates, Modifier.weight(1f))
-        }
-        if (parsed.invalid.isNotEmpty()) {
-            PremiumCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.errorContainer) {
-                Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            if (subtitle != null) {
+                Text(subtitle, color = HomeMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryAction("Optimize route", vm::optimize, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
-            SecondaryAction("Clear postal code", vm::clearPostalCodes, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
+        content()
+    }
+}
+
+@Composable
+private fun HomeStat(value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier.background(HomeNavy.copy(alpha = .75f), RoundedCornerShape(15.dp))
+            .border(1.dp, HomeBorder, RoundedCornerShape(15.dp))
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(value, color = accent, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(label, color = HomeMuted, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+fun Home(vm: PlannerViewModel) {
+    val context = LocalContext.current
+    val parsed = parseInput(vm.input)
+    val validStops = if (vm.draftOrders.isEmpty()) parsed.valid.size else vm.planningOrders().size
+    val duplicateLabel = if (vm.draftOrders.isEmpty()) "Duplicates removed" else "Duplicate postals preserved"
+    val dateLabel = vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+    val timeLabel = LocalTime.of(vm.startMinute / 60, vm.startMinute % 60)
+        .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+
+    Column(
+        Modifier.fillMaxSize().background(HomeNavy).verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(52.dp).background(PremiumGold, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("SG", color = HomeNavy, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("SG DELIVERY", color = PremiumGold, style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold)
+                Text("Runner Route Planning", color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Plan your next Singapore delivery run", color = HomeMuted,
+                    style = MaterialTheme.typography.bodySmall)
+            }
         }
+
+        StartLocationControls(vm)
+
+        HomeSection("Delivery Schedule", "Set your departure date and start time") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { deliveryDatePicker(context, vm.deliveryDate, vm::selectDeliveryDate).show() },
+                    enabled = !vm.busy,
+                    modifier = Modifier.weight(1f).heightIn(min = 76.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+                    border = BorderStroke(1.dp, PremiumGold.copy(alpha = .7f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("DELIVERY DATE", color = PremiumGold, style = MaterialTheme.typography.labelSmall)
+                        Text(dateLabel, color = Color.White, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        TimePickerDialog(context, { _, hour, minute ->
+                            vm.startMinute = hour * 60 + minute
+                            vm.persist()
+                        }, vm.startMinute / 60, vm.startMinute % 60, false).show()
+                    },
+                    enabled = !vm.busy,
+                    modifier = Modifier.weight(1f).heightIn(min = 76.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+                    border = BorderStroke(1.dp, HomeBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("START TIME", color = PremiumGold, style = MaterialTheme.typography.labelSmall)
+                        Text(timeLabel, color = Color.White, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            Text("◷  ${vm.service} minutes planned per delivery stop", color = HomeMuted,
+                style = MaterialTheme.typography.bodySmall)
+        }
+
+        HomeSection("Delivery Postal Codes", "Paste postal codes or import customer orders from WhatsApp") {
+            OutlinedTextField(
+                value = vm.input,
+                onValueChange = vm::updatePostalInput,
+                label = { Text("Singapore postal codes") },
+                placeholder = { Text("730120\n730301\n760270\n560211\n460079\n640208") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 176.dp),
+                shape = RoundedCornerShape(16.dp),
+                enabled = !vm.busy,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    disabledTextColor = HomeMuted,
+                    focusedContainerColor = HomeNavy,
+                    unfocusedContainerColor = HomeNavy,
+                    disabledContainerColor = HomeNavy,
+                    focusedBorderColor = PremiumGold,
+                    unfocusedBorderColor = HomeBorder,
+                    focusedLabelColor = PremiumGold,
+                    unfocusedLabelColor = HomeMuted,
+                    focusedPlaceholderColor = HomeMuted,
+                    unfocusedPlaceholderColor = HomeMuted,
+                    cursorColor = PremiumGold
+                )
+            )
+            Button(
+                onClick = { vm.importOrdersDialog = true },
+                enabled = !vm.busy,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = HomeBlue, contentColor = Color.White)
+            ) {
+                Text("▣  Import WhatsApp Orders", fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium)
+            }
+            if (vm.draftOrders.isNotEmpty()) {
+                Text(
+                    "Orders found: ${vm.planningOrders().size} · Duplicate postals preserved: " +
+                        "${vm.planningOrders().size - vm.planningOrders().map { it.postalCode }.distinct().size}",
+                    color = HomeMuted, style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HomeStat(validStops.toString(), "Valid stops", HomeGreen, Modifier.weight(1f))
+                HomeStat(parsed.duplicates.toString(), duplicateLabel, PremiumGold, Modifier.weight(1f))
+            }
+            if (parsed.invalid.isNotEmpty()) {
+                Text("Invalid postal codes: ${parsed.invalid.joinToString()}",
+                    color = Color(0xFFFFB4AB), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Button(
+            onClick = vm::optimize,
+            enabled = !vm.busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 65.dp),
+            shape = RoundedCornerShape(19.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = HomeBlue, contentColor = Color.White)
+        ) {
+            Text("➜  Optimize Route", fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge)
+        }
+        OutlinedButton(
+            onClick = vm::clearPostalCodes,
+            enabled = !vm.busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, HomeBorder),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+        ) {
+            Text("Clear Postal Codes", fontWeight = FontWeight.SemiBold)
+        }
+
         TaxDeclareButton()
-        Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Routes follow roads and support up to 50 unique delivery stops. " +
+                "Times are planning estimates and do not include live traffic.",
+            color = HomeMuted, style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(Modifier.height(4.dp))
     }
 }
 
