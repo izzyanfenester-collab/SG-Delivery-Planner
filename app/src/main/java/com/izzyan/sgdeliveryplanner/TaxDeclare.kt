@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -46,18 +47,19 @@ internal fun openTaxDeclare(context: Context): Boolean = try {
 }
 
 @Composable
-fun TaxDeclareButton(modifier: Modifier = Modifier) {
+fun TaxDeclareButton(modifier: Modifier = Modifier, compact: Boolean = false) {
     val context = LocalContext.current
     Button(
         onClick = { openTaxDeclare(context) },
-        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
-        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = if (compact) 46.dp else 64.dp),
+        contentPadding = if (compact) PaddingValues(horizontal = 7.dp, vertical = 3.dp) else ButtonDefaults.ContentPadding,
+        shape = RoundedCornerShape(if (compact) 13.dp else 18.dp),
         border = BorderStroke(1.dp, PremiumGold),
         colors = ButtonDefaults.buttonColors(containerColor = PremiumNavy, contentColor = PremiumGold),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
     ) {
-        Icon(painterResource(R.drawable.ic_customs_document), contentDescription = null, modifier = Modifier.size(28.dp))
-        Spacer(Modifier.width(12.dp))
-        Text("Tax Declare", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Icon(painterResource(R.drawable.ic_customs_document), contentDescription = null, modifier = Modifier.size(if (compact) 19.dp else 28.dp))
+        Spacer(Modifier.width(if (compact) 6.dp else 12.dp))
+        Text("Tax Declare", style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
