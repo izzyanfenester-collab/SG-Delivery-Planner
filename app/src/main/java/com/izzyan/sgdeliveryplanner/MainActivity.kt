@@ -285,14 +285,67 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, color: Color? = null) {
+private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, color: Color? = null, compact: Boolean = false) {
     Surface(
         modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(count.toString(), style = MaterialTheme.typography.headlineMedium, color = color ?: MaterialTheme.colorScheme.onSurface)
-            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(if (compact) 9.dp else 14.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 4.dp)) {
+            Text(count.toString(),
+                style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
+                color = color ?: MaterialTheme.colorScheme.onSurface)
+            Text(label, style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun HomeDateTimeAction(
+    label: String, value: String, onClick: () -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    OutlinedButton(
+        onClick = onClick, enabled = enabled,
+        modifier = modifier.fillMaxWidth().height(50.dp),
+        shape = RoundedCornerShape(13.dp),
+        contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(label, fontSize = 12.sp, lineHeight = 14.sp)
+            Text(value, fontSize = 14.sp, lineHeight = 17.sp,
+                fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun HomeSmallAction(
+    label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    enabled: Boolean = true, filled: Boolean = false
+) {
+    if (filled) {
+        Button(
+            onClick = onClick, enabled = enabled,
+            modifier = modifier.fillMaxWidth().height(46.dp),
+            shape = RoundedCornerShape(13.dp),
+            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PremiumRoyal, contentColor = Color.White)
+        ) {
+            Text(label, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 2)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick, enabled = enabled,
+            modifier = modifier.fillMaxWidth().height(46.dp),
+            shape = RoundedCornerShape(13.dp),
+            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp)
+        ) {
+            Text(label, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 2)
         }
     }
 }
@@ -300,66 +353,105 @@ private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, 
 @Composable
 fun DeliveryDateControl(vm: PlannerViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val context = LocalContext.current
-    SecondaryAction(
-        "Delivery Date${if (compact) "\n" else ": "}${vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}",
-        { deliveryDatePicker(context, vm.deliveryDate, vm::selectDeliveryDate).show() },
-        enabled = !vm.busy, modifier = modifier, minHeight = if (compact) 56.dp else 64.dp
-    )
+    val value = vm.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+    val pickDate = { deliveryDatePicker(context, vm.deliveryDate, vm::selectDeliveryDate).show(); Unit }
+    if (compact) {
+        HomeDateTimeAction("Delivery Date", value, pickDate, modifier, enabled = !vm.busy)
+    } else {
+        SecondaryAction("Delivery Date: " + value, pickDate,
+            enabled = !vm.busy, modifier = modifier)
+    }
 }
 
 @Composable
 fun Clock(vm: PlannerViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val context = LocalContext.current
-    SecondaryAction(
-        "Start time${if (compact) "\n" else ": "}${LocalTime.of(vm.startMinute / 60, vm.startMinute % 60).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))}",
-        {
-            TimePickerDialog(context, { _, hour, minute ->
-                vm.startMinute = hour * 60 + minute
-                vm.persist()
-            }, vm.startMinute / 60, vm.startMinute % 60, false).show()
-        }, enabled = !vm.busy, modifier = modifier, minHeight = if (compact) 56.dp else 64.dp
-    )
+    val value = LocalTime.of(vm.startMinute / 60, vm.startMinute % 60)
+        .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+    val pickTime = {
+        TimePickerDialog(context, { _, hour, minute ->
+            vm.startMinute = hour * 60 + minute
+            vm.persist()
+        }, vm.startMinute / 60, vm.startMinute % 60, false).show()
+        Unit
+    }
+    if (compact) {
+        HomeDateTimeAction("Start time", value, pickTime, modifier, enabled = !vm.busy)
+    } else {
+        SecondaryAction("Start time: " + value, pickTime,
+            enabled = !vm.busy, modifier = modifier)
+    }
 }
 
 @Composable
 fun Home(vm: PlannerViewModel) {
     val parsed = parseInput(vm.input)
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
         StartLocationControls(vm)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DeliveryDateControl(vm, Modifier.weight(1f), compact = true)
             Clock(vm, Modifier.weight(1f), compact = true)
         }
-        Text("Delivery time per stop: ${vm.service} minutes", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Text("Delivery time per stop: " + vm.service + " minutes",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
+
         OutlinedTextField(
             value = vm.input, onValueChange = vm::updatePostalInput,
             label = { Text("Singapore postal codes") },
             placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
             modifier = Modifier.fillMaxWidth().height(168.dp),
             minLines = 5, maxLines = 5,
-            shape = RoundedCornerShape(20.dp), enabled = !vm.busy
+            shape = RoundedCornerShape(17.dp), enabled = !vm.busy
         )
-        SecondaryAction("Import WhatsApp Orders", { vm.importOrdersDialog = true }, enabled = !vm.busy)
-        if (vm.draftOrders.isNotEmpty()) Text("Orders found: ${vm.planningOrders().size} · Duplicate postals preserved: ${vm.planningOrders().size - vm.planningOrders().map { it.postalCode }.distinct().size}")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CountTile("Valid stops", if (vm.draftOrders.isEmpty()) parsed.valid.size else vm.planningOrders().size, Modifier.weight(1f))
-            CountTile(if (vm.draftOrders.isEmpty()) "Duplicates removed" else "Duplicate postals preserved", parsed.duplicates, Modifier.weight(1f))
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeSmallAction("Import WhatsApp Orders",
+                { vm.importOrdersDialog = true }, Modifier.weight(1f), enabled = !vm.busy)
+            HomeSmallAction("Optimize route",
+                vm::optimize, Modifier.weight(1f), enabled = !vm.busy, filled = true)
         }
+
+        if (vm.draftOrders.isNotEmpty()) {
+            Text("Orders found: " + vm.planningOrders().size +
+                " · Duplicate postals preserved: " +
+                (vm.planningOrders().size - vm.planningOrders().map { it.postalCode }.distinct().size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CountTile("Valid stops",
+                if (vm.draftOrders.isEmpty()) parsed.valid.size else vm.planningOrders().size,
+                Modifier.weight(1f), compact = true)
+            CountTile(if (vm.draftOrders.isEmpty()) "Duplicates removed" else "Duplicate postals preserved",
+                parsed.duplicates, Modifier.weight(1f), compact = true)
+        }
+
         if (parsed.invalid.isNotEmpty()) {
             PremiumCard(Modifier.fillMaxWidth(), containerColor = MaterialTheme.colorScheme.errorContainer) {
-                Text("Invalid postal codes: ${parsed.invalid.joinToString()}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("Invalid postal codes: " + parsed.invalid.joinToString(),
+                    Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryAction("Optimize route", vm::optimize, Modifier.weight(1f), enabled = !vm.busy, minHeight = 56.dp)
-            SecondaryAction("Clear postal code", vm::clearPostalCodes, enabled = !vm.busy, modifier = Modifier.weight(1f), minHeight = 56.dp)
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            TaxDeclareButton(Modifier.weight(1f), compact = true)
+            HomeSmallAction("Clear postal code", vm::clearPostalCodes,
+                modifier = Modifier.weight(1f), enabled = !vm.busy)
         }
-        TaxDeclareButton()
-        Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+
+        Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
     }
 }
 
