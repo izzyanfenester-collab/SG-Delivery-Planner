@@ -183,27 +183,27 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Stop ${index + 1} · ${stop.place.postal}",
                 Modifier.weight(1f), color = V6Gold,
-                fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             Box(
                 Modifier.background(Color(badge.backgroundArgb), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 9.dp, vertical = 5.dp)
+                    .padding(horizontal = 11.dp, vertical = 7.dp)
             ) {
                 Text(badge.label, color = Color(badge.foregroundArgb),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             if (stop.order?.paymentStatus?.uppercase(Locale.ENGLISH) in listOf("COD", "PAYNOW")) {
-                PaymentModeStamp(stop.order, size = 54.dp)
+                PaymentModeStamp(stop.order, size = 70.dp)
             }
         }
         Text("Customer : " + (stop.order?.customerName ?: "—"),
-            color = V6White, fontSize = 14.sp)
+            color = V6White, fontSize = 17.sp)
         Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
-            color = V6White, fontSize = 14.sp)
+            color = V6White, fontSize = 17.sp)
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
-            color = V6White, fontSize = 14.sp, lineHeight = 19.sp)
+            color = V6White, fontSize = 17.sp, lineHeight = 19.sp)
         Text("Parcel Price : " + orderPrice(stop.order),
-            color = V6White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            color = V6White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         // Both proof thumbnails sit directly below Parcel Price.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top) {
@@ -217,16 +217,16 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
             )
         }
         if (stop.holdReason != null)
-            Text("Hold reasons : " + stop.holdReason, color = V6White, fontSize = 13.sp)
+            Text("Hold reasons : " + stop.holdReason, color = V6White, fontSize = 15.sp)
         if (stop.holdNote != null)
-            Text("Hold notes : " + stop.holdNote, color = V6White, fontSize = 13.sp)
+            Text("Hold notes : " + stop.holdNote, color = V6White, fontSize = 15.sp)
 
         OutlinedButton(
             onClick = onReport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = RoundedCornerShape(24.dp),
             border = BorderStroke(1.dp, V6Outline)
         ) {
-            Text("View / Share Delivery Report", color = V6White, fontSize = 13.sp)
+            Text("View / Share Delivery Report", color = V6White, fontSize = 15.sp)
         }
     }
 
@@ -255,10 +255,10 @@ private fun V9ProofTile(
         }
     }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = V6White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        Text(label, color = V6White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
             maxLines = 1)
         Box(
-            Modifier.fillMaxWidth().height(125.dp)
+            Modifier.fillMaxWidth().height(140.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF06192C))
                 .border(1.dp, V6Outline.copy(alpha = .7f), RoundedCornerShape(10.dp))
@@ -280,7 +280,7 @@ private fun V9ProofTile(
             }
         }
         Text(if (thumbnail != null) "View Photo" else "No proof yet",
-            color = V6Secondary, fontSize = 12.sp)
+            color = V6Secondary, fontSize = 14.sp)
     }
 }
 
