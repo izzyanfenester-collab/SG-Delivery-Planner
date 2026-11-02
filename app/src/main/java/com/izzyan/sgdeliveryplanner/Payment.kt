@@ -239,7 +239,7 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
     val compactRowHeight = 46.dp
     val compactCellPadding = 6.dp
     Row(
-        Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground),
+        Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground.copy(alpha = 0.30f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.weight(0.42f).heightIn(min = compactRowHeight).padding(compactCellPadding), contentAlignment = Alignment.CenterStart) {
@@ -294,7 +294,7 @@ private fun PaymentTableRow(
     val gesture = if (onLongClick != null) {
         Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
     } else Modifier
-    Row(Modifier.fillMaxWidth().then(gesture).border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
+    Row(Modifier.fillMaxWidth().then(gesture).border(BorderStroke(0.5.dp, gridLine)).background(cellBackground.copy(alpha = 0.30f))) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 0.88f else 1.16f)

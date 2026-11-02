@@ -287,7 +287,7 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, color: Color? = null, compact: Boolean = false) {
     Surface(
-        modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
         shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)
     ) {
         Column(Modifier.padding(if (compact) 9.dp else 14.dp),
@@ -1013,11 +1013,11 @@ fun ScheduleTable(p: Plan) {
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm), stop.etaArrival?.let(::time) ?: "—", stop.etaLeave?.let(::time) ?: "—", stop.completedAt?.let(::time) ?: "—")
     }
     val end = listOf("END", startPlace.postal, startPlace.block, startPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
-    Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
                 val background = if (index == 0) PremiumNavy else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
-                Row(Modifier.background(background)) {
+                Row(Modifier.background(background.copy(alpha = 0.30f))) {
                     row.forEach {
                         Text(it, Modifier.width(160.dp).padding(14.dp), color = if (index == 0) Color.White else MaterialTheme.colorScheme.onSurface, style = if (index == 0) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium)
                     }

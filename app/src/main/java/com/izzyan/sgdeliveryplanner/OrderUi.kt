@@ -122,7 +122,10 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     LazyColumn(Modifier.heightIn(max=340.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         items(result.failedOrders.size) { index ->
                             val failure = result.failedOrders[index]
-                            Card(Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f))
+                            ) {
                                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                                     Text("Customer: ${failure.customerName ?: "Unknown — check original message"}",style=MaterialTheme.typography.titleSmall)
                                     Text("Reason: ${failure.reason}",color=MaterialTheme.colorScheme.error)
@@ -169,7 +172,10 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(duplicateGroups, key = { it.postalCode }) { group ->
-                                    Card(Modifier.fillMaxWidth()) {
+                                    Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f))
+                            ) {
                                         Column(Modifier.padding(10.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text(
@@ -293,7 +299,10 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(vm.failedRoutePostalChecks, key = { it.postalCode }) { failure ->
                             val affected = orders.filter { it.postalCode == failure.postalCode }
-                            Card(Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f))
+                            ) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text("Postal: ${failure.postalCode}", style = MaterialTheme.typography.titleMedium)

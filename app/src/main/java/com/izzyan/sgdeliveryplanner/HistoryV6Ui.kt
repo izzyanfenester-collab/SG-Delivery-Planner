@@ -84,7 +84,7 @@ internal fun HistoryViewV6(
                     Text("History", color = V6White, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp)
                 }
                 Column(
-                    Modifier.background(Color(0xFF102F51), RoundedCornerShape(13.dp))
+                    Modifier.background(Color(0xFF102F51).copy(alpha = 0.30f), RoundedCornerShape(13.dp))
                         .border(1.dp, V6Outline, RoundedCornerShape(13.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.End
@@ -102,7 +102,7 @@ internal fun HistoryViewV6(
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                                .background(Color(0xFF0C2442))
+                                .background(Color(0xFF0C2442).copy(alpha = 0.30f))
                                 .border(1.dp, V6Outline, RoundedCornerShape(18.dp))
                                 .padding(7.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -121,7 +121,7 @@ internal fun HistoryViewV6(
                         }
                         if (detailsOpen) {
                             Column(
-                                Modifier.fillMaxWidth().background(Color(0xFF112E4D), RoundedCornerShape(14.dp))
+                                Modifier.fillMaxWidth().background(Color(0xFF112E4D).copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                                     .border(1.dp, V6Outline, RoundedCornerShape(14.dp))
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -149,7 +149,7 @@ internal fun HistoryViewV6(
 @Composable
 private fun V6StatBox(symbol: String, count: String, label: String, tint: Color, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.background(Color(0xFF143454), RoundedCornerShape(13.dp))
+        modifier = modifier.background(Color(0xFF143454).copy(alpha = 0.30f), RoundedCornerShape(13.dp))
             .padding(horizontal = 7.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -188,9 +188,14 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 Text("Stop ${index + 1} · ${stop.place.postal}",
                     color = V6Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Customer : " + (stop.order?.customerName ?: "—"),
-                    color = V6White, fontSize = 17.sp,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Text("Customer : " + (stop.order?.customerName ?: "—"),
+                        color = V6White, fontSize = 17.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
+                        color = V6White, fontSize = 17.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
             }
             Box(
                 Modifier.background(Color(badge.backgroundArgb), RoundedCornerShape(30.dp))
@@ -203,8 +208,6 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 PaymentModeStamp(stop.order, size = 70.dp)
             }
         }
-        Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
-            color = V6White, fontSize = 17.sp)
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
             color = V6White, fontSize = 17.sp, lineHeight = 23.sp)
         Text("Parcel Price : " + orderPrice(stop.order),

@@ -110,7 +110,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.matchParentSize())
         session.mapMessage?.let { error ->
-            Surface(Modifier.align(Alignment.TopCenter).padding(8.dp), color = PremiumNavy) {
+            Surface(Modifier.align(Alignment.TopCenter).padding(8.dp), color = PremiumNavy.copy(alpha = 0.30f)) {
                 Column(Modifier.padding(12.dp)) {
                     Text(error, color = PremiumGold)
                     TextButton(onClick = {

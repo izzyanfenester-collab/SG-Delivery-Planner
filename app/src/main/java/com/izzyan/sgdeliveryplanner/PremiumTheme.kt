@@ -101,7 +101,7 @@ fun PremiumCard(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
         border = borderColor?.let { BorderStroke(1.dp, it) },
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        colors = CardDefaults.cardColors(containerColor = containerColor.copy(alpha = 0.30f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         content = content
     )
