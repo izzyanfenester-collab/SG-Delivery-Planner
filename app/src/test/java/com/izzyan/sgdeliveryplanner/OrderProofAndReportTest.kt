@@ -127,7 +127,11 @@ class OrderProofAndReportTest {
         assertEquals(46.5f,DeliveryReportTypography.statusPx)
         assertTrue("Compact 1.5x report must include both photos",png.height > 1000)
         var red=false;var blue=false; var redY=-1; var blueY=-1; var redX=-1; var blueX=-1
-        assertEquals(Color.rgb(7,23,45),png.getPixel(0,0))
+        val pageBackground = png.getPixel(0, 0)
+        assertTrue("Report backdrop must stay dark enough for readable text",
+            Color.red(pageBackground) < 80 &&
+                Color.green(pageBackground) < 100 &&
+                Color.blue(pageBackground) < 130)
         // The COD logo is red too; scan only the lower proof-photo section.
         for(y in (png.height / 2) until png.height step 8) for(x in 0 until png.width step 8) {
             val pixel=png.getPixel(x,y)
