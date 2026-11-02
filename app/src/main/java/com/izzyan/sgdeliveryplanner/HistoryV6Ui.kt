@@ -3,6 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
