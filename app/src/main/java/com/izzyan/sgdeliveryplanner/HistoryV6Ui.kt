@@ -173,18 +173,24 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth().clip(shape)
-            .background(Color(0xFF102844))
+            .background(Color(0xFF102844).copy(alpha = 0.30f))
             .border(1.dp, V6Outline.copy(alpha = .48f), shape)
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // Payment logo retains the existing 35-degree tilt and sits next to Delivered.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        // Keep Stop, Customer and Phone equally close without the stamp row creating a gap.
+        // The original 35-degree COD/PayNow stamp remains beside the delivery badge.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Stop ${index + 1} · ${stop.place.postal}",
-                Modifier.weight(1f), color = V6Gold,
-                fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Stop ${index + 1} · ${stop.place.postal}",
+                    color = V6Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Customer : " + (stop.order?.customerName ?: "—"),
+                    color = V6White, fontSize = 17.sp)
+                Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
+                    color = V6White, fontSize = 17.sp)
+            }
             Box(
                 Modifier.background(Color(badge.backgroundArgb), RoundedCornerShape(30.dp))
                     .padding(horizontal = 11.dp, vertical = 7.dp)
@@ -196,10 +202,6 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 PaymentModeStamp(stop.order, size = 70.dp)
             }
         }
-        Text("Customer : " + (stop.order?.customerName ?: "—"),
-            color = V6White, fontSize = 17.sp)
-        Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
-            color = V6White, fontSize = 17.sp)
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
             color = V6White, fontSize = 17.sp, lineHeight = 23.sp)
         Text("Parcel Price : " + orderPrice(stop.order),
