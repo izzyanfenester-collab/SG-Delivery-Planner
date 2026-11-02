@@ -126,7 +126,8 @@ private class SingleDeliveryReportView(
 
     override fun onDraw(canvas: Canvas) {
         drawMarinaBayReportBackground(context, canvas, 1080, reportHeight)
-        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(210,16,39,68) }
+        // 30% transparency (70% opacity): Marina Bay Sands remains visible behind the readable report.
+        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(179,16,39,68) }
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
