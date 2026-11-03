@@ -106,6 +106,10 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     val canGoBack: Boolean get() { currentScreen; return navigation.canGoBack }
     var selectedStartLocation by mutableStateOf(locationSettings.selected())
         private set
+    var selectedEndLocation by mutableStateOf(locationSettings.selectedEnd())
+        private set
+    var locationPickerTarget by mutableStateOf("START")
+        private set
     var savedHome by mutableStateOf(locationSettings.home())
         private set
     var route by mutableStateOf<Plan?>(null)
@@ -303,8 +307,33 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         if (!busy) currentScreen = navigation.back()
     }
 
-    fun goLocationPicker() {
-        if (!busy) screen = "LocationPicker"
+    fun goLocationPicker(target: String = "START") {
+        if (!busy) {
+            locationPickerTarget = if (target == "END") "END" else "START"
+            screen = "LocationPicker"
+        }
+    }
+
+    fun selectEndLastDelivery() {
+        if (busy) return
+        try {
+            locationSettings.selectEndLastDelivery()
+            selectedEndLocation = EndLocationSelection()
+            message = ""
+        } catch (e: Exception) { message = englishError(e, "Could not save the end location. Please try again.") }
+    }
+
+    fun selectEndLocation(location: StartLocation) {
+        if (busy) return
+        try {
+            locationSettings.selectEndLocation(location)
+            selectedEndLocation = EndLocationSelection(false, location)
+            message = ""
+        } catch (e: Exception) { message = englishError(e, "Could not save the end location. Please try again.") }
+    }
+
+    fun confirmPickedLocation(location: StartLocation) {
+        if (locationPickerTarget == "END") selectEndLocation(location) else selectStartLocation(location)
     }
 
     fun selectStartLocation(location: StartLocation) {
@@ -313,7 +342,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             locationSettings.select(location)
             selectedStartLocation = location
             message = ""
-        } catch (e: Exception) { message = englishError(e, "Could not save the Start & End location. Please try again.") }
+        } catch (e: Exception) { message = englishError(e, "Could not save the start location. Please try again.") }
     }
 
     fun saveHome(location: StartLocation) {
@@ -323,7 +352,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             savedHome = home
             selectedStartLocation = home
             message = ""
-            notice = "Home location saved. Your next route will start and end at Home."
+            notice = "Home location saved and selected as Start. The End choice is unchanged."
         } catch (e: Exception) { message = englishError(e, "Could not save your Home location. Please try again.") }
     }
 
@@ -357,7 +386,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             try {
                 val planned = repo.plan(
                     parsed.valid, routeStart,
-                    service, traffic, endpoint, selectedStartLocation, orders
+                    service, traffic, endpoint, selectedStartLocation, orders, selectedEndLocation
                 ) { message = it }
                 val withRate = planned.copy(exchangeRate = latestExchangeRate)
                 repo.save(withRate)

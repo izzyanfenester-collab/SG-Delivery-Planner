@@ -14,7 +14,10 @@ fun parseInput(raw: String): Input {
 }
 data class Leg(val km: Double, val baseSeconds: Double, val bufferSeconds: Double) { val plannedSeconds get() = baseSeconds + bufferSeconds }
 data class Stop(val place: Place, val leg: Leg, val arrival: String, val leave: String, val cumulativeKm: Double, val status: String = "PENDING", val completedAt: String? = null, val holdReason: String? = null, val holdNote: String? = null, val reviewedAt: String? = null, val etaArrival: String? = null, val etaLeave: String? = null, val orderId: String = java.util.UUID.randomUUID().toString(), val order: CustomerOrder? = null)
-data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null, val reviewedFinishedAt: String? = null, val cashOnHand: String = "0.00", val tax: String = "0.00", val summarySavedAt: String? = null, val startLocation: StartLocation = woodlandsStartLocation, val exchangeRate: String = "3.60", val remark: String = "", val etaReturned: String? = null) {
+data class Plan(val id: String, val created: String, val start: String, val serviceMinutes: Int, val mode: String, val stops: List<Stop>, val returnLeg: Leg, val returned: String, val geometry: List<List<Double>>, val current: Int = 0, val actualCompletion: String? = null, val reviewedFinishedAt: String? = null, val cashOnHand: String = "0.00", val tax: String = "0.00", val summarySavedAt: String? = null, val startLocation: StartLocation = woodlandsStartLocation, val exchangeRate: String = "3.60", val remark: String = "", val etaReturned: String? = null, val endLocation: StartLocation? = null, val endAtLastDelivery: Boolean = false) {
+ val endPlace: Place get() = if (endAtLastDelivery) stops.lastOrNull()?.place ?: startLocation.asPlace() else (endLocation ?: startLocation).asPlace()
+ val endDisplayName: String get() = if (endAtLastDelivery) "Last delivery stop" else (endLocation ?: startLocation).displayName
+ val endReportLabel: String get() = if (endAtLastDelivery) "Last delivery stop${stops.lastOrNull()?.place?.postal?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""}" else (endLocation ?: startLocation).reportLabel
  // The saved scheduled start is the sole route-date snapshot, including for legacy JSON.
  val deliveryDate: LocalDate get() = LocalDateTime.parse(start).toLocalDate()
  val totalKm get() = stops.sumOf { it.leg.km } + returnLeg.km
@@ -29,18 +32,19 @@ fun trafficBuffer(km: Double, seconds: Double, mode: String): Double {
  return if (seconds <= 0) 0.0 else (seconds * fraction + min(km, 8.0) * 12) * factor
 }
 object Optimizer {
- fun cost(order: List<Int>, costs: Array<DoubleArray>): Double = (listOf(0)+order+0).zipWithNext().sumOf { (a,b) -> costs[a][b] }
- fun optimize(costs: Array<DoubleArray>): List<Int> {
+ fun cost(order: List<Int>, costs: Array<DoubleArray>, endIndex: Int? = 0): Double = (listOf(0) + order + listOfNotNull(endIndex)).zipWithNext().sumOf { (a,b) -> costs[a][b] }
+ fun optimize(costs: Array<DoubleArray>, endIndex: Int? = 0): List<Int> {
   require(costs.size >= 2 && costs.all { it.size == costs.size && it.all { v -> v.isFinite() && v >= 0 } })
-  val remaining = (1 until costs.size).toMutableSet(); val order = mutableListOf<Int>(); var last = 0
+  require(endIndex == null || endIndex in costs.indices) { "Invalid end location index." }
+  val remaining = (1 until costs.size).filter { it != endIndex }.toMutableSet(); val order = mutableListOf<Int>(); var last = 0
   while(remaining.isNotEmpty()) { val next = remaining.minBy { costs[last][it] }; order.add(next); remaining.remove(next); last = next }
   // Evaluate the entire directed tour: reversing a section changes internal directed legs too.
   repeat(12) {
-   var best = cost(order,costs); var improved: List<Int>? = null
+   var best = cost(order,costs,endIndex); var improved: List<Int>? = null
    for (i in order.indices) for (j in i+1 until order.size) {
     val reversed = order.toMutableList().apply { subList(i,j+1).reverse() }
     val swapped = order.toMutableList().apply { val t=this[i]; this[i]=this[j]; this[j]=t }
-    for (candidate in listOf(reversed,swapped)) { val c=cost(candidate,costs); if(c < best-.01) { best=c; improved=candidate } }
+    for (candidate in listOf(reversed,swapped)) { val c=cost(candidate,costs,endIndex); if(c < best-.01) { best=c; improved=candidate } }
    }
    if(improved == null) return order
    order.clear(); order.addAll(improved!!)
@@ -48,7 +52,7 @@ object Optimizer {
   return order
  }
 }
-fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service: Int, mode: String, geometry: List<List<Double>>, location: StartLocation = woodlandsStartLocation): Plan {
+fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service: Int, mode: String, geometry: List<List<Double>>, location: StartLocation = woodlandsStartLocation, endLocation: StartLocation? = null, endAtLastDelivery: Boolean = false): Plan {
  require(legs.size == places.size+1 && places.isNotEmpty())
  var clock=start; var distance=0.0
  val stops=places.mapIndexed { i,p ->
@@ -56,5 +60,5 @@ fun schedule(places: List<Place>, legs: List<Leg>, start: LocalDateTime, service
   clock=clock.plusMinutes(service.toLong()); distance+=leg.km
   Stop(p,leg,arrival.toString(),clock.toString(),distance)
  }
- return Plan(java.util.UUID.randomUUID().toString(),LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")).toString(),start.toString(),service,mode,stops,legs.last(),clock.plusSeconds(ceil(legs.last().plannedSeconds).toLong()).toString(),geometry, startLocation = location)
+ return Plan(java.util.UUID.randomUUID().toString(),LocalDateTime.now(java.time.ZoneId.of("Asia/Singapore")).toString(),start.toString(),service,mode,stops,legs.last(),clock.plusSeconds(ceil(legs.last().plannedSeconds).toLong()).toString(),geometry, startLocation = location, endLocation = endLocation, endAtLastDelivery = endAtLastDelivery)
 }

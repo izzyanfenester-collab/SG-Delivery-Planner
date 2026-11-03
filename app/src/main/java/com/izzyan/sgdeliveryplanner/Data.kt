@@ -58,10 +58,11 @@ class Repository(context:Context) {
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place = oneMap.resolve(postal)
- suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),progress:(String)->Unit):Plan = coroutineScope {
+ suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),endSelection:EndLocationSelection = EndLocationSelection(false, null),progress:(String)->Unit):Plan = coroutineScope {
   checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
-  checkPlanning(location.isValid()) { "Choose a valid Start & End location before planning." }
+  checkPlanning(location.isValid()) { "Choose a valid start location before planning." }
+  checkPlanning(endSelection.isValid()) { "Choose a valid end location before planning." }
   val resolved=codes.mapIndexed { index, code ->
    progress("Checking postal code ${index+1} of ${codes.size}…")
    try { Result.success(resolve(code)) }
@@ -76,7 +77,11 @@ class Repository(context:Context) {
   }
   if (failures.isNotEmpty()) throw PostalResolutionException(failures)
   progress("Finding road distances and driving times…")
-  val places=listOf(location.asPlace())+resolved.map { it.getOrThrow() }
+  val destination = if (endSelection.useLastDelivery) null else (endSelection.location ?: location).asPlace()
+  val sameAsStart = destination != null && destination.lat == location.latitude && destination.lon == location.longitude
+  val customEnd = destination?.takeUnless { sameAsStart }
+  val places = listOf(location.asPlace()) + resolved.map { it.getOrThrow() } + listOfNotNull(customEnd)
+  val endIndex: Int? = if (endSelection.useLastDelivery) null else if (customEnd == null) 0 else places.lastIndex
   val coordinates=places.joinToString(";") { "${it.lon},${it.lat}" }
   val root=endpoint.trimEnd('/')
   val n=places.size
@@ -117,13 +122,14 @@ class Repository(context:Context) {
   }
   val costs=Array(n) { i -> DoubleArray(n) { j -> seconds[i][j]+trafficBuffer(meters[i][j]/1000,seconds[i][j],mode)+meters[i][j]/1000*15 } }
   progress("Improving the delivery order…")
-  val order=withContext(Dispatchers.Default) { Optimizer.optimize(costs) }
-  val path=listOf(0)+order+0
-  val legs=path.zipWithNext().map { (a,b) ->
+  val order=withContext(Dispatchers.Default) { Optimizer.optimize(costs, endIndex) }
+  val path = listOf(0) + order + listOfNotNull(endIndex)
+  val actualLegs=path.zipWithNext().map { (a,b) ->
    val key=roadCacheKey(root,places[a],places[b])
    val leg=Leg(meters[a][b]/1000,seconds[a][b],trafficBuffer(meters[a][b]/1000,seconds[a][b],mode))
    dao.leg(CachedLeg(key,gson.toJson(leg),System.currentTimeMillis())); leg
   }
+  val legs = if (endSelection.useLastDelivery) actualLegs + Leg(0.0, 0.0, 0.0) else actualLegs
   progress("Loading the route map…")
   val routePlaces=path.map { places[it] }
    val route=try {
@@ -141,7 +147,9 @@ class Repository(context:Context) {
      throw isolateNoRouteIfNeeded(problem, api, root, routePlaces)
    }
   val geometry=route.getAsJsonArray("routes")[0].asJsonObject.getAsJsonObject("geometry").getAsJsonArray("coordinates").map { listOf(it.asJsonArray[0].asDouble,it.asJsonArray[1].asDouble) }
-  val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location)
+  val scheduled = schedule(order.map { places[it] },legs,start,service,mode,geometry,location,
+      endLocation = if (endSelection.useLastDelivery) null else endSelection.location,
+      endAtLastDelivery = endSelection.useLastDelivery)
   (if (orders.isEmpty()) scheduled else expandCustomerOrders(scheduled, orders)).also { save(it) }
  }
 }

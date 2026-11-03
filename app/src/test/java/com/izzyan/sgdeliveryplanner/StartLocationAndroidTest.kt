@@ -60,6 +60,44 @@ class StartLocationAndroidTest {
     }
 
     @Test
+    fun endDefaultsToFinalDeliveryAndDoesNotChangeTheStart() {
+        val settings = StartLocationSettings(app)
+        assertEquals(EndLocationSelection(), settings.selectedEnd())
+        assertEquals(woodlandsStartLocation, settings.selected())
+
+        settings.selectEndLocation(custom)
+        assertEquals(EndLocationSelection(false, custom), StartLocationSettings(app).selectedEnd())
+        assertEquals(woodlandsStartLocation, StartLocationSettings(app).selected())
+
+        settings.selectEndLocation(woodlandsStartLocation)
+        assertEquals(EndLocationSelection(false, woodlandsStartLocation), StartLocationSettings(app).selectedEnd())
+
+        settings.selectEndLastDelivery()
+        assertEquals(EndLocationSelection(), StartLocationSettings(app).selectedEnd())
+        assertEquals(woodlandsStartLocation, StartLocationSettings(app).selected())
+    }
+
+    @Test
+    fun savedRouteKeepsSelectedEndWhenCurrentEndChanges() {
+        val settings = StartLocationSettings(app)
+        settings.selectEndLocation(custom)
+        val saved = plan(woodlandsStartLocation).copy(endLocation = custom)
+        val json = PlanJson.encode(saved)
+        settings.selectEndLastDelivery()
+
+        val restored = PlanJson.decode(json)
+        assertEquals(custom, restored.endLocation)
+        assertEquals(custom.asPlace(), restored.endPlace)
+        assertEquals(woodlandsStartLocation, restored.startLocation)
+        assertEquals(EndLocationSelection(), settings.selectedEnd())
+
+        val legacy = PlanJson.decode(PlanJson.encode(plan(woodlandsStartLocation)))
+        assertFalse(legacy.endAtLastDelivery)
+        assertNull(legacy.endLocation)
+        assertEquals(depot, legacy.endPlace)
+    }
+
+    @Test
     fun selectedCustomLocationPersistsAllFieldsAcrossSettingsRecreation() {
         StartLocationSettings(app).select(custom)
         val reopened = StartLocationSettings(app)
