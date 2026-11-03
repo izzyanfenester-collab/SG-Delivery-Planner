@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,8 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -223,36 +226,112 @@ private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
 
 // Keep only five payment history rows visible; older entries remain scrollable.
 private const val VISIBLE_PAYMENT_HISTORY_ROWS = 5
-private val PAYMENT_HISTORY_ROW_HEIGHT = 30.dp
+private val PAYMENT_HISTORY_ROW_HEIGHT = 38.dp
 
 private fun displayPaymentDate(value: String): String = runCatching {
     LocalDate.parse(value).format(rowDate)
 }.getOrDefault(value)
 
+/** Payment-only styling: keeps calculator state and payment ledger logic untouched. */
 @Composable
-private fun PaymentRow(label: String, strong: Boolean = false, content: @Composable () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val cellBackground = if (strong) colors.primaryContainer else colors.surface
-    val cellText = if (strong) colors.onPrimaryContainer else colors.onSurface
-    val gridLine = colors.outlineVariant
-    // Compact payment input table: reduce unused vertical space without changing fields.
-    val compactRowHeight = 46.dp
-    val compactCellPadding = 6.dp
-    Row(
-        Modifier.fillMaxWidth().border(BorderStroke(0.5.dp, gridLine)).background(cellBackground),
-        verticalAlignment = Alignment.CenterVertically
+private fun PaymentSectionTitle(title: String) {
+    Text(
+        title,
+        color = PremiumGold,
+        style = MaterialTheme.typography.titleLarge,
+        fontSize = 23.sp,
+        fontStyle = FontStyle.Italic,
+        modifier = Modifier.padding(top = 5.dp, bottom = 1.dp)
+    )
+}
+
+@Composable
+private fun PaymentGlassPanel(content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .border(BorderStroke(1.dp, PremiumGold.copy(alpha = 0.48f)), shape)
+            .background(Color(0xFF122B4B).copy(alpha = 0.38f), shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Box(Modifier.weight(0.42f).heightIn(min = compactRowHeight).padding(compactCellPadding), contentAlignment = Alignment.CenterStart) {
-            Text(
-                label, color = cellText, fontSize = 13.sp,
-                lineHeight = 17.sp, fontWeight = if (strong) FontWeight.Bold else FontWeight.Normal
-            )
+        content()
+    }
+}
+
+@Composable
+private fun PaymentOverviewCard(date: String) {
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .border(BorderStroke(1.dp, Color(0xFF9CBDF3).copy(alpha = 0.62f)), shape)
+            .background(Color(0xFF244269).copy(alpha = 0.38f), shape)
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Payment overview", color = PremiumGold,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
+            Text("Track your delivery earnings",
+                color = Color(0xFFDAE6F6), fontSize = 11.sp)
         }
         Box(
-            Modifier.weight(0.58f).heightIn(min = compactRowHeight)
-                .border(BorderStroke(0.5.dp, gridLine)).padding(compactCellPadding),
-            contentAlignment = Alignment.CenterStart
-        ) { content() }
+            modifier = Modifier.border(1.dp, PremiumGold, RoundedCornerShape(24.dp))
+                .background(PremiumNavy.copy(alpha = 0.60f), RoundedCornerShape(24.dp))
+                .padding(horizontal = 11.dp, vertical = 8.dp)
+        ) {
+            Text(date, color = Color(0xFFFFE5AD), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun PaymentRow(label: String, strong: Boolean = false, content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    val labelIcon = when (label) {
+        "Date" -> "◷"
+        "Qty parcel" -> "▣"
+        "Commission per parcel (RM)" -> "◉"
+        "Total payment (RM)" -> "≋"
+        "Tax (RM)" -> "%"
+        "Others (RM)" -> "✎"
+        else -> "◆"
+    }
+    val cellBackground = if (strong) Color(0xFF173B79).copy(alpha = 0.88f)
+        else Color(0xFF0B2343).copy(alpha = 0.50f)
+    val line = if (strong) Color(0xFF639FFE) else Color(0xFF6987AD).copy(alpha = 0.58f)
+    Row(
+        Modifier.fillMaxWidth()
+            .border(BorderStroke(if (strong) 1.25.dp else 0.65.dp, line), shape)
+            .background(cellBackground, shape)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            Modifier.weight(0.48f).heightIn(min = 37.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Box(
+                Modifier.background(PremiumGold.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(labelIcon, color = PremiumGold, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(
+                label,
+                color = if (strong) Color.White else Color(0xFFF0F5FF),
+                fontSize = if (strong) 12.sp else 11.5.sp,
+                lineHeight = 15.sp,
+                fontWeight = if (strong) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+        Box(Modifier.weight(0.52f).padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
+            content()
+        }
     }
 }
 
@@ -268,11 +347,20 @@ private fun PaymentInput(
         onValueChange = onChange,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+        cursorBrush = SolidColor(PremiumGold),
+        textStyle = TextStyle(color = Color(0xFFF6F9FF), fontSize = 13.sp),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { input ->
-            Box {
-                if (value.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Box(
+                Modifier.fillMaxWidth()
+                    .border(BorderStroke(0.8.dp, Color(0xFF9DB6D8).copy(alpha = 0.85f)), RoundedCornerShape(9.dp))
+                    .background(PremiumNavy.copy(alpha = 0.48f), RoundedCornerShape(9.dp))
+                    .padding(horizontal = 9.dp, vertical = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (value.isEmpty()) {
+                    Text(hint, color = Color(0xFFBECBE1), fontSize = 12.sp, lineHeight = 14.sp)
+                }
                 input()
             }
         }
@@ -286,25 +374,33 @@ private fun PaymentTableRow(
     isHeader: Boolean = false, isTotal: Boolean = false,
     onLongClick: (() -> Unit)? = null, fixedRowHeight: Dp? = null
 ) {
-    val colors = MaterialTheme.colorScheme
     val emphasized = isHeader || isTotal
-    val cellBackground = if (emphasized) colors.primaryContainer else colors.surface
-    val cellText = if (emphasized) colors.onPrimaryContainer else colors.onSurface
-    val gridLine = colors.outlineVariant
+    val fill = when {
+        isHeader -> Color(0xFF20467F).copy(alpha = 0.90f)
+        isTotal -> Color(0xFF173B79).copy(alpha = 0.86f)
+        else -> PremiumNavy.copy(alpha = 0.55f)
+    }
+    val textColor = if (emphasized) Color(0xFFFFE8B8) else Color(0xFFF1F6FF)
     val gesture = if (onLongClick != null) {
         Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
     } else Modifier
-    Row(Modifier.fillMaxWidth().then(gesture).border(BorderStroke(0.5.dp, gridLine)).background(cellBackground)) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 1.dp)
+            .then(gesture)
+            .border(BorderStroke(0.6.dp, Color(0xFF829FC8).copy(alpha = 0.50f)), RoundedCornerShape(9.dp))
+            .background(fill, RoundedCornerShape(9.dp)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 0.88f else 1.16f)
-                    .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight)
-                        else Modifier.heightIn(min = if (isHeader) 54.dp else 30.dp))
-                    .border(BorderStroke(0.5.dp, gridLine)).padding(5.dp),
+                    .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight - 2.dp)
+                        else Modifier.heightIn(min = if (isHeader) 45.dp else 35.dp))
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    value, color = cellText, fontSize = if (isHeader) 11.sp else 12.sp,
+                    value, color = textColor, fontSize = if (isHeader) 10.5.sp else 12.sp,
                     lineHeight = 15.sp,
                     fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal
                 )
@@ -312,7 +408,6 @@ private fun PaymentTableRow(
         }
     }
 }
-
 
 /** Edit one entry rather than an aggregate; calculated totals stay consistent with the fields. */
 @Composable
@@ -420,8 +515,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Payment", style = MaterialTheme.typography.headlineMedium)
-        Column {
+        Text("Payment", color = Color(0xFFF8F6FF), fontSize = 28.sp,
+            fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
+        PaymentOverviewCard(displayPaymentDate(vm.deliveryDate.toString()))
+        PaymentGlassPanel {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("▤", color = PremiumGold, fontSize = 18.sp)
+                Text("Payment calculator", color = Color(0xFFFFE5AB),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
+            }
             PaymentRow("Date") {
                 Text(displayPaymentDate(vm.deliveryDate.toString()), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             }
@@ -466,17 +573,17 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
                 )
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(5.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    border = BorderStroke(1.4.dp, Color(0xFF90BBFC)),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
+                        containerColor = PremiumNavy.copy(alpha = 0.45f),
+                        contentColor = Color(0xFFEDF5FF)
                     )
-                ) { Text("Reset", fontWeight = FontWeight.Bold) }
+                ) { Text("↶  Reset", fontWeight = FontWeight.Bold) }
                 OutlinedButton(
                     onClick = {
                         val value = amounts ?: return@OutlinedButton
@@ -495,14 +602,14 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     },
                     enabled = amounts != null && !vm.busy,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                    border = BorderStroke(1.dp, PremiumGold),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        containerColor = PremiumGold,
+                        contentColor = PremiumNavy,
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                ) { Text("Save", fontWeight = FontWeight.Bold) }
+                ) { Text("▣  Save", fontWeight = FontWeight.Bold) }
             }
         }
         if (reportTax == null) {
@@ -512,11 +619,11 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        Text("Payment history", style = MaterialTheme.typography.titleLarge)
+        PaymentSectionTitle("Payment history")
         Text("Press and hold a saved date to edit or delete its payment.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall)
-        Column {
+        PaymentGlassPanel {
             // Header stays visible while the records scroll in a five-row-high viewport.
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
             Column(
@@ -533,7 +640,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             }
         }
-        Text("Summary payment in month", style = MaterialTheme.typography.titleLarge)
+        PaymentSectionTitle("Summary payment in month")
         Text(
             "Totals for the current calendar year, calculated from saved payment records.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -543,7 +650,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
         val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
         val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
-        Column {
+        PaymentGlassPanel {
             PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
             monthsWithPayment.forEach { (month, totals) ->
                 PaymentTableRow(
