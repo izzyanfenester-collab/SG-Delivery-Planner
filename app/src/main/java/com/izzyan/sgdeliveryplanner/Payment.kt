@@ -226,7 +226,7 @@ private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
 
 // Keep only five payment history rows visible; older entries remain scrollable.
 private const val VISIBLE_PAYMENT_HISTORY_ROWS = 5
-private val PAYMENT_HISTORY_ROW_HEIGHT = 38.dp
+private val PAYMENT_HISTORY_ROW_HEIGHT = 50.dp
 
 private fun displayPaymentDate(value: String): String = runCatching {
     LocalDate.parse(value).format(rowDate)
@@ -239,7 +239,8 @@ private fun PaymentSectionTitle(title: String) {
         title,
         color = PremiumGold,
         style = MaterialTheme.typography.titleLarge,
-        fontSize = 23.sp,
+        fontSize = 26.sp,
+        fontWeight = FontWeight.Bold,
         fontStyle = FontStyle.Italic,
         modifier = Modifier.padding(top = 5.dp, bottom = 1.dp)
     )
@@ -273,16 +274,16 @@ private fun PaymentOverviewCard(date: String) {
         Column(Modifier.weight(1f)) {
             Text("Payment overview", color = PremiumGold,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
+                fontSize = 18.sp, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
             Text("Track your delivery earnings",
-                color = Color(0xFFDAE6F6), fontSize = 11.sp)
+                color = Color(0xFFDAE6F6), fontSize = 14.sp, lineHeight = 19.sp)
         }
         Box(
             modifier = Modifier.border(1.dp, PremiumGold, RoundedCornerShape(24.dp))
                 .background(PremiumNavy.copy(alpha = 0.60f), RoundedCornerShape(24.dp))
-                .padding(horizontal = 11.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Text(date, color = Color(0xFFFFE5AD), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(date, color = Color(0xFFFFE5AD), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -310,26 +311,26 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            Modifier.weight(0.48f).heightIn(min = 37.dp),
+            Modifier.weight(0.52f).heightIn(min = 50.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
                 Modifier.background(PremiumGold.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                    .padding(horizontal = 7.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(labelIcon, color = PremiumGold, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(labelIcon, color = PremiumGold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
             Text(
                 label,
                 color = if (strong) Color.White else Color(0xFFF0F5FF),
-                fontSize = if (strong) 12.sp else 11.5.sp,
-                lineHeight = 15.sp,
-                fontWeight = if (strong) FontWeight.Bold else FontWeight.Medium
+                fontSize = if (strong) 16.sp else 15.sp,
+                lineHeight = 20.sp,
+                fontWeight = if (strong) FontWeight.Bold else FontWeight.SemiBold
             )
         }
-        Box(Modifier.weight(0.52f).padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.weight(0.48f).padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
             content()
         }
     }
@@ -348,18 +349,18 @@ private fun PaymentInput(
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         cursorBrush = SolidColor(PremiumGold),
-        textStyle = TextStyle(color = Color(0xFFF6F9FF), fontSize = 13.sp),
+        textStyle = TextStyle(color = Color(0xFFF6F9FF), fontSize = 16.sp, fontWeight = FontWeight.Medium),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { input ->
             Box(
                 Modifier.fillMaxWidth()
                     .border(BorderStroke(0.8.dp, Color(0xFF9DB6D8).copy(alpha = 0.85f)), RoundedCornerShape(9.dp))
-                    .background(PremiumNavy.copy(alpha = 0.48f), RoundedCornerShape(9.dp))
-                    .padding(horizontal = 9.dp, vertical = 8.dp),
+                    .background(PremiumNavy.copy(alpha = 0.72f), RoundedCornerShape(9.dp))
+                    .padding(horizontal = 9.dp, vertical = 10.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (value.isEmpty()) {
-                    Text(hint, color = Color(0xFFBECBE1), fontSize = 12.sp, lineHeight = 14.sp)
+                    Text(hint, color = Color(0xFFDFE8F7), fontSize = 14.sp, lineHeight = 18.sp)
                 }
                 input()
             }
@@ -393,16 +394,16 @@ private fun PaymentTableRow(
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
-                Modifier.weight(if (index == 0) 0.88f else 1.16f)
+                Modifier.weight(if (index == 0) 1.04f else 1.12f)
                     .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight - 2.dp)
-                        else Modifier.heightIn(min = if (isHeader) 45.dp else 35.dp))
+                        else Modifier.heightIn(min = if (isHeader) 70.dp else 48.dp))
                     .padding(horizontal = 4.dp, vertical = 3.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    value, color = textColor, fontSize = if (isHeader) 10.5.sp else 12.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal
+                    value, color = textColor, fontSize = if (isHeader) 14.sp else 16.sp,
+                    lineHeight = if (isHeader) 18.sp else 21.sp,
+                    fontWeight = if (emphasized) FontWeight.Bold else FontWeight.SemiBold
                 )
             }
         }
@@ -524,13 +525,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("▤", color = PremiumGold, fontSize = 18.sp)
+                Box(
+                    modifier = Modifier.border(BorderStroke(1.dp, PremiumGold), RoundedCornerShape(12.dp))
+                        .background(PremiumGold.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("▤", color = PremiumGold, fontSize = 29.sp, fontWeight = FontWeight.Bold)
+                }
                 Text("Payment calculator", color = Color(0xFFFFE5AB),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium, fontSize = 22.sp,
                     fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
             }
             PaymentRow("Date") {
-                Text(displayPaymentDate(vm.deliveryDate.toString()), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                Text(displayPaymentDate(vm.deliveryDate.toString()), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
             PaymentRow("Qty parcel") {
                 PaymentInput(quantity, "Enter quantity", KeyboardType.Number) {
@@ -543,7 +551,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             }
             PaymentRow("Total payment (RM)") {
-                Text(amounts?.totalPaymentRm ?: "—", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                Text(amounts?.totalPaymentRm ?: "—", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
             PaymentRow("Tax (RM)") {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -552,12 +560,12 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     }
                     if (reportTax != null && manualTaxRm != null) {
                         TextButton(onClick = { manualTaxRm = null }) {
-                            Text("Use report tax: RM $reportTax", fontSize = 12.sp)
+                            Text("Use report tax: RM $reportTax", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     } else if (reportTax != null) {
                         Text(
                             "From Delivery Report Summary",
-                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -570,20 +578,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
             PaymentRow("Grand total payment", strong = true) {
                 Text(
                     if (amounts == null) "—" else "RM " + amounts.grandTotalPaymentRm,
-                    color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                    color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp
                 )
             }
             Spacer(Modifier.height(5.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 54.dp),
                     border = BorderStroke(1.4.dp, Color(0xFF90BBFC)),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumNavy.copy(alpha = 0.45f),
                         contentColor = Color(0xFFEDF5FF)
                     )
-                ) { Text("↶  Reset", fontWeight = FontWeight.Bold) }
+                ) { Text("↶  Reset", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
                 OutlinedButton(
                     onClick = {
                         val value = amounts ?: return@OutlinedButton
@@ -601,7 +609,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         }
                     },
                     enabled = amounts != null && !vm.busy,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 54.dp),
                     border = BorderStroke(1.dp, PremiumGold),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumGold,
@@ -609,20 +617,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                ) { Text("▣  Save", fontWeight = FontWeight.Bold) }
+                ) { Text("▣  Save", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
             }
         }
         if (reportTax == null) {
             Text(
                 "No saved Delivery Report Summary for this date. Tax defaults to RM 0.00; you can edit it manually.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
+                fontSize = 14.sp, lineHeight = 19.sp
             )
         }
         PaymentSectionTitle("Payment history")
         Text("Press and hold a saved date to edit or delete its payment.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall)
+            fontSize = 14.sp, lineHeight = 19.sp
         PaymentGlassPanel {
             // Header stays visible while the records scroll in a five-row-high viewport.
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
@@ -644,10 +652,10 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text(
             "Totals for the current calendar year, calculated from saved payment records.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall
+            fontSize = 14.sp, lineHeight = 19.sp
         )
         // Current year is captured by the Payment screen and its month-management dialog.
-        Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium)
+        Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
         val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
         PaymentGlassPanel {
@@ -663,7 +671,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 Text(
                     "No payment records for $currentYear.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
             }
@@ -671,7 +679,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         Text("Press and hold a month to manage the saved payments within it.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall)
+            fontSize = 14.sp, lineHeight = 19.sp
     }
 
     selectedMonth?.let { month ->
