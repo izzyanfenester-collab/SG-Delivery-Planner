@@ -631,6 +631,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text("Press and hold a saved date to edit or delete its payment.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp, lineHeight = 19.sp
+        )
         PaymentGlassPanel {
             // Header stays visible while the records scroll in a five-row-high viewport.
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
@@ -680,6 +681,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text("Press and hold a month to manage the saved payments within it.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp, lineHeight = 19.sp
+        )
     }
 
     selectedMonth?.let { month ->
