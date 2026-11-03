@@ -199,6 +199,7 @@ fun expandCustomerOrders(plan: Plan, orders: List<CustomerOrder>): Plan {
         Triple(stop.place, if (i == 0) stop.leg else Leg(0.0,0.0,0.0), order)
     } }
     val result = schedule(pairs.map { it.first }, pairs.map { it.second } + plan.returnLeg,
-        LocalDateTime.parse(plan.start), plan.serviceMinutes, plan.mode, plan.geometry, plan.startLocation)
+        LocalDateTime.parse(plan.start), plan.serviceMinutes, plan.mode, plan.geometry, plan.startLocation,
+        endLocation = plan.endLocation, endAtLastDelivery = plan.endAtLastDelivery)
     return result.copy(id = plan.id, created = plan.created, stops = result.stops.mapIndexed { i, stop -> stop.copy(orderId = pairs[i].third.orderId, order = pairs[i].third) })
 }

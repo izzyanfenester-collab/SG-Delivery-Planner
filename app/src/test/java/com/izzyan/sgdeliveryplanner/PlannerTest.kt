@@ -75,5 +75,21 @@ class PlannerTest {
   assertEquals(11.0,fixed.totalKm,.001)
   assertEquals("Home",fixed.endDisplayName)
  }
+ @Test fun duplicateCustomerOrdersKeepOpenEndAndCorrectEndEta() {
+  val customerPlace=depot.copy(postal="730120",lat=1.35,lon=103.8)
+  val start=LocalDateTime.of(2026,11,3,10,0)
+  val base=schedule(listOf(customerPlace),
+      listOf(Leg(4.0,600.0,0.0),Leg(0.0,0.0,0.0)),
+      start,8,"Normal",emptyList(),endAtLastDelivery=true)
+  val expanded=expandCustomerOrders(base,listOf(
+      CustomerOrder(postalCode="730120",orderId="A"),
+      CustomerOrder(postalCode="730120",orderId="B")))
+  assertTrue(expanded.endAtLastDelivery)
+  assertEquals(customerPlace,expanded.endPlace)
+  assertEquals(2,expanded.stops.size)
+  assertEquals("2026-11-03T10:26",expanded.returned)
+  assertEquals(expanded.stops.last().leave,expanded.returned)
+ }
+
  @Test(expected=IllegalArgumentException::class) fun rejectsUnreachableMatrix() { Optimizer.optimize(arrayOf(doubleArrayOf(0.0,Double.POSITIVE_INFINITY),doubleArrayOf(1.0,0.0))) }
 }
