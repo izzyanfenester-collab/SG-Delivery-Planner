@@ -57,6 +57,7 @@ private fun summaryReportFields(plan: Plan): List<Pair<String, String>> {
     return listOf(
         "Date" to plan.deliveryDate.format(reportDateFormat),
         "Start" to reportTime(summary.start),
+        "End location" to plan.endReportLabel,
         "Finish" to reportTime(summary.finish),
         "Total Parcel" to summary.totalParcel.toString(),
         "Delivered" to summary.delivered.toString(),

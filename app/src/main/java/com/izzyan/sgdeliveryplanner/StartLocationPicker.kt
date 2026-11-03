@@ -45,6 +45,7 @@ private fun locationCoordinates(location: StartLocation): String =
 @Composable
 fun StartLocationControls(vm: PlannerViewModel) {
     var showChoices by remember { mutableStateOf(false) }
+    var showEndChoices by remember { mutableStateOf(false) }
     var replaceHome by remember { mutableStateOf(false) }
     val selected = vm.selectedStartLocation
     val isCheckpoint = selected.type == woodlandsStartLocation.type
@@ -58,7 +59,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Start & End", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                    Text("Start location", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                     Text(selected.displayName, color = Color.White,
                         style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 }
@@ -74,9 +75,95 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 Text(selected.address, color = LocationMuted,
                     style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
-            Text(locationCoordinates(selected) + " · Return after final delivery",
+            Text(locationCoordinates(selected),
                 color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
         }
+    }
+
+    PremiumCard(
+        Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
+        containerColor = PremiumNavy
+    ) {
+        val chosenEnd = vm.selectedEndLocation
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("End location", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                    Text(if (chosenEnd.useLastDelivery) "Last delivery (automatic)"
+                         else chosenEnd.location?.displayName ?: "Last delivery (automatic)",
+                        color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                }
+                Button(
+                    onClick = { showEndChoices = true }, enabled = !vm.busy,
+                    modifier = Modifier.height(40.dp), shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 17.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)
+                ) { Text("Change", fontWeight = FontWeight.Bold) }
+            }
+            if (chosenEnd.useLastDelivery) {
+                Text("Route ends at the final optimized delivery stop. No return journey.",
+                    color = LocationMuted, style = MaterialTheme.typography.bodySmall)
+            } else {
+                val destination = chosenEnd.location
+                if (destination != null) {
+                    if (destination.address.isNotBlank()) Text(destination.address,
+                        color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    Text(locationCoordinates(destination), color = LocationMuted,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+
+    if (showEndChoices) {
+        val savedSelection = vm.selectedEndLocation
+        var endChoice by remember { mutableStateOf(if (savedSelection.useLastDelivery) "LAST" else
+            if (savedSelection.location?.type == "WOODLANDS") "WOODLANDS"
+            else if (savedSelection.location?.type == "HOME") "HOME" else "CUSTOM") }
+        AlertDialog(
+            onDismissRequest = { showEndChoices = false },
+            containerColor = PremiumNavy, titleContentColor = PremiumGold, textContentColor = Color.White,
+            title = { Text("Choose end location") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LocationChoice("Last delivery (default)",
+                        "Finish at the final optimized stop without returning to Start.",
+                        endChoice == "LAST") { endChoice = "LAST" }
+                    LocationChoice("Woodlands Checkpoint", "Return to Woodlands after deliveries.",
+                        endChoice == "WOODLANDS") { endChoice = "WOODLANDS" }
+                    vm.savedHome?.takeIf { it.isValid() }?.let { home ->
+                        LocationChoice("Saved Home", home.reportLabel, endChoice == "HOME") {
+                            endChoice = "HOME"
+                        }
+                    }
+                    if (savedSelection.location?.type == "CUSTOM") {
+                        LocationChoice("Current custom end", savedSelection.location!!.reportLabel,
+                            endChoice == "CUSTOM") { endChoice = "CUSTOM" }
+                    }
+                    LocationGoldButton("Choose another location on Map", {
+                        showEndChoices = false
+                        vm.goLocationPicker("END")
+                    }, enabled = !vm.busy)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (endChoice) {
+                        "LAST" -> vm.selectEndLastDelivery()
+                        "WOODLANDS" -> vm.selectEndLocation(woodlandsStartLocation)
+                        "HOME" -> vm.savedHome?.let(vm::selectEndLocation)
+                        "CUSTOM" -> savedSelection.location?.let(vm::selectEndLocation)
+                    }
+                    showEndChoices = false
+                }, enabled = !vm.busy) { Text("Use this End", color = PremiumGold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndChoices = false }) { Text("Close", color = LocationMuted) }
+            }
+        )
     }
 
     if (showChoices) {
@@ -86,10 +173,10 @@ fun StartLocationControls(vm: PlannerViewModel) {
             containerColor = PremiumNavy,
             titleContentColor = PremiumGold,
             textContentColor = Color.White,
-            title = { Text("Start and end location") },
+            title = { Text("Choose start location") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LocationChoice("Woodlands Checkpoint", "Default start and return location", !chooseCustom) {
+                    LocationChoice("Woodlands Checkpoint", "Default start location", !chooseCustom) {
                         chooseCustom = false
                     }
                     LocationChoice("Custom / Home", "Choose a map point or use your saved Home", chooseCustom) {
@@ -108,7 +195,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                         }
                         LocationGoldButton("Choose on Map", {
                             showChoices = false
-                            vm.goLocationPicker()
+                            vm.goLocationPicker("START")
                         }, enabled = !vm.busy)
                         LocationOutlineButton("Use Home", {
                             vm.useHome()
@@ -193,8 +280,10 @@ private fun LocationOutlineButton(label: String, onClick: () -> Unit, enabled: B
 @Composable
 fun StartLocationPicker(vm: PlannerViewModel) {
     val context = LocalContext.current
-    val initial = remember {
-        vm.selectedStartLocation.takeIf { it.type != woodlandsStartLocation.type && it.isValid() }
+    val choosingEnd = vm.locationPickerTarget == "END"
+    val initial = remember(choosingEnd) {
+        (if (choosingEnd) vm.selectedEndLocation.location else vm.selectedStartLocation)
+            ?.takeIf { it.type != woodlandsStartLocation.type && it.isValid() }
     }
     var selected by remember { mutableStateOf(initial) }
     var latitude by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
@@ -244,7 +333,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Choose your start and end location", style = MaterialTheme.typography.headlineSmall)
+        Text(if (choosingEnd) "Choose your end location" else "Choose your start location", style = MaterialTheme.typography.headlineSmall)
         Text("Pan and zoom the map, then tap to place the marker. Tap again to move it.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         LocationMap(selected, initial ?: woodlandsStartLocation, ::choosePoint)
@@ -262,7 +351,8 @@ fun StartLocationPicker(vm: PlannerViewModel) {
                         "Address unavailable. The selected coordinates will be used."
                     }, color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("This point will be used for both the start and return of your next route.",
+                Text(if (choosingEnd) "Your route will finish at this point after the final delivery."
+                     else "Your next route will start at this point.",
                     color = LocationMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -286,7 +376,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
         if (validation.isNotBlank()) Text(validation, color = MaterialTheme.colorScheme.error)
         LocationGoldButton("Confirm Location", {
             selected?.takeIf { it.isValid() }?.let {
-                vm.selectStartLocation(it)
+                vm.confirmPickedLocation(it)
                 vm.goBack()
             }
         }, enabled = !vm.busy && selected?.isValid() == true)

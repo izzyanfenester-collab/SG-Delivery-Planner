@@ -23,15 +23,17 @@ fun deliveryExcelFileName(plan: Plan): String =
  */
 fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
     val origin = plan.startLocation.asPlace()
-    val endpointLabel = if (plan.startLocation.type == "WOODLANDS") plan.startLocation.displayName
+    val startLabel = if (plan.startLocation.type == "WOODLANDS") plan.startLocation.displayName
         else plan.startLocation.reportLabel
+    val endPlace = plan.endPlace
+    val endLabel = if (!plan.endAtLastDelivery && plan.endLocation == null) startLabel else plan.endReportLabel
     val headings = listOf(
         "Stop", "Postal Code", "Block", "Area", "Arrival", "Distance From Previous",
         "Base Drive", "Traffic Buffer", "Planned Travel", "Delivery", "Leave", "Cumulative KM", "Updated ETA", "Updated Finish", "Actual / Delivered At"
     )
     val rows = mutableListOf<List<ExcelCell>>()
     rows += listOf(
-        textCell("START", ENDPOINT_STYLE), textCell(origin.postal), textCell(endpointLabel),
+        textCell("START", ENDPOINT_STYLE), textCell(origin.postal), textCell(startLabel),
         textCell(origin.area), dateTimeCell(plan.start), textCell("—"), textCell("—"),
         textCell("—"), textCell("—"), textCell("—"), dateTimeCell(plan.start), kmCell(0.0), textCell("—"), textCell("—"), textCell("—")
     )
@@ -49,8 +51,8 @@ fun writeDeliveryScheduleXlsx(plan: Plan, output: OutputStream) {
         )
     }
     rows += listOf(
-        textCell("END", ENDPOINT_STYLE), textCell(origin.postal), textCell(endpointLabel),
-        textCell(origin.area), dateTimeCell(plan.returned), kmCell(plan.returnLeg.km),
+        textCell("END", ENDPOINT_STYLE), textCell(endPlace.postal), textCell(endLabel),
+        textCell(endPlace.area), dateTimeCell(plan.returned), kmCell(plan.returnLeg.km),
         durationCell(plan.returnLeg.baseSeconds), durationCell(plan.returnLeg.bufferSeconds),
         durationCell(plan.returnLeg.plannedSeconds), textCell("—"), dateTimeCell(plan.returned),
         kmCell(plan.totalKm), plan.etaReturned?.let(::dateTimeCell) ?: textCell("—"), textCell("—"), textCell("—")

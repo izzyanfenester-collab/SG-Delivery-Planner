@@ -167,7 +167,9 @@ object PlanJson {
             }
         }
         val decoded = gson.fromJson(root, Plan::class.java)
-        if (!decoded.startLocation.isValid()) throw PlannerError("This saved route has an invalid Start & End location.")
+        if (!decoded.startLocation.isValid()) throw PlannerError("This saved route has an invalid Start location.")
+        if (decoded.endLocation != null && !decoded.endLocation.isValid()) throw PlannerError("This saved route has an invalid End location.")
+        if (decoded.endAtLastDelivery && decoded.stops.isEmpty()) throw PlannerError("This saved route has no final delivery location.")
         val current = decoded.current.coerceIn(0, decoded.stops.size)
         val allReviewed = decoded.stops.isNotEmpty() && decoded.stops.all { it.reviewedAt != null }
         return decoded.copy(

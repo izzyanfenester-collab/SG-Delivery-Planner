@@ -390,7 +390,7 @@ fun Home(vm: PlannerViewModel) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        PageTitle("Plan your delivery", "Plan a round trip from your selected Start & End location.")
+        PageTitle("Plan your delivery", "Choose where to start and finish your delivery route.")
         StartLocationControls(vm)
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -556,13 +556,16 @@ fun navigate(context: Context, place: Place) {
     }
 }
 
-/** The saved route's depot remains the origin and destination even after Home is changed. */
+/** Each route keeps independent Start and End snapshots even after location preferences change. */
 internal fun routeGoogleMapsIntent(plan: Plan): Intent {
     val start = plan.startLocation.asPlace()
-    val waypoints = plan.stops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
+    val end = plan.endPlace
+    val intermediateStops = if (plan.endAtLastDelivery) plan.stops.dropLast(1) else plan.stops
+    val waypoints = intermediateStops.joinToString("|") { "${it.place.lat},${it.place.lon}" }
+    val waypointParameter = if (waypoints.isBlank()) "" else "&waypoints=${Uri.encode(waypoints)}"
     return Intent(Intent.ACTION_VIEW, Uri.parse(
         "https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}" +
-            "&destination=${start.lat},${start.lon}&travelmode=driving&waypoints=${Uri.encode(waypoints)}"
+            "&destination=${end.lat},${end.lon}&travelmode=driving$waypointParameter"
     ))
 }
 
@@ -722,7 +725,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 CountTile("To revisit", summary.onHold + summary.skipped + summary.pending, Modifier.weight(1f))
             }
             PrimaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
-            SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
+            if (!p.endAtLastDelivery) SecondaryAction("Navigate to End: ${p.endDisplayName}", { navigate(context, p.endPlace) }, enabled = !vm.busy)
             p.stops.forEachIndexed { index, stop ->
                 if (normalizedStatus(stop.status) != "DELIVERED") StopCard(vm, p, stop, index, false, showShareReport = false) { vm.revisit(index) }
             }
@@ -945,19 +948,19 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("END — return to ${p.startLocation.reportLabel}\nPlanned return: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
+            Text("END — ${p.endReportLabel}\nPlanned arrival: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
         }
-        PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.startLocation.displayName}")
+        PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.endDisplayName}")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(p.startLocation.reportLabel, style = MaterialTheme.typography.titleLarge)
                 DetailRow("Start location", p.startLocation.displayName)
-                DetailRow("End location", p.startLocation.displayName)
+                DetailRow("End location", p.endReportLabel)
                 DetailRow("Start", time(p.start))
                 DetailRow("Total parcels", p.stops.size.toString())
                 DetailRow("Distance", km(p.totalKm))
                 DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
-                DetailRow("Return to ${p.startLocation.displayName}", time(p.returned))
+                DetailRow("End arrival", time(p.returned))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -992,12 +995,13 @@ fun Results(vm: PlannerViewModel, p: Plan) {
 @Composable
 fun ScheduleTable(p: Plan) {
     val startPlace = p.startLocation.asPlace()
+    val endPlace = p.endPlace
     val headings = listOf("Stop", "Postal code", "Block", "Area", "Planned arrival", "Distance from previous stop", "Driving time", "Traffic allowance", "Planned travel time", "Delivery period", "Planned departure", "Distance so far", "Updated ETA", "Updated finish", "Actual / Delivered at")
     val start = listOf("START", startPlace.postal, startPlace.block, startPlace.area, time(p.start), "—", "—", "—", "—", "—", time(p.start), "0.0 km", "—", "—", "—")
     val rows = p.stops.mapIndexed { index, stop ->
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm), stop.etaArrival?.let(::time) ?: "—", stop.etaLeave?.let(::time) ?: "—", stop.completedAt?.let(::time) ?: "—")
     }
-    val end = listOf("END", startPlace.postal, startPlace.block, startPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
+    val end = listOf("END", endPlace.postal, endPlace.block, endPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
     Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
@@ -1048,12 +1052,12 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
                 DetailRow("Date", p.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 DetailRow("Start location", p.startLocation.reportLabel)
-                DetailRow("End location", p.startLocation.reportLabel)
+                DetailRow("End location", p.endReportLabel)
                 DetailRow("Start", time(summary.start))
                 DetailRow(if (estimated) "Estimated finish" else "Finish", time(summary.finish))
                 DetailRow(if (estimated) "Estimated route time" else "Total route time", duration(summary.totalRouteSeconds))
                 DetailRow("Total distance", km(summary.totalKm))
-                DetailRow("Planned return", time(summary.returned))
+                DetailRow("Planned End arrival", time(summary.returned))
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
@@ -1077,7 +1081,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        SecondaryAction("Return to ${p.startLocation.displayName}", { navigate(context, p.startLocation.asPlace()) }, enabled = !vm.busy)
+        if (!p.endAtLastDelivery) SecondaryAction("Navigate to End: ${p.endDisplayName}", { navigate(context, p.endPlace) }, enabled = !vm.busy)
         SecondaryAction("View full route and schedule", { vm.screen = "Route" }, enabled = !vm.busy)
         val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
         if (remaining.isNotEmpty()) {
@@ -1211,8 +1215,15 @@ fun RouteMap(p: Plan) {
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 })
             }
+            if (!p.endAtLastDelivery) view.overlays.add(Marker(view).apply {
+                position = GeoPoint(p.endPlace.lat, p.endPlace.lon)
+                title = "END — ${p.endDisplayName}"
+                snippet = p.endPlace.address
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            })
             val startPlace = p.startLocation.asPlace()
-            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(startPlace.lat, startPlace.lon)
+            val finalPlace = p.endPlace
+            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(startPlace.lat, startPlace.lon) + GeoPoint(finalPlace.lat, finalPlace.lon)
             view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 80) }
             view.invalidate()
         })

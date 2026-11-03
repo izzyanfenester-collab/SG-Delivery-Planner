@@ -30,10 +30,15 @@ data class StartLocation(
     }.getOrDefault(false)
 
     fun asPlace(): Place {
-        require(isValid()) { "Choose a valid Start & End location." }
+        require(isValid()) { "Choose a valid location." }
         return if (type == "WOODLANDS") depot else Place(postalCode, latitude, longitude,
             displayName, if (type == "HOME") "Home" else "Custom Location", address.ifBlank { displayName })
     }
+}
+
+/** End choice is stored separately from Start; Last Delivery means no return leg. */
+data class EndLocationSelection(val useLastDelivery: Boolean = true, val location: StartLocation? = null) {
+    fun isValid(): Boolean = useLastDelivery || location?.isValid() != false // null means legacy End = Start
 }
 
 val woodlandsStartLocation = StartLocation("WOODLANDS", depot.lat, depot.lon,
@@ -44,10 +49,22 @@ class StartLocationSettings(context: Context) {
     private val gson = Gson()
     fun selected(): StartLocation = read("selected") ?: woodlandsStartLocation
     fun home(): StartLocation? = read("home")?.takeIf { it.type == "HOME" }
+    fun selectedEnd(): EndLocationSelection = if (prefs.getString("end_mode", "LAST_DELIVERY") == "FIXED") {
+        read("end_selected")?.let { EndLocationSelection(false, it) } ?: EndLocationSelection()
+    } else EndLocationSelection()
+    fun selectEndLastDelivery() {
+        if (!prefs.edit().putString("end_mode", "LAST_DELIVERY").commit())
+            throw PlannerError("Could not save the end location. Please try again.")
+    }
+    fun selectEndLocation(location: StartLocation) {
+        checkLocation(location)
+        if (!prefs.edit().putString("end_mode", "FIXED").putString("end_selected", gson.toJson(location)).commit())
+            throw PlannerError("Could not save the end location. Please try again.")
+    }
     fun select(location: StartLocation) {
         checkLocation(location)
         if (!prefs.edit().putString("selected", gson.toJson(location)).commit())
-            throw PlannerError("Could not save the Start & End location. Please try again.")
+            throw PlannerError("Could not save the start location. Please try again.")
     }
     fun saveHome(location: StartLocation): StartLocation {
         checkLocation(location)
