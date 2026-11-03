@@ -247,14 +247,15 @@ private fun PaymentSectionTitle(title: String) {
 }
 
 @Composable
-private fun PaymentGlassPanel(content: @Composable () -> Unit) {
+private fun PaymentGlassPanel(compact: Boolean = false, content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(22.dp)
     Column(
         modifier = Modifier.fillMaxWidth()
             .border(BorderStroke(1.dp, PremiumGold.copy(alpha = 0.48f)), shape)
             .background(Color(0xFF122B4B).copy(alpha = 0.38f), shape)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+            .padding(horizontal = if (compact) 10.dp else 12.dp,
+                vertical = if (compact) 9.dp else 12.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)
     ) {
         content()
     }
@@ -307,17 +308,17 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
         Modifier.fillMaxWidth()
             .border(BorderStroke(if (strong) 1.25.dp else 0.65.dp, line), shape)
             .background(cellBackground, shape)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            Modifier.weight(0.52f).heightIn(min = 50.dp),
+            Modifier.weight(0.52f).heightIn(min = 40.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Box(
                 Modifier.background(PremiumGold.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 7.dp, vertical = 7.dp),
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(labelIcon, color = PremiumGold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -356,7 +357,7 @@ private fun PaymentInput(
                 Modifier.fillMaxWidth()
                     .border(BorderStroke(0.8.dp, Color(0xFF9DB6D8).copy(alpha = 0.85f)), RoundedCornerShape(9.dp))
                     .background(PremiumNavy.copy(alpha = 0.72f), RoundedCornerShape(9.dp))
-                    .padding(horizontal = 9.dp, vertical = 10.dp),
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (value.isEmpty()) {
@@ -519,16 +520,16 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text("Payment", color = Color(0xFFF8F6FF), fontSize = 28.sp,
             fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
         PaymentOverviewCard(displayPaymentDate(vm.deliveryDate.toString()))
-        PaymentGlassPanel {
+        PaymentGlassPanel(compact = true) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(
                     modifier = Modifier.border(BorderStroke(1.dp, PremiumGold), RoundedCornerShape(12.dp))
                         .background(PremiumGold.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("▤", color = PremiumGold, fontSize = 29.sp, fontWeight = FontWeight.Bold)
@@ -581,11 +582,11 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp
                 )
             }
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(2.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
-                    modifier = Modifier.weight(1f).heightIn(min = 54.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     border = BorderStroke(1.4.dp, Color(0xFF90BBFC)),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumNavy.copy(alpha = 0.45f),
@@ -609,7 +610,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         }
                     },
                     enabled = amounts != null && !vm.busy,
-                    modifier = Modifier.weight(1f).heightIn(min = 54.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     border = BorderStroke(1.dp, PremiumGold),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumGold,
