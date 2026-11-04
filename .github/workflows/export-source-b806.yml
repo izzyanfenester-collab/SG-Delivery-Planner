@@ -1,0 +1,27 @@
+name: Export SG Delivery Official B806 Source ZIP
+on:
+  push:
+    branches:
+      - artifact/official-b806-source-zip
+permissions:
+  contents: read
+jobs:
+  package-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Package exact official Build 806 source
+        run: |
+          git cat-file -e f16137a9af29099b6481fefe06707fd491c30163^{commit}
+          git archive --format=zip --prefix=SG-Delivery-Official-B806/ --output=SG-Delivery-Official-B806-Source.zip f16137a9af29099b6481fefe06707fd491c30163
+          unzip -t SG-Delivery-Official-B806-Source.zip
+          sha256sum SG-Delivery-Official-B806-Source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SG-Delivery-Official-B806-Source
+          path: SG-Delivery-Official-B806-Source.zip
+          if-no-files-found: error
+          retention-days: 30
