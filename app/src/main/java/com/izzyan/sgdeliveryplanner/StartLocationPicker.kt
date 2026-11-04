@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.location.Geocoder
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,12 +22,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import com.google.gson.JsonObject
+import retrofit2.HttpException
 import kotlinx.coroutines.withContext
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -75,8 +83,8 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 Text(selected.address, color = LocationMuted,
                     style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
-            Text(locationCoordinates(selected),
-                color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            if (selected.postalCode.isNotBlank()) Text("Singapore " + selected.postalCode,
+                color = LocationMuted, style = MaterialTheme.typography.bodySmall)
         }
     }
 
@@ -110,8 +118,8 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 if (destination != null) {
                     if (destination.address.isNotBlank()) Text(destination.address,
                         color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                    Text(locationCoordinates(destination), color = LocationMuted,
-                        style = MaterialTheme.typography.bodySmall)
+                    if (destination.postalCode.isNotBlank()) Text("Singapore " + destination.postalCode,
+                        color = LocationMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -143,7 +151,13 @@ fun StartLocationControls(vm: PlannerViewModel) {
                         LocationChoice("Current custom end", savedSelection.location!!.reportLabel,
                             endChoice == "CUSTOM") { endChoice = "CUSTOM" }
                     }
-                    LocationGoldButton("Choose another location on Map", {
+                    Text("Search a custom end point", color = PremiumGold,
+                        style = MaterialTheme.typography.titleSmall)
+                    LocationSearchPanel("End location or postal code") { location ->
+                        vm.selectEndLocation(location)
+                        showEndChoices = false
+                    }
+                    LocationOutlineButton("Or choose on Map", {
                         showEndChoices = false
                         vm.goLocationPicker("END")
                     }, enabled = !vm.busy)
@@ -179,21 +193,26 @@ fun StartLocationControls(vm: PlannerViewModel) {
                     LocationChoice("Woodlands Checkpoint", "Default start location", !chooseCustom) {
                         chooseCustom = false
                     }
-                    LocationChoice("Custom / Home", "Choose a map point or use your saved Home", chooseCustom) {
+                    LocationChoice("Custom / Home", "Search a place, enter a postal code, or use Home", chooseCustom) {
                         chooseCustom = true
                     }
                     if (chooseCustom) {
                         if (vm.savedHome == null) {
                             Text("No Home location saved", color = PremiumGold,
                                 style = MaterialTheme.typography.titleSmall)
-                            Text("Choose a location on the map and confirm it. You can then set that location as Home.",
+                            Text("Search a location or postal code below, or select a point on the map.",
                                 color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
                         } else {
                             Text("Saved Home: ${vm.savedHome!!.displayName}", color = LocationMuted)
-                            Text(locationCoordinates(vm.savedHome!!), color = LocationMuted,
-                                style = MaterialTheme.typography.bodySmall)
+                            if (vm.savedHome!!.postalCode.isNotBlank())
+                                Text("Singapore " + vm.savedHome!!.postalCode, color = LocationMuted,
+                                    style = MaterialTheme.typography.bodySmall)
                         }
-                        LocationGoldButton("Choose on Map", {
+                        LocationSearchPanel("Start location or postal code") { location ->
+                            vm.selectStartLocation(location)
+                            showChoices = false
+                        }
+                        LocationOutlineButton("Or choose on Map", {
                             showChoices = false
                             vm.goLocationPicker("START")
                         }, enabled = !vm.busy)
@@ -208,7 +227,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                                 showChoices = false
                             }
                         }, enabled = !vm.busy && !isCheckpoint && selected.isValid())
-                        if (isCheckpoint) Text("Choose a custom location on the map before setting Home.",
+                        if (isCheckpoint) Text("Select a custom place or postal code before setting Home.",
                             color = LocationMuted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -277,6 +296,113 @@ private fun LocationOutlineButton(label: String, onClick: () -> Unit, enabled: B
     ) { Text(label, fontWeight = FontWeight.SemiBold) }
 }
 
+
+/** Uses the existing Singapore OneMap search service for both Start and End. */
+private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
+    val items = response.get("results")?.takeIf { it.isJsonArray }?.asJsonArray ?: return emptyList()
+    return items.mapNotNull { item ->
+        if (!item.isJsonObject) return@mapNotNull null
+        val row = item.asJsonObject
+        fun field(key: String): String =
+            row.get(key)?.takeIf { it.isJsonPrimitive && !it.isJsonNull }?.asString.orEmpty().trim()
+        val lat = field("LATITUDE").toDoubleOrNull() ?: return@mapNotNull null
+        val lon = field("LONGITUDE").toDoubleOrNull() ?: return@mapNotNull null
+        if (lat !in 1.1..1.6 || lon !in 103.5..104.1) return@mapNotNull null
+        val postal = field("POSTAL").takeIf { it.matches(Regex("[0-9]{6}")) }.orEmpty()
+        val road = listOf(field("BLK_NO"), field("ROAD_NAME")).filter { it.isNotBlank() }.joinToString(" ")
+        val building = field("BUILDING").takeUnless { it.isBlank() || it.equals("NIL", ignoreCase = true) }
+        val address = field("ADDRESS").takeUnless { it.equals("NIL", ignoreCase = true) }.orEmpty()
+        val label = building ?: road.ifBlank { field("SEARCHVAL").ifBlank { address } }
+        StartLocation("CUSTOM", lat, lon, label.ifBlank { "Singapore " + postal }, address, postal)
+            .takeIf { it.isValid() }
+    }.distinctBy { it.latitude to it.longitude }.take(6)
+}
+
+@Composable
+private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -> Unit) {
+    val api = remember { createOneMapApi() }
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<StartLocation>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
+    var searchSequence by remember { mutableIntStateOf(0) }
+
+    fun searchLocation() {
+        val term = query.trim()
+        if (term.length < 3) {
+            message = "Enter a place name, address or 6-digit Singapore postal code."
+            return
+        }
+        searchJob?.cancel()
+        searchSequence++
+        val activeSequence = searchSequence
+        searchJob = scope.launch {
+            searching = true
+            message = ""
+            results = emptyList()
+            try {
+                val response = api.search(term)
+                results = parseLocationMatches(response)
+                if (results.isEmpty()) message = "No matching Singapore locations. Try a postal code or more specific address."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                message = if ((error as? HttpException)?.code() == 429)
+                    "Search is busy. Please wait a moment and try again."
+                else "Unable to search right now. Check your internet connection or use the map."
+            } finally {
+                if (activeSequence == searchSequence) searching = false
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                searchJob?.cancel()
+                searchSequence++
+                searching = false
+                query = it
+                results = emptyList()
+                message = ""
+            },
+            label = { Text("Search location / postal code") },
+            placeholder = { Text(placeholder) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { searchLocation() })
+        )
+        LocationGoldButton(if (searching) "Searching…" else "Search location", ::searchLocation,
+            enabled = !searching && query.trim().length >= 3)
+        if (searching) LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)
+        if (message.isNotBlank()) Text(message, color = LocationMuted,
+            style = MaterialTheme.typography.bodySmall)
+        if (results.isNotEmpty()) Text("Select a matching location:", color = PremiumGold,
+            style = MaterialTheme.typography.titleSmall)
+        results.forEach { result ->
+            Column(
+                Modifier.fillMaxWidth()
+                    .border(1.dp, PremiumGold.copy(alpha = .5f), RoundedCornerShape(12.dp))
+                    .clickable { onChosen(result) }
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(result.displayName, color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                if (result.address.isNotBlank() && result.address != result.displayName)
+                    Text(result.address, color = LocationMuted, style = MaterialTheme.typography.bodySmall)
+                if (result.postalCode.isNotBlank())
+                    Text("Singapore " + result.postalCode, color = PremiumGold,
+                        style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
 @Composable
 fun StartLocationPicker(vm: PlannerViewModel) {
     val context = LocalContext.current
@@ -286,8 +412,6 @@ fun StartLocationPicker(vm: PlannerViewModel) {
             ?.takeIf { it.type != woodlandsStartLocation.type && it.isValid() }
     }
     var selected by remember { mutableStateOf(initial) }
-    var latitude by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
-    var longitude by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
     var lookingUpAddress by remember { mutableStateOf(false) }
     var validation by remember { mutableStateOf("") }
 
@@ -298,12 +422,10 @@ fun StartLocationPicker(vm: PlannerViewModel) {
             return
         }
         selected = candidate
-        latitude = String.format(Locale.ENGLISH, "%.6f", point.latitude)
-        longitude = String.format(Locale.ENGLISH, "%.6f", point.longitude)
         validation = ""
     }
 
-    // Coordinates remain a valid choice when reverse geocoding or map tiles are unavailable.
+    // Reverse-geocode map taps; searched locations already include address and postal information.
     LaunchedEffect(selected?.latitude, selected?.longitude) {
         val point = selected ?: return@LaunchedEffect
         if (point.address.isNotBlank()) return@LaunchedEffect
@@ -334,8 +456,14 @@ fun StartLocationPicker(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(if (choosingEnd) "Choose your end location" else "Choose your start location", style = MaterialTheme.typography.headlineSmall)
-        Text("Pan and zoom the map, then tap to place the marker. Tap again to move it.",
+        Text("Find a place by name, street address, or six-digit Singapore postal code.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LocationSearchPanel(if (choosingEnd) "End location or postal code" else "Start location or postal code") {
+            selected = it
+            validation = ""
+        }
+        Text("Or select a precise point on the map:", color = PremiumGold,
+            style = MaterialTheme.typography.titleMedium)
         LocationMap(selected, initial ?: woodlandsStartLocation, ::choosePoint)
         Text("© OpenStreetMap contributors", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -346,9 +474,10 @@ fun StartLocationPicker(vm: PlannerViewModel) {
                 if (point == null) Text("Tap the map to choose a location.", color = LocationMuted)
                 else {
                     Text(point.displayName, color = Color.White, style = MaterialTheme.typography.titleLarge)
-                    Text(locationCoordinates(point), color = LocationMuted)
+                    if (point.postalCode.isNotBlank())
+                        Text("Singapore " + point.postalCode, color = LocationMuted)
                     Text(if (lookingUpAddress) "Finding the address…" else point.address.ifBlank {
-                        "Address unavailable. The selected coordinates will be used."
+                        "Map point selected. You can confirm this location."
                     }, color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
                 }
                 Text(if (choosingEnd) "Your route will finish at this point after the final delivery."
@@ -356,23 +485,6 @@ fun StartLocationPicker(vm: PlannerViewModel) {
                     color = LocationMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
-        Text("If map tiles are unavailable, enter the coordinates below.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(latitude, { latitude = it }, label = { Text("Latitude") },
-                singleLine = true, modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-            OutlinedTextField(longitude, { longitude = it }, label = { Text("Longitude") },
-                singleLine = true, modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-        }
-        OutlinedButton(onClick = {
-            val lat = latitude.toDoubleOrNull()
-            val lon = longitude.toDoubleOrNull()
-            if (lat == null || lon == null || !StartLocation("CUSTOM", lat, lon, "Custom Location").isValid())
-                validation = "Enter a latitude from -90 to 90 and a longitude from -180 to 180."
-            else choosePoint(GeoPoint(lat, lon))
-        }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Use coordinates") }
         if (validation.isNotBlank()) Text(validation, color = MaterialTheme.colorScheme.error)
         LocationGoldButton("Confirm Location", {
             selected?.takeIf { it.isValid() }?.let {
@@ -401,7 +513,7 @@ private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, 
     }
     if (map == null) {
         PremiumCard(Modifier.fillMaxWidth()) {
-            Text("The map could not be opened. Enter coordinates below to choose your location.", Modifier.padding(20.dp))
+            Text("The map could not be opened. Search for a place or postal code above.", Modifier.padding(20.dp))
         }
         return
     }
@@ -432,10 +544,16 @@ private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, 
             map.onDetach()
         }
     }
+    val lastFocused = remember(map) { mutableStateOf<Pair<Double, Double>?>(null) }
     AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().height(340.dp), update = { view ->
         if (selected == null) view.overlays.remove(marker)
         else {
             marker.position = GeoPoint(selected.latitude, selected.longitude)
+            val locationPair = selected.latitude to selected.longitude
+            if (lastFocused.value != locationPair) {
+                view.controller.animateTo(marker.position)
+                lastFocused.value = locationPair
+            }
             marker.title = selected.displayName
             marker.snippet = selected.address.ifBlank { locationCoordinates(selected) }
             if (!view.overlays.contains(marker)) view.overlays.add(marker)
