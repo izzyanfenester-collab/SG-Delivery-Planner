@@ -1176,9 +1176,39 @@ fun History(vm: PlannerViewModel) {
     }
 }
 
+/** Small numbered red stop markers matching the route map reference: red fill, dark rim, white stop number. */
+private fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
+    val density = resources.displayMetrics.density
+    val diameter = (16f * density + 0.5f).toInt().coerceAtLeast(16)
+    val bitmap = android.graphics.Bitmap.createBitmap(diameter, diameter, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    val center = diameter / 2f
+    val outerRadius = center - 0.5f
+    paint.style = android.graphics.Paint.Style.FILL
+    paint.color = android.graphics.Color.BLACK
+    canvas.drawCircle(center, center, outerRadius, paint)
+    paint.color = android.graphics.Color.rgb(238, 6, 12)
+    canvas.drawCircle(center, center, (outerRadius - 1.35f * density).coerceAtLeast(1f), paint)
+    paint.color = android.graphics.Color.WHITE
+    paint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    paint.textAlign = android.graphics.Paint.Align.CENTER
+    paint.textSize = (when {
+        stopNumber >= 100 -> 7.2f
+        stopNumber >= 10 -> 9f
+        else -> 10.7f
+    }) * density
+    val centeredBaseline = center - (paint.fontMetrics.ascent + paint.fontMetrics.descent) / 2f
+    canvas.drawText(stopNumber.toString(), center, centeredBaseline, paint)
+    return android.graphics.drawable.BitmapDrawable(resources, bitmap)
+}
+
 @Composable
 fun RouteMap(p: Plan) {
     val context = LocalContext.current
+    val numberedStopIcons = remember(context, p.stops.size) {
+        (1..p.stops.size).map { numberedMapStopIcon(context.resources, it) }
+    }
     val map = remember { MapView(context).apply {
         setMultiTouchControls(true)
         setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
@@ -1201,7 +1231,7 @@ fun RouteMap(p: Plan) {
                 outlinePaint.strokeWidth = 7f
             }
             view.overlays.add(line)
-            // Show all delivery stops as compact red dots, not a single oversized pin.
+            // Show all delivery stops as compact numbered red dots, matching the reference image.
             // Center the drawable on each actual GPS coordinate to avoid visual offset.
             // Route line stays underneath the markers, preserving the existing blue route.
             p.stops.forEachIndexed { index, stop ->
@@ -1211,7 +1241,7 @@ fun RouteMap(p: Plan) {
                         "Current Target - Stop ${index + 1}: ${stop.place.postal}"
                     else "Stop ${index + 1}: ${stop.place.postal}"
                     snippet = stop.place.address
-                    icon = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_current_delivery)
+                    icon = numberedStopIcons[index]
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 })
             }
