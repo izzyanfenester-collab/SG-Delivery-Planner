@@ -119,9 +119,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     return@setStyle
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
-                    // Show ONLY the transparent, 3D Axia vehicle. MapLibre's other
-                    // location-puck assets otherwise leave a white disk beneath it.
-                    .gpsDrawable(R.drawable.ic_gps_axia_yellow_marker)
+                    // TomTom-style blue 3D arrow; other puck layers stay invisible.
+                    .gpsDrawable(R.drawable.ic_gps_vehicle_3d)
                     .foregroundDrawable(R.drawable.ic_gps_transparent)
                     .backgroundDrawable(R.drawable.ic_gps_transparent)
                     .bearingDrawable(R.drawable.ic_gps_transparent)
