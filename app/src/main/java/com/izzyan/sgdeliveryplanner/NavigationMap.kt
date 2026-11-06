@@ -1,45 +1,65 @@
 package com.izzyan.sgdeliveryplanner
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import org.maplibre.android.annotations.*
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlin.math.abs
 
-/** The view is created once per screen; native rendering and lifecycle stay on the UI thread. */
+private const val NIGHT_MAP_STYLE = "https://tiles.openfreemap.org/styles/dark"
+
+private fun nightInSingapore() = NavigationDisplayTuning.isNightSingapore(
+    ZonedDateTime.now(ZoneId.of("Asia/Singapore")).hour)
+
+/** GPS and camera animations happen in MapLibre's native location layer, not on Compose frames. */
 @Composable
-internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
+internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locationPermitted: Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember { MapView(context).apply { onCreate(null) } }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
+    var nightMode by remember { mutableStateOf(nightInSingapore()) }
+    var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
-    var vehicleMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
+    var lastBearing by remember { mutableStateOf<Float?>(null) }
+    var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            nightMode = nightInSingapore()
+        }
+    }
+
     DisposableEffect(view, lifecycle) {
-        var started = false; var resumed = false
+        var started = false
+        var resumed = false
         fun sync() {
             val shouldStart = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
             val shouldResume = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
@@ -49,74 +69,130 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
             if (!resumed && shouldResume) { view.onResume(); resumed = true }
         }
         val observer = LifecycleEventObserver { _, _ -> sync() }
-        lifecycle.addObserver(observer); sync()
-        val failure = MapView.OnDidFailLoadingMapListener { session.mapMessage = "Map unavailable. Check the connection and retry navigation." }
+        lifecycle.addObserver(observer)
+        sync()
+        val failure = MapView.OnDidFailLoadingMapListener {
+            session.mapMessage = "Map unavailable. Check the connection and retry navigation."
+        }
         view.addOnDidFailLoadingMapListener(failure)
         view.getMapAsync { native ->
             map = native
             native.uiSettings.isAttributionEnabled = true
-            native.setStyle(Style.Builder().fromUri(NAVIGATION_STYLE)) {
-                styleReady = true; session.mapMessage = null
-            }
             native.addOnCameraMoveStartedListener { reason ->
-                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) session.cameraMode = "free"
+                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE)
+                    session.cameraMode = "free"
             }
         }
         onDispose {
-            lifecycle.removeObserver(observer); view.removeOnDidFailLoadingMapListener(failure)
+            lifecycle.removeObserver(observer)
+            view.removeOnDidFailLoadingMapListener(failure)
             if (resumed) view.onPause()
             if (started) view.onStop()
-            map = null; view.onDestroy()
+            map = null
+            view.onDestroy()
         }
     }
-    LaunchedEffect(styleReady, session.route, session.destination) {
+
+    LaunchedEffect(map, nightMode, styleRetry, locationPermitted) {
         val native = map ?: return@LaunchedEffect
-        if (!styleReady) return@LaunchedEffect
-        destinationMarker?.let { native.removeMarker(it) }
-        val dest = session.destination
-        if (GpsPoint(dest.lat, dest.lon).valid()) {
-            destinationMarker = native.addMarker(MarkerOptions().position(LatLng(dest.lat, dest.lon)).title("${dest.postal} • ${dest.address}"))
-            if (session.location == null) native.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(dest.lat, dest.lon), 14.0))
+        styleReady = false
+        if (!locationPermitted) {
+            session.mapMessage = "Allow precise location to use built-in GPS."
+            return@LaunchedEffect
         }
-        routeLine?.let { native.removePolyline(it) }
-        if (session.shape.size >= 2) {
-            routeLine = native.addPolyline(PolylineOptions().addAll(session.shape.map { LatLng(it.lat, it.lon) }).color(android.graphics.Color.rgb(46, 204, 113)).width(6f))
-        }
-    }
-    LaunchedEffect(styleReady, session.location, session.cameraMode, session.cameraRequest, session.route) {
-        val native = map ?: return@LaunchedEffect
-        if (!styleReady) return@LaunchedEffect
-        val fix = session.location
-        if (fix != null) {
-            val position = LatLng(fix.latitude, fix.longitude)
-            if (vehicleMarker == null) {
-                val edge = (32 * context.resources.displayMetrics.density).toInt()
-                val bitmap = Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888)
-                Canvas(bitmap).apply {
-                    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-                    paint.color = android.graphics.Color.WHITE; drawCircle(edge / 2f, edge / 2f, edge * .48f, paint)
-                    paint.color = android.graphics.Color.rgb(36, 78, 166); drawCircle(edge / 2f, edge / 2f, edge * .36f, paint)
+        native.setStyle(Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)) { style ->
+            try {
+                val locationComponent = native.locationComponent
+                locationComponent.activateLocationComponent(
+                    LocationComponentActivationOptions.builder(context, style)
+                        .useDefaultLocationEngine(false).build())
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                    locationComponent.isLocationComponentEnabled = true
+                } else {
+                    session.mapMessage = "Allow precise location to use built-in GPS."
+                    return@setStyle
                 }
-                vehicleMarker = native.addMarker(MarkerOptions().position(position).icon(IconFactory.getInstance(context).fromBitmap(bitmap)).title("Current GPS position"))
-            } else vehicleMarker?.position = position
-            if (session.cameraMode == "follow") {
-                native.moveCamera(CameraUpdateFactory.newLatLngZoom(position, 17.0))
+                locationComponent.renderMode = RenderMode.GPS
+                locationComponent.setMaxAnimationFps(60)
+                lastZoom = Double.NaN
+                styleReady = true
+                session.mapMessage = null
+            } catch (_: Exception) {
+                session.mapMessage = "GPS display could not start. Try reopening navigation."
             }
         }
-        if (session.cameraMode == "overview" && session.shape.size >= 2) {
-            native.moveCamera(CameraUpdateFactory.newLatLngBounds(LatLngBounds.Builder().includes(session.shape.map { LatLng(it.lat, it.lon) }).build(), 40))
+    }
+
+    LaunchedEffect(styleReady, session.route, session.destination, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        destinationMarker?.let { runCatching { native.removeMarker(it) } }
+        destinationMarker = null
+        val dest = session.destination
+        if (GpsPoint(dest.lat, dest.lon).valid()) {
+            destinationMarker = native.addMarker(MarkerOptions().position(LatLng(dest.lat, dest.lon))
+                .title("${dest.postal} • ${dest.address}"))
+            if (session.location == null) native.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(LatLng(dest.lat, dest.lon), 14.0))
+        }
+        routeLine?.let { runCatching { native.removePolyline(it) } }
+        routeLine = null
+        if (session.shape.size >= 2) {
+            routeLine = native.addPolyline(PolylineOptions()
+                .addAll(session.shape.map { LatLng(it.lat, it.lon) })
+                .color(android.graphics.Color.rgb(0, 190, 245)).width(9f))
         }
     }
+
+    // Feed raw, accurate GPS positions to MapLibre's interpolating vehicle puck.
+    // Only the DISPLAY bearing is filtered; routing, progress and arrival use original fixes.
+    LaunchedEffect(styleReady, session.location) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val fix = session.location ?: return@LaunchedEffect
+        val displayed = Location(fix)
+        lastBearing = NavigationDisplayTuning.smoothBearing(
+            lastBearing, fix.bearing.takeIf { fix.hasBearing() }, fix.speed.takeIf { fix.hasSpeed() })
+        lastBearing?.let { displayed.bearing = it }
+        native.locationComponent.forceLocationUpdate(displayed)
+        if (session.cameraMode == "follow") {
+            val zoom = NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
+            if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.4) {
+                native.locationComponent.zoomWhileTracking(zoom, 900)
+                lastZoom = zoom
+            }
+        }
+    }
+
+    LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val component = native.locationComponent
+        when (session.cameraMode) {
+            "follow" -> {
+                val fix = session.location
+                val zoom = NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
+                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 48.0, null)
+                lastZoom = zoom
+            }
+            "overview" -> {
+                component.cameraMode = CameraMode.NONE
+                if (session.shape.size >= 2) native.animateCamera(
+                    CameraUpdateFactory.newLatLngBounds(
+                        LatLngBounds.Builder().includes(session.shape.map { LatLng(it.lat, it.lon) }).build(), 60), 700)
+            }
+            else -> component.cameraMode = CameraMode.NONE
+        }
+    }
+
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.matchParentSize())
         session.mapMessage?.let { error ->
-            Surface(Modifier.align(Alignment.TopCenter).padding(8.dp), color = PremiumNavy) {
+            Surface(Modifier.align(Alignment.Center).padding(12.dp), color = PremiumNavy) {
                 Column(Modifier.padding(12.dp)) {
                     Text(error, color = PremiumGold)
-                    TextButton(onClick = {
-                        styleReady = false
-                        map?.setStyle(Style.Builder().fromUri(NAVIGATION_STYLE)) { styleReady = true; session.mapMessage = null }
-                    }) { Text("Retry map") }
+                    TextButton(onClick = { styleRetry++ }) { Text("Retry map") }
                 }
             }
         }

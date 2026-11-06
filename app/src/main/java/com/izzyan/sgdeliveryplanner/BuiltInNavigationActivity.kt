@@ -16,12 +16,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -56,7 +60,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
         val stop = Place(postal, intent.getDoubleExtra("lat", Double.NaN), intent.getDoubleExtra("lon", Double.NaN), "", "", intent.getStringExtra("address").orEmpty())
         MapLibre.getInstance(this)
         setContent {
-            IzzDeliveryTheme(true) { NavigationContent(stop) }
+            IzzDeliveryTheme(true) {
+                NavigationContent(stop)
+            }
         }
     }
 
@@ -87,38 +93,117 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
         Scaffold(containerColor = PremiumNavy) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${stop.postal} • ${session.destination.address}", color = PremiumGold, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                // Full-screen vector map: UI panels overlay the road view without shrinking it.
+                NavigationMap(session, Modifier.matchParentSize(), permitted)
+
+                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(color = PremiumNavy.copy(alpha = 0.96f), shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("SG Delivery GPS Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Surface(color = PremiumGold, shape = RoundedCornerShape(14.dp)) {
+                                Text("GPS NAV", color = PremiumNavy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+                            }
+                        }
+                    }
+
+                    Surface(color = PremiumNavy.copy(alpha = 0.97f), shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
+                                color = Color.White, fontSize = 37.sp, fontWeight = FontWeight.Bold)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                val nextTurn = session.turnMeters?.takeIf { !session.arrived }
+                                if (nextTurn != null) Text("In ${metricDistance(nextTurn)}", color = PremiumGold,
+                                    fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                Text(if (session.arrived) "Arrived" else session.instruction,
+                                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                                session.street?.takeIf { it.isNotBlank() }?.let {
+                                    Text(it, color = Color(0xFFB9C9E0), fontSize = 13.sp, maxLines = 1)
+                                }
+                            }
+                            TextButton(onClick = { session.toggleMute() }) {
+                                Text(if (session.muted) "Unmute" else "Mute", color = PremiumGold)
+                            }
+                        }
+                    }
+                    if (session.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)
+                    session.message?.let { message ->
+                        Surface(color = PremiumNavy.copy(alpha = 0.95f), shape = RoundedCornerShape(10.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(message, Modifier.weight(1f), color = Color(0xFFFFD492), fontSize = 13.sp)
+                                if (!session.loading && !session.arrived)
+                                    TextButton(onClick = { retry++ }) { Text("Retry", color = PremiumGold) }
+                            }
+                        }
+                    }
+                }
+
                 if (!permitted) {
-                    Text(if (requestedPermission) "Precise location permission is needed for GPS navigation. Allow location in Android app settings if permission is blocked." else "Allow precise location to start navigation.", color = Color.White)
-                    Button(onClick = { requestPermission() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Allow location / Retry") }
-                    if (requestedPermission) TextButton(onClick = {
-                        startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
-                    }) { Text("Open app settings") }
-                } else {
-                    Text(if (session.arrived) "Arrived" else session.instruction, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    if (!session.arrived && session.turnMeters != null) Text("${metricDistance(session.turnMeters!!)} to maneuver", color = PremiumGold, style = MaterialTheme.typography.titleMedium)
-                    session.street?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodyLarge) }
-                    if (session.remainingMeters != null && session.remainingSeconds != null && !session.arrived) {
-                        val eta = Instant.ofEpochMilli(navigationEta(System.currentTimeMillis(), session.remainingSeconds!!)).atZone(ZoneId.of("Asia/Singapore")).format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
-                        Text("${metricDistance(session.remainingMeters!!)} • ${duration(session.remainingSeconds!!)} • Navigation ETA $eta", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Surface(Modifier.align(Alignment.Center).padding(16.dp), color = PremiumNavy,
+                        shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(if (requestedPermission) "Precise GPS permission is needed. Allow location in Android settings if blocked."
+                                else "Allow precise location to start 3D navigation.", color = Color.White)
+                            Button(onClick = { requestPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow location / Retry") }
+                            if (requestedPermission) TextButton(onClick = {
+                                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:$packageName")))
+                            }) { Text("Open app settings") }
+                        }
                     }
-                    session.message?.let {
-                        Text(it, color = Color(0xFFFFD492))
-                        if (!session.loading && !session.arrived) TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry GPS / Route") }
+                }
+
+                Column(Modifier.align(Alignment.CenterEnd).padding(end = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilledTonalButton(onClick = { session.cameraMode = "follow"; session.cameraRequest++ },
+                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
+                        Text("◎", color = PremiumGold, fontSize = 29.sp)
                     }
-                    if (session.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    FilledTonalButton(onClick = { session.cameraMode = "overview"; session.cameraRequest++ },
+                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
+                        Text("▱", color = PremiumGold, fontSize = 27.sp)
+                    }
+                    FilledTonalButton(onClick = { showCameras = true },
+                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
+                        Text("⌖", color = PremiumGold, fontSize = 27.sp)
+                    }
                 }
-                NavigationMap(session, Modifier.weight(1f).fillMaxWidth())
-                Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, style = MaterialTheme.typography.labelSmall)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { session.toggleMute() }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(if (session.muted) "Unmute" else "Mute") }
-                    OutlinedButton(onClick = { session.cameraMode = "follow"; session.cameraRequest++ }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Recenter") }
-                    OutlinedButton(onClick = { session.cameraMode = "overview"; session.cameraRequest++ }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Overview") }
-                }
-                OutlinedButton(onClick = { showCameras = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Traffic Cameras") }
-                Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)) {
-                    Text(if (session.arrived) "Back to Delivery" else "End Navigation / Back to Delivery")
+
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
+                        modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp))
+                    Surface(color = PremiumNavy.copy(alpha = 0.97f), shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            val remaining = session.remainingSeconds
+                            val eta = if (remaining != null) Instant.ofEpochMilli(
+                                navigationEta(System.currentTimeMillis(), remaining))
+                                .atZone(ZoneId.of("Asia/Singapore"))
+                                .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
+                            Column { Text("ETA", color = Color(0xFFB9C9E0), fontSize = 12.sp)
+                                Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                            Column { Text(session.remainingMeters?.let { metricDistance(it) } ?: "-- km",
+                                color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(remaining?.let { duration(it) } ?: "-- min", color = Color(0xFFB9C9E0), fontSize = 13.sp) }
+                            Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
+                    }
+                    Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy),
+                        shape = RoundedCornerShape(14.dp)) {
+                        Text("Back to Delivery", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
