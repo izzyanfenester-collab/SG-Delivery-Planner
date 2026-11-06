@@ -17,6 +17,17 @@ internal object NavigationDisplayTuning {
     fun adjustedZoom(currentZoom: Double, step: Double): Double =
         (currentZoom + step).coerceIn(15.5, 19.5)
 
+    /** Extract the road and exit for a large, at-a-glance turn banner. */
+    fun nextRoadLabel(instruction: String, fallbackStreet: String?): String =
+        Regex("""(?i)\bonto\s+(.+)$""").find(instruction)?.groupValues?.get(1)?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackStreet?.takeIf { it.isNotBlank() }
+            ?: instruction
+
+    fun roundaboutExit(instruction: String): String? =
+        Regex("""(?i)\b(\d+)(?:st|nd|rd|th)\s+exit\b""").find(instruction)
+            ?.groupValues?.get(1)?.let { "EXIT $it" }
+
     fun isNightSingapore(hour: Int): Boolean = hour < 7 || hour >= 19
 
     /** Maintain the last reliable heading while stationary, to avoid spinning at traffic lights. */
