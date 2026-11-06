@@ -11,8 +11,8 @@ internal object NavigationDisplayTuning {
     }
 
     /** Screen camera padding moves the vehicle from 50% down to about 72% of map height. */
-    fun trackingPadding(mapHeightPixels: Int): Array<Double> =
-        arrayOf(0.0, mapHeightPixels.coerceAtLeast(0) * 0.44, 0.0, 0.0)
+    fun trackingPadding(mapHeightPixels: Int): DoubleArray =
+        doubleArrayOf(0.0, mapHeightPixels.coerceAtLeast(0) * 0.44, 0.0, 0.0)
 
     fun adjustedZoom(currentZoom: Double, step: Double): Double =
         (currentZoom + step).coerceIn(15.5, 19.5)
