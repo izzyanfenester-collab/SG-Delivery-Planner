@@ -8,7 +8,17 @@ import org.junit.Test
 class NavigationDisplayTuningTest {
     @Test fun speedControlsLookAheadWithoutInvalidZoom() {
         assertTrue(NavigationDisplayTuning.zoomForSpeed(0f) > NavigationDisplayTuning.zoomForSpeed(30f))
-        assertEquals(16.7, NavigationDisplayTuning.zoomForSpeed(Float.NaN), 0.01)
+        assertEquals(17.8, NavigationDisplayTuning.zoomForSpeed(Float.NaN), 0.01)
+        assertTrue(NavigationDisplayTuning.zoomForSpeed(15f) >= 17.5)
+    }
+
+    @Test fun cameraPaddingPositionsVehicleLowerAndZoomButtonsClamp() {
+        val padding = NavigationDisplayTuning.trackingPadding(1000)
+        assertEquals(0.0, padding[0], 0.01)
+        assertEquals(440.0, padding[1], 0.01)
+        assertEquals(0.0, padding[3], 0.01)
+        assertEquals(19.5, NavigationDisplayTuning.adjustedZoom(19.4, 0.5), 0.01)
+        assertEquals(15.5, NavigationDisplayTuning.adjustedZoom(15.6, -0.5), 0.01)
     }
 
     @Test fun singaporeNightModeChangesAtSeven() {
