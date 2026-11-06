@@ -22,6 +22,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.OnLocationCameraTransitionListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -48,6 +49,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var nightMode by remember { mutableStateOf(nightInSingapore()) }
     var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
+    var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
     var lastBearing by remember { mutableStateOf<Float?>(null) }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
@@ -116,6 +118,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     session.mapMessage = "Allow precise location to use built-in GPS."
                     return@setStyle
                 }
+                locationComponent.applyStyle(LocationComponentOptions.builder(context)
+                    .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
@@ -148,6 +152,18 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
+    LaunchedEffect(styleReady, session.fuelPreview, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        fuelMarker?.let { runCatching { native.removeMarker(it) } }
+        fuelMarker = null
+        session.fuelPreview?.let { station ->
+            fuelMarker = native.addMarker(MarkerOptions()
+                .position(LatLng(station.point.lat, station.point.lon))
+                .title("Petrol: ${station.name}"))
+        }
+    }
+
     // Feed raw, accurate GPS positions to MapLibre's interpolating vehicle puck.
     // Only the DISPLAY bearing is filtered; routing, progress and arrival use original fixes.
     LaunchedEffect(styleReady, session.location) {
@@ -170,7 +186,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     }
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route,
-        session.zoomOverride, nightMode, mapHeightPixels) {
+        session.zoomOverride, session.fuelPreview, nightMode, mapHeightPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
@@ -198,6 +214,13 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 if (session.shape.size >= 2) native.animateCamera(
                     CameraUpdateFactory.newLatLngBounds(
                         LatLngBounds.Builder().includes(session.shape.map { LatLng(it.lat, it.lon) }).build(), 60), 700)
+            }
+            "fuel" -> {
+                component.cameraMode = CameraMode.NONE
+                session.fuelPreview?.let { station ->
+                    native.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                        LatLng(station.point.lat, station.point.lon), 17.8), 700)
+                }
             }
             else -> component.cameraMode = CameraMode.NONE
         }
