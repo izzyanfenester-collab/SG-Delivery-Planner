@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.ThreeDRotation
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
@@ -196,7 +195,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
-                    GpsControl(Icons.Filled.ThreeDRotation, if (session.perspective3d) "3D" else "2D",
+                    GpsControl(Icons.Filled.Map, if (session.perspective3d) "3D" else "2D",
                         session.perspective3d) { session.togglePerspective() }
                 }
 
