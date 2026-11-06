@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    3D yellow Perodua Axia with transparent outer pixels and no platform.
-    Preserve the #817 32dp frame and existing 1.8x GPS icon scale.
+    The user's own rear-three-quarter 3D yellow Axia icon, shown at a slightly
+    larger size while keeping the full transparent background and no platform.
+    Preserve the GPS 1.8x zoom multiplier and bearing behavior.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="32dp"
-        android:height="32dp"
+        android:width="36dp"
+        android:height="36dp"
         android:gravity="center">
         <bitmap
-            android:src="@drawable/ic_gps_axia_3d"
+            android:src="@drawable/ic_gps_axia_3d_user"
             android:gravity="fill" />
     </item>
 </layer-list>
