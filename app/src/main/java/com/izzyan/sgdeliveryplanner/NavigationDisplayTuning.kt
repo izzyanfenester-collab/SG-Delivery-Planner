@@ -3,11 +3,11 @@ package com.izzyan.sgdeliveryplanner
 /** Presentation-only tuning; GPS fixes used for routing and arrival remain untouched. */
 internal object NavigationDisplayTuning {
     fun zoomForSpeed(speedMetersPerSecond: Float?): Double = when {
-        speedMetersPerSecond == null || !speedMetersPerSecond.isFinite() -> 17.8
-        speedMetersPerSecond < 4f -> 18.4
-        speedMetersPerSecond < 12f -> 18.0
-        speedMetersPerSecond < 22f -> 17.6
-        else -> 17.2
+        speedMetersPerSecond == null || !speedMetersPerSecond.isFinite() -> 18.2
+        speedMetersPerSecond < 4f -> 18.8
+        speedMetersPerSecond < 12f -> 18.4
+        speedMetersPerSecond < 22f -> 18.0
+        else -> 17.6
     }
 
     /** Screen camera padding moves the vehicle from 50% down to about 72% of map height. */
