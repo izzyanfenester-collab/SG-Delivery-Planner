@@ -95,7 +95,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
-                NavigationMap(session, Modifier.matchParentSize())
+                NavigationMap(session, Modifier.matchParentSize(), permitted)
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
