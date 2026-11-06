@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -84,6 +85,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
+        var showFuelStations by remember { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -189,15 +191,30 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
                 }
 
-                session.location?.takeIf { it.hasSpeed() }?.let { fix ->
-                    Surface(modifier = Modifier.align(Alignment.BottomStart)
-                        .padding(start = 12.dp, bottom = 143.dp),
-                        color = PremiumNavy.copy(alpha = 0.96f), shape = RoundedCornerShape(14.dp)) {
-                        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                            Text("km/h", color = Color(0xFFB9C9E0), fontSize = 11.sp)
+                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = { showFuelStations = true },
+                        enabled = permitted && session.location != null,
+                        modifier = Modifier.width(74.dp).height(70.dp),
+                        contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = PremiumGold, contentColor = PremiumNavy)) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Icon(Icons.Filled.LocalGasStation, contentDescription = "Nearby petrol stations",
+                                modifier = Modifier.size(27.dp))
+                            Text("Petrol", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    session.location?.takeIf { it.hasSpeed() }?.let { fix ->
+                        Surface(color = PremiumNavy.copy(alpha = 0.96f),
+                            shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
+                                    color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                                Text("km/h", color = Color(0xFFB9C9E0), fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -241,6 +258,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
+        if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
     }
 
     @Composable
@@ -286,10 +304,19 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
     var mapMessage by mutableStateOf<String?>(null)
+    var fuelPreview by mutableStateOf<FuelStation?>(null); private set
+    val fuelStations = FuelStationClient()
 
     fun recenter() {
+        fuelPreview = null
         zoomOverride = null
         cameraMode = "follow"
+        cameraRequest++
+    }
+
+    fun previewFuelStation(station: FuelStation) {
+        fuelPreview = station
+        cameraMode = "fuel"
         cameraRequest++
     }
 
