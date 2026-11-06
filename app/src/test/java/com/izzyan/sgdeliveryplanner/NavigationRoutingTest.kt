@@ -110,6 +110,16 @@ class NavigationRoutingTest {
         assertFalse(policy.shouldReroute(100.0, 10f, 90_001))
     }
 
+    @Test fun repeatedOppositeCourseCanTriggerReroutingWithoutLargeSidewaysDrift() {
+        val policy = ReroutePolicy()
+        assertFalse(policy.shouldReroute(5.0, 10f, 1000, wrongWayConfirmed = true))
+        assertFalse(policy.shouldReroute(5.0, 10f, 4000, wrongWayConfirmed = true))
+        assertTrue(policy.shouldReroute(5.0, 10f, 7500, wrongWayConfirmed = true))
+        policy.requested(7500)
+        assertFalse(policy.shouldReroute(5.0, 10f, 7600, wrongWayConfirmed = true))
+        assertFalse(policy.shouldReroute(5.0, 60f, 8000, wrongWayConfirmed = true))
+    }
+
     @Test fun failedRequestsBackOffForOneMinuteAndVoiceAnnouncementsDeduplicate() {
         val policy = ReroutePolicy()
         policy.requested(0); policy.failed(10_000)

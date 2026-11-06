@@ -146,16 +146,24 @@ internal fun distanceFromNavigationRoute(point: GpsPoint, shape: List<GpsPoint>)
 
 internal class ReroutePolicy {
     private var offSince: Long? = null
+    private var consecutiveDeviations = 0
     private var lastRequest: Long? = null
     private var blockedUntil: Long = 0
     fun requestAllowed(now: Long) = now >= blockedUntil && (lastRequest?.let { now - it >= 30_000 } ?: true)
-    fun failed(now: Long) { blockedUntil = now + 60_000; offSince = null }
-    fun requested(now: Long) { lastRequest = now; offSince = null }
-    fun resetDrift() { offSince = null }
-    fun shouldReroute(distance: Double, accuracy: Float, now: Long): Boolean {
-        if (accuracy > 35 || !accuracy.isFinite() || distance <= max(60.0, accuracy * 2.0)) { offSince = null; return false }
+    fun failed(now: Long) { blockedUntil = now + 60_000; resetDrift() }
+    fun requested(now: Long) { lastRequest = now; resetDrift() }
+    fun resetDrift() { offSince = null; consecutiveDeviations = 0 }
+    fun shouldReroute(distance: Double, accuracy: Float, now: Long, wrongWayConfirmed: Boolean = false): Boolean {
+        val unreliable = !accuracy.isFinite() || accuracy > 35 || accuracy < 0
+        val farOffRoute = distance.isFinite() && distance > max(60.0, accuracy * 2.0)
+        // On a route drawn along a long straight road, a sustained wrong-way GPS bearing
+        // can indicate a missed exit/U-turn even before lateral deviation reaches 60 m.
+        val wrongWay = wrongWayConfirmed && accuracy <= 20f
+        if (unreliable || (!farOffRoute && !wrongWay)) { resetDrift(); return false }
         if (offSince == null) offSince = now
-        return now - requireNotNull(offSince) >= 10_000 && requestAllowed(now)
+        consecutiveDeviations++
+        val dwell = if (wrongWay) 6_000 else 10_000
+        return consecutiveDeviations >= 3 && now - requireNotNull(offSince) >= dwell && requestAllowed(now)
     }
 }
 

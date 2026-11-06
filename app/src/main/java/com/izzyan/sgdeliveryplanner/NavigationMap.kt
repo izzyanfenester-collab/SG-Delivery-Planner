@@ -3,6 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.SystemClock
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +52,10 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
-    var lastBearing by remember { mutableStateOf<Float?>(null) }
+    var traveledLine by remember { mutableStateOf<Polyline?>(null) }
+    var lastMatchedSegment by remember { mutableIntStateOf(-1) }
+    val zoomPolicy = remember { NavigationCameraPolicy() }
+    val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
 
@@ -130,11 +134,15 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     .pulseEnabled(false)
                     .elevation(0f)
                     .enableStaleState(false)
+                    .trackingGesturesManagement(true)
+                    .trackingAnimationDurationMultiplier(0.80f)
                     // Keep the established GPS icon size, bearing and camera behavior.
                     .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
+                zoomPolicy.reset()
+                visualTracker.reset()
                 styleReady = true
                 session.mapMessage = null
             } catch (_: Exception) {
@@ -156,7 +164,12 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 CameraUpdateFactory.newLatLngZoom(LatLng(dest.lat, dest.lon), 14.0))
         }
         routeLine?.let { runCatching { native.removePolyline(it) } }
+        traveledLine?.let { runCatching { native.removePolyline(it) } }
         routeLine = null
+        traveledLine = null
+        lastMatchedSegment = -1
+        zoomPolicy.reset()
+        visualTracker.reset()
         if (session.shape.size >= 2) {
             routeLine = native.addPolyline(PolylineOptions()
                 .addAll(session.shape.map { LatLng(it.lat, it.lon) })
@@ -176,49 +189,88 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    // Feed raw, accurate GPS positions to MapLibre's interpolating vehicle puck.
-    // Only the DISPLAY bearing is filtered; routing, progress and arrival use original fixes.
-    LaunchedEffect(styleReady, session.location) {
+    // The displayed puck is gently snapped to a compatible route segment. Raw FusedLocation
+    // fixes remain untouched in NavigationSession for off-route detection, ETA and arrival.
+    // Updating when session.route changes also reprojects the existing fix on a fresh route.
+    LaunchedEffect(styleReady, session.location, session.route) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val fix = session.location ?: return@LaunchedEffect
-        val displayed = Location(fix)
-        lastBearing = NavigationDisplayTuning.smoothBearing(
-            lastBearing, fix.bearing.takeIf { fix.hasBearing() }, fix.speed.takeIf { fix.hasSpeed() })
-        lastBearing?.let { displayed.bearing = it }
+        val visual = visualTracker.update(
+            GpsPoint(fix.latitude, fix.longitude), session.shape,
+            fix.accuracy, fix.speed.takeIf { fix.hasSpeed() },
+            fix.bearing.takeIf { fix.hasBearing() })
+        val displayed = Location(fix).apply {
+            latitude = visual.position.lat
+            longitude = visual.position.lon
+            visual.bearingDegrees?.let { bearing = it }
+        }
         native.locationComponent.forceLocationUpdate(displayed)
+
+        // The same route geometry drives the displayed puck and traveled-road overlay.
+        // Ignore impossible backward progress or a large jump across a looping route.
+        visual.matchedSegmentIndex?.let { index ->
+            if (index >= lastMatchedSegment && (lastMatchedSegment < 0 || index <= lastMatchedSegment + 100)
+                && session.shape.size >= 2) {
+                val points = session.shape.take(index + 1).map { LatLng(it.lat, it.lon) } +
+                    LatLng(displayed.latitude, displayed.longitude)
+                if (points.size >= 2) {
+                    val existing = traveledLine
+                    if (existing == null) {
+                        traveledLine = native.addPolyline(PolylineOptions().addAll(points)
+                            .color(android.graphics.Color.argb(205, 79, 101, 129)).width(8f))
+                    } else {
+                        existing.points = points
+                        native.updatePolyline(existing)
+                    }
+                    lastMatchedSegment = index
+                }
+            }
+        }
+
         if (session.cameraMode == "follow") {
-            val zoom = session.zoomOverride ?:
-                NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
-            if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.4) {
-                native.locationComponent.zoomWhileTracking(zoom, 900)
+            val zoom = session.zoomOverride ?: zoomPolicy.consume(
+                SystemClock.elapsedRealtime(), fix.speed.takeIf { fix.hasSpeed() },
+                session.turnMeters, session.remainingMeters, session.instruction)
+            if (zoom != null && (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.3)) {
+                native.locationComponent.zoomWhileTracking(zoom, 1450)
                 lastZoom = zoom
             }
         }
     }
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route,
-        session.zoomOverride, session.fuelPreview, nightMode, mapHeightPixels) {
+        session.zoomOverride, session.fuelPreview, session.perspective3d, nightMode, mapHeightPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location
-                val zoom = session.zoomOverride ?:
-                    NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
+                val zoom = session.zoomOverride ?: zoomPolicy.targetZoom(
+                    fix?.speed?.takeIf { fix.hasSpeed() },
+                    session.turnMeters, session.remainingMeters, session.instruction)
                 val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
+                val tilt = if (session.perspective3d) 54.0 else 0.0
                 val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
-                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 54.0,
-                    object : OnLocationCameraTransitionListener {
-                        override fun onLocationCameraTransitionFinished(cameraMode: Int) {
-                            if (cameraMode == CameraMode.TRACKING_GPS && session.cameraMode == "follow" &&
-                                mapHeightPixels > 0) component.paddingWhileTracking(padding, 350)
-                        }
-                        override fun onLocationCameraTransitionCanceled(cameraMode: Int) = Unit
-                    })
-                if (alreadyTracking && mapHeightPixels > 0)
-                    component.paddingWhileTracking(padding, 350)
+                if (alreadyTracking) {
+                    component.tiltWhileTracking(tilt, 750)
+                    if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.25)
+                        component.zoomWhileTracking(zoom, 900)
+                    if (mapHeightPixels > 0) component.paddingWhileTracking(padding, 350)
+                } else {
+                    component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, tilt,
+                        object : OnLocationCameraTransitionListener {
+                            override fun onLocationCameraTransitionFinished(cameraMode: Int) {
+                                if (cameraMode == CameraMode.TRACKING_GPS && session.cameraMode == "follow" &&
+                                    mapHeightPixels > 0) component.paddingWhileTracking(padding, 350)
+                            }
+                            override fun onLocationCameraTransitionCanceled(cameraMode: Int) = Unit
+                        })
+                }
+                zoomPolicy.reset()
+                zoomPolicy.consume(SystemClock.elapsedRealtime(), fix?.speed?.takeIf { fix.hasSpeed() },
+                    session.turnMeters, session.remainingMeters, session.instruction)
                 lastZoom = zoom
             }
             "overview" -> {

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.VolumeOff
@@ -60,7 +61,7 @@ import kotlin.math.roundToInt
 internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = navigationDestination(plan)?.let { stop ->
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
-        .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
+        .putExtra("lat", stop.lat).putExtra("lon", stop.lon).putExtra("stopNumber", plan.current + 1)
 }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
@@ -69,23 +70,25 @@ class BuiltInNavigationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val postal = intent.getStringExtra("postal") ?: run { finish(); return }
+        val stopNumber = intent.getIntExtra("stopNumber", 0)
         val stop = Place(postal, intent.getDoubleExtra("lat", Double.NaN), intent.getDoubleExtra("lon", Double.NaN), "", "", intent.getStringExtra("address").orEmpty())
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop)
+                NavigationContent(stop, stopNumber)
             }
         }
     }
 
     @Composable
-    private fun NavigationContent(stop: Place) {
+    private fun NavigationContent(stop: Place, stopNumber: Int) {
         val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
         var showFuelStations by remember { mutableStateOf(false) }
+        var showVoiceSettings by remember { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -124,6 +127,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                         Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                                             contentDescription = if (session.muted) "Enable voice directions" else "Mute voice directions",
                                             tint = Color.White)
+                                    }
+                                    IconButton(onClick = { showVoiceSettings = true }, modifier = Modifier.size(38.dp)) {
+                                        Icon(Icons.Filled.Tune, contentDescription = "Voice language and volume", tint = Color.White)
                                     }
                                     IconButton(onClick = { showCameras = true }, modifier = Modifier.size(38.dp)) {
                                         Icon(Icons.Filled.PhotoCamera, contentDescription = "Traffic cameras", tint = Color.White)
@@ -189,6 +195,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
+                    GpsControl(Icons.Filled.Map, if (session.perspective3d) "3D" else "2D",
+                        session.perspective3d) { session.togglePerspective() }
                 }
 
                 Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
@@ -241,7 +249,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(if (stopNumber > 0) "STOP $stopNumber · ${stop.postal}" else stop.postal,
+                                    color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF185477), contentColor = Color.White),
@@ -256,6 +265,31 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+        if (showVoiceSettings) {
+            AlertDialog(
+                onDismissRequest = { showVoiceSettings = false },
+                title = { Text("Voice guidance") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Language")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = session.voiceLanguageTag == "en-US",
+                                onClick = { session.setVoiceLanguage("en-US") },
+                                label = { Text("English") })
+                            FilterChip(selected = session.voiceLanguageTag == "ms-MY",
+                                onClick = { session.setVoiceLanguage("ms-MY") },
+                                label = { Text("Bahasa Melayu") })
+                        }
+                        Text("Volume: ${(session.guidanceVolume * 100).roundToInt()}%")
+                        Slider(value = session.guidanceVolume,
+                            onValueChange = { session.updateGuidanceVolume(it) },
+                            valueRange = 0f..1f)
+                        Text("Audio follows Android routing, including Bluetooth when supported.")
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showVoiceSettings = false }) { Text("Done") } }
+            )
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
@@ -300,12 +334,18 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var loading by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null); private set
     var muted by mutableStateOf(false); private set
+    private val voicePrefs = context.getSharedPreferences("gps_voice_settings", Context.MODE_PRIVATE)
+    var guidanceVolume by mutableFloatStateOf(voicePrefs.getFloat("volume", 0.85f).coerceIn(0f, 1f)); private set
+    var voiceLanguageTag by mutableStateOf(voicePrefs.getString("language", "en-US") ?: "en-US"); private set
     var cameraMode by mutableStateOf("follow")
+    var perspective3d by mutableStateOf(true); private set
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
     var mapMessage by mutableStateOf<String?>(null)
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
+
+    fun togglePerspective() { perspective3d = !perspective3d; cameraRequest++ }
 
     fun recenter() {
         fuelPreview = null
@@ -351,12 +391,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && p.directionsRoute == route) updateProgress(p) } }
         speech = TextToSpeech(context) { status -> main.post {
             if (status == TextToSpeech.SUCCESS) {
-                val result = speech?.setLanguage(Locale.US)
+                val result = speech?.setLanguage(Locale.forLanguageTag(voiceLanguageTag))
                 speechReady = result != null && result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
                 speech?.setAudioAttributes(android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
-                if (!speechReady) message = "English voice unavailable. Follow the on-screen instructions."
+                if (!speechReady) message = "Selected navigation voice unavailable. Try English in voice settings."
             } else message = "Voice unavailable. Follow the on-screen instructions."
         } }
     }
@@ -398,7 +438,17 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
                 if (route == null && !initialAttempt) { initialAttempt = true; requestRoute(fix) }
-                else if (route != null && !loading && reroute.shouldReroute(distanceFromNavigationRoute(point, shape), fix.accuracy, now)) requestRoute(fix)
+                else if (route != null && !loading) {
+                    val nearest = NavigationRoadMatcher.match(
+                        point, shape, fix.accuracy,
+                        fix.speed.takeIf { fix.hasSpeed() }, null)
+                    val wrongWay = nearest != null && fix.hasBearing() && fix.hasSpeed() &&
+                        fix.speed >= 4f && NavigationRoadMatcher.angleDifference(
+                            fix.bearing, nearest.bearingDegrees) >= 130f
+                    if (reroute.shouldReroute(
+                            distanceFromNavigationRoute(point, shape), fix.accuracy, now, wrongWay))
+                        requestRoute(fix)
+                }
                 feed.updates.emit(org.maplibre.navigation.core.location.Location(
                     latitude = fix.latitude, longitude = fix.longitude, accuracyMeters = fix.accuracy,
                     speedMetersPerSeconds = if (fix.hasSpeed()) fix.speed else null,
@@ -452,16 +502,40 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         }
     }
+    fun updateGuidanceVolume(value: Float) {
+        guidanceVolume = value.coerceIn(0f, 1f)
+        voicePrefs.edit().putFloat("volume", guidanceVolume).apply()
+    }
+    fun setVoiceLanguage(tag: String) {
+        if (tag !in setOf("en-US", "ms-MY")) return
+        val code = speech?.setLanguage(Locale.forLanguageTag(tag))
+        if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
+            message = "Voice for ${if (tag == "ms-MY") "Bahasa Melayu" else "English"} is not installed on this device."
+            speech?.setLanguage(Locale.forLanguageTag(voiceLanguageTag))
+            return
+        }
+        voiceLanguageTag = tag
+        voicePrefs.edit().putString("language", tag).apply()
+        speechReady = true
+        voiceGate.reset()
+    }
     fun toggleMute() { muted = !muted; if (muted) speech?.stop() else voiceGate.reset() }
-    private fun speak(text: String, id: String) { if (active && speechReady && !muted) speech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) }
+    private fun speak(text: String, id: String) {
+        if (active && speechReady && !muted) {
+            val options = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, guidanceVolume) }
+            speech?.speak(text, TextToSpeech.QUEUE_FLUSH, options, id)
+        }
+    }
     override fun close() { active = false; requestJob?.cancel(); sdk.onDestroy(); speech?.stop(); speech?.shutdown(); speech = null }
 }
 
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
 private fun fusedLocations(context: Context): Flow<Location> = kotlinx.coroutines.flow.callbackFlow {
     val client = LocationServices.getFusedLocationProviderClient(context)
-    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000).setMinUpdateIntervalMillis(1_000)
-        .setMaxUpdateDelayMillis(2_000).setWaitForAccurateLocation(true).build()
+    // Foreground navigation only: request shorter, non-batched fixes for smoother puck animation.
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000)
+        .setMinUpdateIntervalMillis(750).setMaxUpdateDelayMillis(1_000)
+        .setWaitForAccurateLocation(true).build()
     val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) { result.locations.forEach { trySend(it) } }
     }

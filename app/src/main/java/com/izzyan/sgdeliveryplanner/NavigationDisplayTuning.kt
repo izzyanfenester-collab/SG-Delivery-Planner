@@ -37,7 +37,20 @@ internal object NavigationDisplayTuning {
         val target = ((measured % 360f) + 360f) % 360f
         if (previous == null) return target
         val delta = ((target - previous + 540f) % 360f) - 180f
-        return (((previous + delta * 0.55f) % 360f) + 360f) % 360f
+        // Slower rotation while creeping in a traffic queue, more responsive at road speed.
+        // Work on the shortest angular arc to avoid a 360-degree spin through north.
+        val alpha = when {
+            speedMetersPerSecond < 5f -> 0.34f
+            speedMetersPerSecond < 15f -> 0.53f
+            else -> 0.70f
+        }
+        val maxStep = when {
+            speedMetersPerSecond < 5f -> 32f
+            speedMetersPerSecond < 15f -> 50f
+            else -> 65f
+        }
+        val step = (delta * alpha).coerceIn(-maxStep, maxStep)
+        return (((previous + step) % 360f) + 360f) % 360f
     }
 
     fun maneuverArrow(instruction: String): String = when {
