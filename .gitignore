@@ -7,3 +7,5 @@ local.properties
 *.p12
 *.pfx
 signing.properties
+app/src/main/assets/sg_postal_seed.db
+__pycache__/

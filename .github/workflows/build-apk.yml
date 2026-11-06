@@ -26,6 +26,8 @@ jobs:
           gradle-version: '8.13'
       - name: Enable launcher
         run: chmod +x gradlew
+      - name: Generate account-free Singapore postal index
+        run: python3 scripts/build_postal_seed.py
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
       - name: Build and lint APK

@@ -31,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
@@ -457,12 +459,55 @@ fun Home(vm: PlannerViewModel) {
 @Composable
 fun Settings(vm: PlannerViewModel) {
     var serviceText by remember(vm.service) { mutableStateOf(vm.service.toString()) }
+    val postalContext = LocalContext.current
+    val postalScope = rememberCoroutineScope()
+    var postalStatus by remember { mutableStateOf<PostalUpdateState?>(null) }
+    var checkingPostal by remember { mutableStateOf(false) }
+    LaunchedEffect(postalContext) {
+        postalStatus = PostalUpdateState.load(postalContext)
+    }
+    fun readablePostalDate(millis: Long): String = if (millis == 0L) "Not yet"
+        else java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.of("Asia/Singapore"))
+            .format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH))
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
+                val state = postalStatus
+                if (state == null) {
+                    Text("Loading offline database status…")
+                } else {
+                    Text("Status: " + if (checkingPostal) "Checking…" else state.status,
+                        color = if (state.status == "Update failed") MaterialTheme.colorScheme.error
+                        else PremiumGold, style = MaterialTheme.typography.titleMedium)
+                    Text("Database version: ${state.version}")
+                    Text("Postal codes: ${state.total}  •  Sources: ${state.sources}")
+                    Text("Last checked: ${readablePostalDate(state.lastChecked)}")
+                    Text("Last successful update: ${readablePostalDate(state.lastUpdated)}")
+                    if (state.newCodes > 0) Text("New postal codes added: ${state.newCodes}")
+                    Text(state.detail, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                OutlinedButton(onClick = {
+                    postalScope.launch {
+                        checkingPostal = true
+                        try { postalStatus = PostalSnapshotUpdater(postalContext).checkAndRecord() }
+                        finally { checkingPostal = false }
+                    }
+                }, enabled = !checkingPostal, modifier = Modifier.fillMaxWidth()) {
+                    if (checkingPostal) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("Check for Updates")
+                }
+                Text("Checks automatically every 7 days when internet is available."
+                    , style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)

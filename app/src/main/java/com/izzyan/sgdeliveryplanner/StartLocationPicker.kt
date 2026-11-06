@@ -297,7 +297,7 @@ private fun LocationOutlineButton(label: String, onClick: () -> Unit, enabled: B
 }
 
 
-/** Uses the existing Singapore OneMap search service for both Start and End. */
+/** Searches the bundled Singapore postal/address index for both Start and End. */
 private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
     val items = response.get("results")?.takeIf { it.isJsonArray }?.asJsonArray ?: return emptyList()
     return items.mapNotNull { item ->
@@ -320,7 +320,8 @@ private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
 
 @Composable
 private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -> Unit) {
-    val api = remember { createOneMapApi() }
+    val context = LocalContext.current
+    val api = remember(context) { OfflinePostalSearchApi(context) }
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<StartLocation>>(emptyList()) }
@@ -349,9 +350,7 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                message = if ((error as? HttpException)?.code() == 429)
-                    "Search is busy. Please wait a moment and try again."
-                else "Unable to search right now. Check your internet connection or use the map."
+                message = "Unable to search the local postal database. You can still choose on the map."
             } finally {
                 if (activeSequence == searchSequence) searching = false
             }
