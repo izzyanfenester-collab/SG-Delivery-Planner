@@ -1,5 +1,7 @@
 package com.izzyan.sgdeliveryplanner
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.location.Location
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -9,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -34,7 +37,7 @@ private fun nightInSingapore() = NavigationDisplayTuning.isNightSingapore(
 
 /** GPS and camera animations happen in MapLibre's native location layer, not on Compose frames. */
 @Composable
-internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
+internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locationPermitted: Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember { MapView(context).apply { onCreate(null) } }
@@ -90,16 +93,26 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier) {
         }
     }
 
-    LaunchedEffect(map, nightMode, styleRetry) {
+    LaunchedEffect(map, nightMode, styleRetry, locationPermitted) {
         val native = map ?: return@LaunchedEffect
         styleReady = false
+        if (!locationPermitted) {
+            session.mapMessage = "Allow precise location to use built-in GPS."
+            return@LaunchedEffect
+        }
         native.setStyle(Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)) { style ->
             try {
                 val locationComponent = native.locationComponent
                 locationComponent.activateLocationComponent(
                     LocationComponentActivationOptions.builder(context, style)
                         .useDefaultLocationEngine(false).build())
-                locationComponent.isLocationComponentEnabled = true
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                    locationComponent.isLocationComponentEnabled = true
+                } else {
+                    session.mapMessage = "Allow precise location to use built-in GPS."
+                    return@setStyle
+                }
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
