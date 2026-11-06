@@ -49,7 +49,6 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = na
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
-        .putExtra("stopOrdinal", plan.current + 1).putExtra("stopCount", plan.stops.size)
 }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
@@ -62,13 +61,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop, intent.getIntExtra("stopOrdinal", 0), intent.getIntExtra("stopCount", 0))
+                NavigationContent(stop)
             }
         }
     }
 
     @Composable
-    private fun NavigationContent(stop: Place, stopOrdinal: Int, stopCount: Int) {
+    private fun NavigationContent(stop: Place) {
         val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
@@ -105,8 +104,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("SG Delivery GPS Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             Surface(color = PremiumGold, shape = RoundedCornerShape(14.dp)) {
-                                Text(if (stopOrdinal > 0 && stopCount > 0) "Stop %02d / %d".format(Locale.ENGLISH, stopOrdinal, stopCount)
-                                    else "GPS NAV", color = PremiumNavy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                Text("GPS NAV", color = PremiumNavy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
                             }
                         }
