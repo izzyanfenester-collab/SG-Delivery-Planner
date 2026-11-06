@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
