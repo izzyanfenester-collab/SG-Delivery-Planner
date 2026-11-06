@@ -17,6 +17,7 @@ class OfflinePostalIndexTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val index = OfflinePostalIndex(context)
         assertEquals(20260215, index.version())
+        assertTrue("Expected complete offline seed", index.count() >= 100_000)
         val postals = listOf("791436", "822446", "822204", "521227", "520259",
             "520135", "520868", "461051", "320035", "310160")
         for (postal in postals) {

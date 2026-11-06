@@ -20,3 +20,32 @@ The postal search requires no API account, user token, or subscription.
 OSM map tiles and OSRM road routing are separate online services governed by
 their own availability and usage policies. Attribution to OpenStreetMap and
 the OneMap-derived data source must be retained when distributing the app.
+
+## Build #810: independently refreshed postal-code sources
+
+The weekly GitHub Actions pipeline (`scripts/build_weekly_postals.py`) adds:
+
+1. **HDB Existing Building**, Singapore Government `data.gov.sg`, dataset
+   `d_16b157c52ed637edd6ba1232e026258d`, under the Singapore Open Data Licence.
+   The source includes `POSTAL_COD` and building footprints and is typically
+   refreshed approximately every two months. Building center points are
+   derived from the supplied polygons; they are not guaranteed vehicle entrances.
+2. **OpenStreetMap**, downloaded as the latest Malaysia/Singapore/Brunei PBF
+   extract from Geofabrik, under the ODbL. Only features with six-digit
+   `addr:postcode`, address metadata and coordinates inside Singapore are used.
+
+The original OneMap-derived community snapshot remains the primary full
+coverage baseline. The two extra sources add previously unknown codes but do
+not overwrite existing resolved coordinates. OSM codes with contradictory
+locations in its own features are rejected. This does not guarantee complete
+coverage of newly issued Singapore postcodes, nor does it replace address
+verification at the destination.
+
+The `postal-data-live` branch publicly publishes a compressed verified combined
+index and a version/checksum manifest. The Android app downloads the compressed
+index only when a newer complete version is available; a bad checksum or
+incomplete dataset never overwrites the existing local database. No delivery,
+customer, payment or GPS data is uploaded by this refresh feature. Combined
+redistributed data incorporates OpenStreetMap data and must preserve the ODbL
+and OSM attribution requirements as well as attribution to the Singapore
+government source.

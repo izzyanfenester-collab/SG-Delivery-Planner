@@ -95,6 +95,14 @@ internal class OfflinePostalIndex(context: Context) {
         } }
     }
 
+    suspend fun count(): Int = withContext(Dispatchers.IO) {
+        mutex.withLock { readDatabase { db ->
+            db.rawQuery("SELECT postal_count FROM metadata LIMIT 1", null).use { row ->
+                if (row.moveToFirst()) row.getInt(0) else 0
+            }
+        } }
+    }
+
     /** Search used by the unchanged Start/End location picker. */
     suspend fun search(term: String): JsonObject = withContext(Dispatchers.IO) {
         mutex.withLock {
