@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Keep the original, full-resolution user-supplied car artwork unchanged.
-    Scale the transparent canvas to 32dp before MapLibre's existing 1.8x
-    GPS icon scale is applied. This roughly matches the visible width of
-    #816's blue arrow while retaining the vehicle silhouette and details.
+    3D yellow Perodua Axia with transparent outer pixels and no platform.
+    Preserve the #817 32dp frame and existing 1.8x GPS icon scale.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
@@ -11,7 +9,7 @@
         android:height="32dp"
         android:gravity="center">
         <bitmap
-            android:src="@drawable/ic_gps_axia_yellow"
+            android:src="@drawable/ic_gps_axia_3d"
             android:gravity="fill" />
     </item>
 </layer-list>

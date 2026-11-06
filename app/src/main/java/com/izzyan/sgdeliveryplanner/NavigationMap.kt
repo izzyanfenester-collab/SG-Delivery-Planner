@@ -119,9 +119,19 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     return@setStyle
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
-                    // The supplied yellow Axia icon has a transparent canvas and points north.
-                    // Keep #816's size multiplier, GPS bearing rotation and camera anchoring.
+                    // Show ONLY the transparent, 3D Axia vehicle. MapLibre's other
+                    // location-puck assets otherwise leave a white disk beneath it.
                     .gpsDrawable(R.drawable.ic_gps_axia_yellow_marker)
+                    .foregroundDrawable(R.drawable.ic_gps_transparent)
+                    .backgroundDrawable(R.drawable.ic_gps_transparent)
+                    .bearingDrawable(R.drawable.ic_gps_transparent)
+                    .foregroundDrawableStale(R.drawable.ic_gps_transparent)
+                    .backgroundDrawableStale(R.drawable.ic_gps_transparent)
+                    .accuracyAlpha(0f)
+                    .pulseEnabled(false)
+                    .elevation(0f)
+                    .enableStaleState(false)
+                    // Keep the established GPS icon size, bearing and camera behavior.
                     .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
