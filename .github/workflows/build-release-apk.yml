@@ -11,7 +11,8 @@ on:
       - '.github/workflows/build-release-apk.yml'
 
 permissions:
-  contents: read
+  # The release job publishes signed APKs to public GitHub Releases for all runners.
+  contents: write
 
 jobs:
   release:
@@ -80,6 +81,29 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Publish public official APK for runner updates
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-b([0-9]+)$ ]]; then
+            echo "::error::Unexpected Android app versionName: $version"
+            exit 1
+          fi
+          build=${BASH_REMATCH[1]}
+          tag="v$version"
+          asset="$RUNNER_TEMP/SG-Delivery-B${build}-Official.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$asset"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" --target "$GITHUB_SHA" \
+              --title "SG Delivery Build #$build" \
+              --notes "Official APK signed using the SG Delivery permanent release key. Runners can download and install without a GitHub account. Back up data before switching from a testing package."
+          fi
+          echo "Official runner APK: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
       - name: Remove temporary keystore
         if: always()
         shell: bash

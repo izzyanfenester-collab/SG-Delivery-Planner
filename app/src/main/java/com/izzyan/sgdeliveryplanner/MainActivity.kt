@@ -1,17 +1,22 @@
 package com.izzyan.sgdeliveryplanner
 
 import android.app.TimePickerDialog
+import android.Manifest
 import android.content.Context
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -32,6 +37,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -72,6 +79,7 @@ class MainActivity : ComponentActivity() {
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
+        runCatching { AppUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
@@ -463,8 +471,25 @@ fun Settings(vm: PlannerViewModel) {
     val postalScope = rememberCoroutineScope()
     var postalStatus by remember { mutableStateOf<PostalUpdateState?>(null) }
     var checkingPostal by remember { mutableStateOf(false) }
+    var appUpdateStatus by remember { mutableStateOf(AppUpdateState.load(postalContext)) }
+    var checkingAppUpdate by remember { mutableStateOf(false) }
+    var appNotificationsAllowed by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < 33 ||
+            postalContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    }
+    val appNotificationsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        appNotificationsAllowed = it
+    }
     LaunchedEffect(postalContext) {
         postalStatus = PostalUpdateState.load(postalContext)
+    }
+    LaunchedEffect(postalContext) {
+        if (System.currentTimeMillis() - appUpdateStatus.lastChecked >= APP_UPDATE_CHECK_INTERVAL_MS) {
+            checkingAppUpdate = true
+            try {
+                appUpdateStatus = withContext(Dispatchers.IO) { AppReleaseChecker(postalContext).checkNow() }
+            } finally { checkingAppUpdate = false }
+        }
     }
     fun readablePostalDate(millis: Long): String = if (millis == 0L) "Not yet"
         else java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.of("Asia/Singapore"))
@@ -506,6 +531,53 @@ fun Settings(vm: PlannerViewModel) {
                 Text("Checks automatically every 7 days when internet is available."
                     , style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("App Updates", style = MaterialTheme.typography.titleLarge)
+                val state = appUpdateStatus
+                val statusText = when {
+                    checkingAppUpdate -> "Checking…"
+                    state.updateAvailable -> "New version available"
+                    state.error.isNotEmpty() -> "Unable to check"
+                    state.lastChecked > 0 -> "Up to date"
+                    else -> "Not checked yet"
+                }
+                Text("Status: $statusText", color = PremiumGold, style = MaterialTheme.typography.titleMedium)
+                Text("Current version: Build #${state.currentBuild}")
+                Text("Latest version: " + (state.latestBuild?.let { "Build #$it" } ?: "Not available"))
+                Text("Last checked: ${readablePostalDate(state.lastChecked)}")
+                if (state.error.isNotEmpty()) Text(state.error,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = {
+                    postalScope.launch {
+                        checkingAppUpdate = true
+                        try {
+                            appUpdateStatus = withContext(Dispatchers.IO) { AppReleaseChecker(postalContext).checkNow() }
+                        } finally { checkingAppUpdate = false }
+                    }
+                }, enabled = !checkingAppUpdate, modifier = Modifier.fillMaxWidth()) {
+                    if (checkingAppUpdate) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("Check for App Updates")
+                }
+                if (state.updateAvailable) {
+                    Button(onClick = {
+                        try {
+                            postalContext.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.downloadUrl)))
+                        } catch (_: Exception) {
+                            Toast.makeText(postalContext, "A browser is required to download the APK.", Toast.LENGTH_LONG).show()
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Download & Install") }
+                    Text("Downloads the official APK in your browser. Android will ask you to confirm installation.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (!appNotificationsAllowed && Build.VERSION.SDK_INT >= 33) {
+                    OutlinedButton(onClick = { appNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        modifier = Modifier.fillMaxWidth()) { Text("Enable update notifications") }
+                }
+                Text("Checks automatically every day when internet is available. No account or API token required.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
