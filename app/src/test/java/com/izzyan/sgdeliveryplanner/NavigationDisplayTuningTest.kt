@@ -21,6 +21,14 @@ class NavigationDisplayTuningTest {
         assertEquals(15.5, NavigationDisplayTuning.adjustedZoom(15.6, -0.5), 0.01)
     }
 
+    @Test fun bannerHighlightsRoadAndRoundaboutExit() {
+        assertEquals("Persiaran Indahpura 2", NavigationDisplayTuning.nextRoadLabel(
+            "Turn right onto Persiaran Indahpura 2", "Current Road"))
+        assertEquals("EXIT 2", NavigationDisplayTuning.roundaboutExit(
+            "Enter Bulatan and take the 2nd exit onto Jalan Utama"))
+        assertNull(NavigationDisplayTuning.roundaboutExit("Continue straight"))
+    }
+
     @Test fun singaporeNightModeChangesAtSeven() {
         assertTrue(NavigationDisplayTuning.isNightSingapore(19))
         assertTrue(NavigationDisplayTuning.isNightSingapore(6))
