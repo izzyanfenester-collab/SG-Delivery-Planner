@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "version": 20261106,
+  "postal_count": 124347,
+  "archive": "singapore-postals.csv.gz",
+  "sha256": "3c09955056d2299c9cdf90f35098bfa6b242a535e69d79b6be014d709bc59e80",
+  "bytes": 1898371,
+  "source_counts": {
+    "onemap_public_snapshot": 123874,
+    "hdb_new": 0,
+    "openstreetmap_new": 473,
+    "hdb_total": 13436,
+    "openstreetmap_total": 26323
+  },
+  "sources": {
+    "onemap_derived": "2026-02-15",
+    "hdb": "d_16b157c52ed637edd6ba1232e026258d",
+    "openstreetmap": "Geofabrik daily PBF"
+  },
+  "updated_utc": "2026-11-06T03:30:43.788932+00:00"
+}
