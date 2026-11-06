@@ -23,6 +23,11 @@ android {
    }
  }
  buildTypes {
+   getByName("debug") {
+     // Installable alongside the signed official app while the new features are tested.
+     applicationIdSuffix = ".testing"
+     versionNameSuffix = "-testing"
+   }
    getByName("release") {
      isMinifyEnabled = false
      if (releaseSigningReady) signingConfig = signingConfigs.getByName("sgDeliveryRelease")
