@@ -3,6 +3,12 @@ name: Build Signed SG Delivery Release APK
 # Only the owner can dispatch this on main; untrusted pull requests never see signing secrets.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'scripts/build_postal_seed.py'
+      - '.github/workflows/build-release-apk.yml'
 
 permissions:
   contents: read
@@ -29,6 +35,8 @@ jobs:
           gradle-version: '8.13'
       - name: Enable launcher
         run: chmod +x gradlew
+      - name: Generate account-free Singapore postal index
+        run: python3 scripts/build_postal_seed.py
       - name: Verify unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug
       - name: Restore release keystore from protected secrets
