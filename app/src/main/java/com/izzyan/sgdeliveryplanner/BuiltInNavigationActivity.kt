@@ -18,11 +18,21 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,33 +110,40 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = PremiumNavy.copy(alpha = 0.96f), shape = RoundedCornerShape(16.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
                             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("SG Delivery GPS Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                            Surface(color = PremiumGold, shape = RoundedCornerShape(14.dp)) {
-                                Text("GPS NAV", color = PremiumNavy, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+                            Column {
+                                Text("SG Delivery GPS Pro", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(if (session.zoomOverride == null) "3D navigation · Auto zoom" else "3D navigation · Manual zoom",
+                                    color = Color(0xFFB9C9E0), fontSize = 11.sp)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { session.toggleMute() }, modifier = Modifier.size(42.dp)) {
+                                    Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                        contentDescription = if (session.muted) "Unmute spoken directions" else "Mute spoken directions",
+                                        tint = PremiumGold)
+                                }
+                                IconButton(onClick = { showCameras = true }, modifier = Modifier.size(42.dp)) {
+                                    Icon(Icons.Filled.PhotoCamera, contentDescription = "Traffic cameras", tint = PremiumGold)
+                                }
                             }
                         }
                     }
 
                     Surface(color = PremiumNavy.copy(alpha = 0.97f), shape = RoundedCornerShape(16.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
-                                color = Color.White, fontSize = 37.sp, fontWeight = FontWeight.Bold)
+                                color = PremiumGold, fontSize = 38.sp, fontWeight = FontWeight.Bold)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 val nextTurn = session.turnMeters?.takeIf { !session.arrived }
                                 if (nextTurn != null) Text("In ${metricDistance(nextTurn)}", color = PremiumGold,
-                                    fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 Text(if (session.arrived) "Arrived" else session.instruction,
-                                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                                    color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 3)
                                 session.street?.takeIf { it.isNotBlank() }?.let {
                                     Text(it, color = Color(0xFFB9C9E0), fontSize = 13.sp, maxLines = 1)
                                 }
-                            }
-                            TextButton(onClick = { session.toggleMute() }) {
-                                Text(if (session.muted) "Unmute" else "Mute", color = PremiumGold)
                             }
                         }
                     }
@@ -159,22 +176,15 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 }
 
                 Column(Modifier.align(Alignment.CenterEnd).padding(end = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilledTonalButton(onClick = { session.cameraMode = "follow"; session.cameraRequest++ },
-                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
-                        Text("◎", color = PremiumGold, fontSize = 29.sp)
+                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode == "follow") {
+                        session.recenter()
                     }
-                    FilledTonalButton(onClick = { session.cameraMode = "overview"; session.cameraRequest++ },
-                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
-                        Text("▱", color = PremiumGold, fontSize = 27.sp)
+                    GpsControl(Icons.Filled.Map, "Route", session.cameraMode == "overview") {
+                        session.cameraMode = "overview"; session.cameraRequest++
                     }
-                    FilledTonalButton(onClick = { showCameras = true },
-                        modifier = Modifier.size(54.dp), contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PremiumNavy)) {
-                        Text("⌖", color = PremiumGold, fontSize = 27.sp)
-                    }
+                    GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
+                    GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
                 }
 
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
@@ -199,15 +209,32 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         }
                     }
-                    Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                    Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy),
                         shape = RoundedCornerShape(14.dp)) {
-                        Text("Back to Delivery", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Back to Delivery", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
+    }
+
+    @Composable
+    private fun GpsControl(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
+        FilledTonalButton(onClick = onClick, modifier = Modifier.width(65.dp).height(61.dp),
+            contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(15.dp),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = if (active) PremiumGold else PremiumNavy.copy(alpha = 0.96f),
+                contentColor = if (active) PremiumNavy else Color.White)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp))
+                Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
     private fun hasPreciseLocation() = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
@@ -236,7 +263,22 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var muted by mutableStateOf(false); private set
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
+    var zoomOverride by mutableStateOf<Double?>(null); private set
     var mapMessage by mutableStateOf<String?>(null)
+
+    fun recenter() {
+        zoomOverride = null
+        cameraMode = "follow"
+        cameraRequest++
+    }
+
+    fun adjustZoom(step: Double) {
+        val baseline = zoomOverride ?: NavigationDisplayTuning.zoomForSpeed(
+            location?.speed?.takeIf { location?.hasSpeed() == true })
+        zoomOverride = NavigationDisplayTuning.adjustedZoom(baseline, step)
+        cameraMode = "follow"
+        cameraRequest++
+    }
     val trafficCameras = TrafficCameraClient()
     private val adaptiveEta = AdaptiveNavigationEta()
     private var baseRemainingSeconds: Double? = null
