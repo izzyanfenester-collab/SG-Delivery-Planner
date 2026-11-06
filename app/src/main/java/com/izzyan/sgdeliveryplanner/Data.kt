@@ -25,8 +25,13 @@ private inline fun checkPlanning(condition: Boolean, message: () -> String) {
 @Dao interface PlannerDao {
  @Query("SELECT * FROM places WHERE postal=:postal") suspend fun place(postal:String): CachedPlace?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun place(p:CachedPlace)
+ @Query("SELECT * FROM places WHERE saved < :olderThan ORDER BY saved ASC LIMIT :limit")
+ suspend fun stalePlaces(olderThan:Long,limit:Int):List<CachedPlace>
+ @Query("SELECT * FROM places ORDER BY saved ASC LIMIT :limit")
+ suspend fun oldestPlaces(limit:Int):List<CachedPlace>
  @Query("SELECT * FROM legs WHERE `key`=:key") suspend fun leg(key:String): CachedLeg?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun leg(l:CachedLeg)
+ @Query("DELETE FROM legs") suspend fun clearRoutingCache()
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun save(r:SavedRoute)
  @Query("SELECT * FROM routes ORDER BY created DESC") fun history(): Flow<List<SavedRoute>>
  @Query("SELECT * FROM routes ORDER BY created DESC") suspend fun allHistoryForBackup(): List<SavedRoute>
@@ -54,10 +59,26 @@ class Repository(context:Context) {
  private val gson=Gson()
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
  private val api=createRoutingApi()
- private val oneMap=OneMapLookup(dao,createOneMapApi())
+ private val oneMap=OneMapLookup(dao,createOneMapApi(context))
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place = oneMap.resolve(postal)
+ suspend fun refreshPostalCache(force:Boolean=false,limit:Int=12):PostalRefreshResult {
+  val now=System.currentTimeMillis()
+  val saved=if(force) dao.oldestPlaces(limit) else dao.stalePlaces(now-30L*86_400_000,limit)
+  var updated=0; var failed=0
+  for(entry in saved) {
+   try {
+    oneMap.resolve(entry.postal,forceRefresh=true)
+    updated++
+   } catch(e:CancellationException) { throw e }
+   catch(e:OneMapRateLimitError) { failed++; break }
+   catch(_:Exception) { failed++ }
+   delay(300) // Stay well below provider request limits, even when updating several entries.
+  }
+  return PostalRefreshResult(saved.size,updated,failed)
+ }
+ suspend fun refreshRoutingCache() { dao.clearRoutingCache() }
  suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),endSelection:EndLocationSelection = EndLocationSelection(false, null),progress:(String)->Unit):Plan = coroutineScope {
   checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }

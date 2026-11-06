@@ -26,6 +26,7 @@ class IzzDeliveryApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        PostalUpdateScheduler.configure(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val localeManager = getSystemService(LocaleManager::class.java)
             val english = LocaleList.forLanguageTags("en")

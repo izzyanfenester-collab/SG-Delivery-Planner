@@ -190,7 +190,7 @@ class OneMapLookupTest {
         val dao = MemoryPlannerDao()
         val now = 200L * 86_400_000L
         val old = samplePlace("018956").copy(address = "Old address")
-        dao.place(CachedPlace(old.postal, Gson().toJson(old), now - 181L * 86_400_000L))
+        dao.place(CachedPlace(old.postal, Gson().toJson(old), now - 31L * 86_400_000L))
         val api = FakeOneMapApi { postal -> searchResult(postal) }
         val lookup = OneMapLookup(dao, api, now = { now })
 
@@ -394,8 +394,13 @@ private class MemoryPlannerDao : PlannerDao {
 
     override suspend fun place(postal: String): CachedPlace? = places[postal]
     override suspend fun place(p: CachedPlace) { places[p.postal] = p }
+    override suspend fun stalePlaces(olderThan: Long, limit: Int): List<CachedPlace> =
+        places.values.filter { it.saved < olderThan }.sortedBy { it.saved }.take(limit)
+    override suspend fun oldestPlaces(limit: Int): List<CachedPlace> =
+        places.values.sortedBy { it.saved }.take(limit)
     override suspend fun leg(key: String): CachedLeg? = legs[key]
     override suspend fun leg(l: CachedLeg) { legs[l.key] = l }
+    override suspend fun clearRoutingCache() { legs.clear() }
     override suspend fun save(r: SavedRoute) { routes[r.id] = r }
     override suspend fun allHistoryForBackup(): List<SavedRoute> = routes.values.sortedByDescending { it.created }
     override suspend fun insertRestoredRoutes(rows: List<SavedRoute>): List<Long> =

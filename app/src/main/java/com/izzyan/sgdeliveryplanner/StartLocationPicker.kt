@@ -320,7 +320,8 @@ private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
 
 @Composable
 private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -> Unit) {
-    val api = remember { createOneMapApi() }
+    val context = LocalContext.current
+    val api = remember(context) { createOneMapApi(context) }
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<StartLocation>>(emptyList()) }
@@ -349,9 +350,11 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                message = if ((error as? HttpException)?.code() == 429)
-                    "Search is busy. Please wait a moment and try again."
-                else "Unable to search right now. Check your internet connection or use the map."
+                message = when {
+                    error is PlannerError -> error.englishMessage
+                    (error as? HttpException)?.code() == 429 -> "Search is busy. Please wait a moment and try again."
+                    else -> "Unable to search right now. Check your internet connection or use the map."
+                }
             } finally {
                 if (activeSequence == searchSequence) searching = false
             }

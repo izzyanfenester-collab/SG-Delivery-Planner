@@ -45,9 +45,9 @@ class OneMapLookup(
     // Covers cache reads, network requests and retry delays, including concurrent callers.
     private val lookupMutex = Mutex()
 
-    suspend fun resolve(postal: String): Place = lookupMutex.withLock {
+    suspend fun resolve(postal: String, forceRefresh: Boolean = false): Place = lookupMutex.withLock {
         val cached = dao.place(postal)
-        if (cached != null && now() - cached.saved < CACHE_AGE_MILLIS) {
+        if (!forceRefresh && cached != null && now() - cached.saved < CACHE_AGE_MILLIS) {
             val place = runCatching { gson.fromJson(cached.json, Place::class.java) }.getOrNull()
             if (place != null && place.postal == postal && insideSingapore(place)) return@withLock place
         }
@@ -108,7 +108,7 @@ class OneMapLookup(
     private fun insideSingapore(place: Place) = place.lat in 1.1..1.6 && place.lon in 103.5..104.1
 
     private companion object {
-        const val CACHE_AGE_MILLIS = 180L * 86_400_000
+        const val CACHE_AGE_MILLIS = 30L * 86_400_000
         const val MAX_RETRIES = 3
         const val MAX_RETRY_WAIT_MILLIS = 30_000L
     }
