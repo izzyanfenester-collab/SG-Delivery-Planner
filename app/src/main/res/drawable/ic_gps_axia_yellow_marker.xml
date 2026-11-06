@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Keep the original, full-resolution user-supplied car artwork unchanged.
+    Scale the transparent canvas to 32dp before MapLibre's existing 1.8x
+    GPS icon scale is applied. This roughly matches the visible width of
+    #816's blue arrow while retaining the vehicle silhouette and details.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="32dp"
+        android:height="32dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/ic_gps_axia_yellow"
+            android:gravity="fill" />
+    </item>
+</layer-list>
