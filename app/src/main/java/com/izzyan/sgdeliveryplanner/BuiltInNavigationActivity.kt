@@ -283,7 +283,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         }
                         Text("Volume: ${(session.guidanceVolume * 100).roundToInt()}%")
                         Slider(value = session.guidanceVolume,
-                            onValueChange = { session.setGuidanceVolume(it) },
+                            onValueChange = { session.updateGuidanceVolume(it) },
                             valueRange = 0f..1f)
                         Text("Audio follows Android routing, including Bluetooth when supported.")
                     }
@@ -502,7 +502,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         }
     }
-    fun setGuidanceVolume(value: Float) {
+    fun updateGuidanceVolume(value: Float) {
         guidanceVolume = value.coerceIn(0f, 1f)
         voicePrefs.edit().putFloat("volume", guidanceVolume).apply()
     }
