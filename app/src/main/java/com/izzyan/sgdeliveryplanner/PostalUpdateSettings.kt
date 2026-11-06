@@ -70,6 +70,9 @@ internal fun PostalUpdateSettingsCard() {
                                 }
                                 hasAccount = true
                                 feedback = "OneMap connected. Token renewal is automatic."
+                                // The first verified login enables the weekly job; WorkManager
+                                // keeps it scheduled across app restarts without repeated setup.
+                                PostalUpdateScheduler.configure(context)
                             } catch (error: Exception) {
                                 hasAccount = credentials.configured()
                                 feedback = "Account saved but verification failed: " +

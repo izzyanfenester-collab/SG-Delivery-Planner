@@ -26,10 +26,6 @@ class IzzDeliveryApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // WorkManager's AndroidX startup initializer is unavailable in isolated JVM/Robolectric tests.
-        // Normal Android devices still schedule automatically at application launch.
-        try { PostalUpdateScheduler.configure(this) }
-        catch (_: IllegalStateException) { /* retry when Settings is opened on a real device */ }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val localeManager = getSystemService(LocaleManager::class.java)
             val english = LocaleList.forLanguageTags("en")
