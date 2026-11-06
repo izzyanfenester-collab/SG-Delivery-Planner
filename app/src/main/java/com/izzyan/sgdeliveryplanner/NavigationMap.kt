@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -21,6 +22,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.OnLocationCameraTransitionListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
@@ -49,6 +51,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
     var lastBearing by remember { mutableStateOf<Float?>(null) }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
+    var mapHeightPixels by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -157,7 +160,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         lastBearing?.let { displayed.bearing = it }
         native.locationComponent.forceLocationUpdate(displayed)
         if (session.cameraMode == "follow") {
-            val zoom = NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
+            val zoom = session.zoomOverride ?:
+                NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
             if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.4) {
                 native.locationComponent.zoomWhileTracking(zoom, 900)
                 lastZoom = zoom
@@ -165,15 +169,28 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route, nightMode) {
+    LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route,
+        session.zoomOverride, nightMode, mapHeightPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location
-                val zoom = NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
-                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 48.0, null)
+                val zoom = session.zoomOverride ?:
+                    NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
+                val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
+                val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
+                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 54.0,
+                    object : OnLocationCameraTransitionListener {
+                        override fun onLocationCameraTransitionFinished(cameraMode: Int) {
+                            if (cameraMode == CameraMode.TRACKING_GPS && session.cameraMode == "follow" &&
+                                mapHeightPixels > 0) component.paddingWhileTracking(padding, 350)
+                        }
+                        override fun onLocationCameraTransitionCanceled(cameraMode: Int) = Unit
+                    })
+                if (alreadyTracking && mapHeightPixels > 0)
+                    component.paddingWhileTracking(padding, 350)
                 lastZoom = zoom
             }
             "overview" -> {
@@ -187,7 +204,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     }
 
     Box(modifier) {
-        AndroidView(factory = { view }, modifier = Modifier.matchParentSize())
+        AndroidView(factory = { view }, modifier = Modifier.matchParentSize()
+            .onSizeChanged { mapHeightPixels = it.height })
         session.mapMessage?.let { error ->
             Surface(Modifier.align(Alignment.Center).padding(12.dp), color = PremiumNavy) {
                 Column(Modifier.padding(12.dp)) {
