@@ -8,8 +8,8 @@ import org.junit.Test
 class NavigationDisplayTuningTest {
     @Test fun speedControlsLookAheadWithoutInvalidZoom() {
         assertTrue(NavigationDisplayTuning.zoomForSpeed(0f) > NavigationDisplayTuning.zoomForSpeed(30f))
-        assertEquals(17.8, NavigationDisplayTuning.zoomForSpeed(Float.NaN), 0.01)
-        assertTrue(NavigationDisplayTuning.zoomForSpeed(15f) >= 17.5)
+        assertEquals(18.2, NavigationDisplayTuning.zoomForSpeed(Float.NaN), 0.01)
+        assertTrue(NavigationDisplayTuning.zoomForSpeed(15f) >= 18.0)
     }
 
     @Test fun cameraPaddingPositionsVehicleLowerAndZoomButtonsClamp() {
