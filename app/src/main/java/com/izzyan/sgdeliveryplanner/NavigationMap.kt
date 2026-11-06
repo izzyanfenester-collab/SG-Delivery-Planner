@@ -51,7 +51,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
-    var lastBearing by remember { mutableStateOf<Float?>(null) }
+    val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
 
@@ -176,16 +176,22 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    // Feed raw, accurate GPS positions to MapLibre's interpolating vehicle puck.
-    // Only the DISPLAY bearing is filtered; routing, progress and arrival use original fixes.
-    LaunchedEffect(styleReady, session.location) {
+    // The displayed puck is gently snapped to a compatible route segment. Raw FusedLocation
+    // fixes remain untouched in NavigationSession for off-route detection, ETA and arrival.
+    // Updating when session.route changes also reprojects the existing fix on a fresh route.
+    LaunchedEffect(styleReady, session.location, session.route) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val fix = session.location ?: return@LaunchedEffect
-        val displayed = Location(fix)
-        lastBearing = NavigationDisplayTuning.smoothBearing(
-            lastBearing, fix.bearing.takeIf { fix.hasBearing() }, fix.speed.takeIf { fix.hasSpeed() })
-        lastBearing?.let { displayed.bearing = it }
+        val visual = visualTracker.update(
+            GpsPoint(fix.latitude, fix.longitude), session.shape,
+            fix.accuracy, fix.speed.takeIf { fix.hasSpeed() },
+            fix.bearing.takeIf { fix.hasBearing() })
+        val displayed = Location(fix).apply {
+            latitude = visual.position.lat
+            longitude = visual.position.lon
+            visual.bearingDegrees?.let { bearing = it }
+        }
         native.locationComponent.forceLocationUpdate(displayed)
         if (session.cameraMode == "follow") {
             val zoom = session.zoomOverride ?:

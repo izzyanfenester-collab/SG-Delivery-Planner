@@ -460,8 +460,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
 private fun fusedLocations(context: Context): Flow<Location> = kotlinx.coroutines.flow.callbackFlow {
     val client = LocationServices.getFusedLocationProviderClient(context)
-    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000).setMinUpdateIntervalMillis(1_000)
-        .setMaxUpdateDelayMillis(2_000).setWaitForAccurateLocation(true).build()
+    // Foreground navigation only: request shorter, non-batched fixes for smoother puck animation.
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000)
+        .setMinUpdateIntervalMillis(750).setMaxUpdateDelayMillis(1_000)
+        .setWaitForAccurateLocation(true).build()
     val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) { result.locations.forEach { trySend(it) } }
     }
