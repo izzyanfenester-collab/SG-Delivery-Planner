@@ -119,6 +119,9 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     return@setStyle
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
+                    // The drawable itself is transparent: only the 3D blue navigation arrow remains.
+                    // Keep the exact same 1.8x MapLibre scaling as #815.
+                    .gpsDrawable(R.drawable.ic_gps_vehicle_3d)
                     .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
