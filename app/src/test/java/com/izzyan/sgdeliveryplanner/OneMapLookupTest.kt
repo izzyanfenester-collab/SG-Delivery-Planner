@@ -344,6 +344,50 @@ class OneMapLookupTest {
     }
 }
 
+class WeeklyPostalRefreshTest {
+    private val week = TimeUnit.DAYS.toMillis(7)
+
+    @Test
+    fun weeklyJobRefreshesOnlyOldCachedPostalsAndKeepsRecentOnes() = runBlocking {
+        val now = TimeUnit.DAYS.toMillis(30)
+        val dao = MemoryPlannerDao()
+        val stale = samplePlace("018956")
+        dao.place(CachedPlace(stale.postal, Gson().toJson(stale), now - week - 1000))
+        val fresh = samplePlace("200640")
+        dao.place(CachedPlace(fresh.postal, Gson().toJson(fresh), now - week + 1000))
+        val api = FakeOneMapApi { postal -> searchResult(postal, latitude = 1.37) }
+
+        val report = refreshKnownPostalCodes(dao, OneMapLookup(dao, api, now = { now }), now - week,
+            pause = {})
+
+        assertEquals(WeeklyRefreshResult(1, 1, 0), report)
+        assertEquals(1, api.calls)
+        assertEquals(1.37, Gson().fromJson(dao.place("018956")!!.json, Place::class.java).lat, 0.00001)
+        assertEquals(fresh, Gson().fromJson(dao.place("200640")!!.json, Place::class.java))
+    }
+
+    @Test
+    fun tokenRequiredStopsFurtherRequestsAndPreservesAllCachedLocations() = runBlocking {
+        val now = TimeUnit.DAYS.toMillis(30)
+        val dao = MemoryPlannerDao()
+        val first = samplePlace("018956")
+        val second = samplePlace("200640")
+        dao.place(CachedPlace(first.postal, Gson().toJson(first), now - 2 * week))
+        dao.place(CachedPlace(second.postal, Gson().toJson(second), now - week - 1000))
+        val api = FakeOneMapApi {
+            JsonParser.parseString("""{"error":"Authentication token missing. Please create an account.","found":0,"results":[]}""").asJsonObject
+        }
+
+        val report = refreshKnownPostalCodes(dao, OneMapLookup(dao, api, now = { now }), now - week,
+            pause = {})
+
+        assertEquals(WeeklyRefreshResult(1, 0, 1), report)
+        assertEquals(1, api.calls)
+        assertEquals(first, Gson().fromJson(dao.place("018956")!!.json, Place::class.java))
+        assertEquals(second, Gson().fromJson(dao.place("200640")!!.json, Place::class.java))
+    }
+}
+
 /** A resolved address must survive app restarts so a repeated route does not consume API quota. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], manifest = Config.NONE)
@@ -394,6 +438,8 @@ private class MemoryPlannerDao : PlannerDao {
 
     override suspend fun place(postal: String): CachedPlace? = places[postal]
     override suspend fun place(p: CachedPlace) { places[p.postal] = p }
+    override suspend fun stalePlaces(cutoff: Long, limit: Int): List<CachedPlace> =
+        places.values.filter { it.saved <= cutoff }.sortedBy { it.saved }.take(limit)
     override suspend fun leg(key: String): CachedLeg? = legs[key]
     override suspend fun leg(l: CachedLeg) { legs[l.key] = l }
     override suspend fun save(r: SavedRoute) { routes[r.id] = r }

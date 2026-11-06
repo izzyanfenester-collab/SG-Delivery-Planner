@@ -70,6 +70,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        // Schedule once when a user opens the app. WorkManager persists the weekly
+        // job independently; do not initialize it from Application.onCreate.
+        runCatching { WeeklyPostalScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.

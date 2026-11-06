@@ -35,6 +35,10 @@ class OneMapRateLimitError(cause: Throwable? = null) : PlannerError(
     cause
 )
 
+class OneMapAuthenticationError : PlannerError(
+    "OneMap Search now requires an account token. Your existing saved postal-code data has been kept."
+)
+
 class OneMapLookup(
     private val dao: PlannerDao,
     private val api: OneMapApi,
@@ -45,13 +49,16 @@ class OneMapLookup(
     // Covers cache reads, network requests and retry delays, including concurrent callers.
     private val lookupMutex = Mutex()
 
-    suspend fun resolve(postal: String): Place = lookupMutex.withLock {
+    suspend fun resolve(postal: String, forceRefresh: Boolean = false): Place = lookupMutex.withLock {
         val cached = dao.place(postal)
-        if (cached != null && now() - cached.saved < CACHE_AGE_MILLIS) {
+        if (!forceRefresh && cached != null && now() - cached.saved < CACHE_AGE_MILLIS) {
             val place = runCatching { gson.fromJson(cached.json, Place::class.java) }.getOrNull()
             if (place != null && place.postal == postal && insideSingapore(place)) return@withLock place
         }
         val response = searchWithRetry(postal)
+        if (response.get("error")?.takeIf { it.isJsonPrimitive }?.asString?.contains("token", ignoreCase = true) == true) {
+            throw OneMapAuthenticationError()
+        }
         val matches = response.get("results")?.takeIf { it.isJsonArray }?.asJsonArray
             ?: throw PlannerError("OneMap returned an unexpected search response. Please try again later.")
         val row = matches.firstOrNull {

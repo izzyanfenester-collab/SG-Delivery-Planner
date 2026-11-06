@@ -25,6 +25,8 @@ private inline fun checkPlanning(condition: Boolean, message: () -> String) {
 @Dao interface PlannerDao {
  @Query("SELECT * FROM places WHERE postal=:postal") suspend fun place(postal:String): CachedPlace?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun place(p:CachedPlace)
+ @Query("SELECT * FROM places WHERE saved <= :cutoff ORDER BY saved ASC LIMIT :limit")
+ suspend fun stalePlaces(cutoff:Long,limit:Int):List<CachedPlace>
  @Query("SELECT * FROM legs WHERE `key`=:key") suspend fun leg(key:String): CachedLeg?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun leg(l:CachedLeg)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun save(r:SavedRoute)
