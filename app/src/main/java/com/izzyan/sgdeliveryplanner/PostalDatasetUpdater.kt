@@ -13,6 +13,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -45,8 +47,20 @@ internal fun latestCompletePostalSnapshot(files: JsonArray): PostalSnapshot? {
     }.maxByOrNull { it.version }
 }
 
+/** True when a checksum-verified archive must be installed (including same-version recovery). */
+internal fun needsVerifiedPostalInstall(
+    publishedVersion: Int, localVersion: Int, publishedCount: Int,
+    localCount: Int, verifiedSources: Int
+): Boolean = publishedVersion > localVersion ||
+    (publishedVersion == localVersion && (verifiedSources != 3 || localCount != publishedCount))
+
 /** No user account: check weekly for new public CSV, then atomically replace the local index. */
 internal class PostalSnapshotUpdater(private val context: Context) {
+    companion object {
+        // Background weekly checks and the Settings button must never write
+        // into the same temporary archive at the same time.
+        private val refreshMutex = Mutex()
+    }
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -75,7 +89,13 @@ internal class PostalSnapshotUpdater(private val context: Context) {
             !expectedSha.matches(Regex("[a-f0-9]{64}")) || version !in 20260215..20991231) {
             throw IllegalStateException("Incomplete multi-source database manifest")
         }
-        if (version <= current) return current
+        val prefs = context.getSharedPreferences("sg_postal_updates", Context.MODE_PRIVATE)
+        // B810 could retain a database whose version was already current while
+        // its source_count preference was missing. That produced the misleading
+        // "Waiting for sources" message even with all 124,347 postal records.
+        // Repair by downloading/verifying the official archive again *once*.
+        if (!needsVerifiedPostalInstall(version, current, count, index.count(),
+                prefs.getInt("source_count", 1))) return current
 
         val zipped = File(context.cacheDir, "sg_postal_verified.csv.gz")
         val plain = File(context.cacheDir, "sg_postal_verified.csv")
@@ -112,9 +132,9 @@ internal class PostalSnapshotUpdater(private val context: Context) {
                     output.write(buf, 0, bytes)
                 }
             } }
-            index.installCsv(plain, version)
+            index.installCsv(plain, version, allowSameVersion = version == current)
             val installed = index.count()
-            if (installed < 100000) throw IllegalStateException("Postal database incomplete")
+            if (installed != count) throw IllegalStateException("Postal database record count mismatch")
             context.getSharedPreferences("sg_postal_updates", Context.MODE_PRIVATE).edit()
                 .putInt("source_count", 3).putInt("postal_count", installed)
                 .putLong("last_updated", System.currentTimeMillis())
@@ -172,7 +192,7 @@ internal class PostalSnapshotUpdater(private val context: Context) {
     }
 
     /** Called by background scheduling and the Settings manual refresh button. */
-    suspend fun checkAndRecord(): PostalUpdateState = withContext(Dispatchers.IO) {
+    suspend fun checkAndRecord(): PostalUpdateState = refreshMutex.withLock { withContext(Dispatchers.IO) {
         val before = OfflinePostalIndex(context).count()
         val pref = context.getSharedPreferences("sg_postal_updates", Context.MODE_PRIVATE)
         val wasVersion = OfflinePostalIndex(context).version()
@@ -185,9 +205,9 @@ internal class PostalSnapshotUpdater(private val context: Context) {
                 .putInt("new_postals", if (installed) (after - before).coerceAtLeast(0) else 0)
                 .putLong("last_checked", now)
                 .putLong("last_updated", if (installed) now else pref.getLong("last_updated", 0))
-                .putString("last_status", if (installed) "Updated" else if (pref.getInt("source_count", 1) == 3) "Up to date" else "Waiting for sources")
+                .putString("last_status", if (installed) "Updated" else if (pref.getInt("source_count", 1) == 3) "Up to date" else "Awaiting verification")
                 .putString("last_detail", if (pref.getInt("source_count", 1) == 3)
-                    "Three-source database verified." else "Offline database kept; waiting for three-source release.")
+                    "Three-source database verified." else "Offline postal data is available; source verification has not completed.")
                 .apply()
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -197,7 +217,7 @@ internal class PostalSnapshotUpdater(private val context: Context) {
                 .putString("last_detail", "Connection or update unavailable; existing database kept.").apply()
         }
         PostalUpdateState.load(context, OfflinePostalIndex(context))
-    }
+    } }
 }
 
 internal data class PostalUpdateState(

@@ -150,7 +150,9 @@ internal class OfflinePostalIndex(context: Context) {
     }
 
     /** Validate the entire new dataset before replacing the current usable database. */
-    suspend fun installCsv(csvFile: File, newVersion: Int): Int = withContext(Dispatchers.IO) {
+    suspend fun installCsv(
+        csvFile: File, newVersion: Int, allowSameVersion: Boolean = false
+    ): Int = withContext(Dispatchers.IO) {
         mutex.withLock {
             ensureSeed()
             val previous = readDatabase { db ->
@@ -158,7 +160,10 @@ internal class OfflinePostalIndex(context: Context) {
                     if (c.moveToFirst()) c.getInt(0) else 0
                 }
             }
-            if (newVersion <= previous) return@withLock 0
+            // A previous installation can have the current version but have lost
+            // its provenance/preferences. Permit a checksum-verified repair of
+            // that same version without allowing an older dataset to downgrade it.
+            if (newVersion < previous || (newVersion == previous && !allowSameVersion)) return@withLock 0
             val temp = File(databaseFile.parentFile, "sg_postals_update.tmp")
             temp.delete()
             var db: SQLiteDatabase? = null

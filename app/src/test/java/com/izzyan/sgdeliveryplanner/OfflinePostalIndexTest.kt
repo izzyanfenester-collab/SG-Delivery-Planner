@@ -51,4 +51,14 @@ class OfflinePostalIndexTest {
         assertNotNull(latest)
         assertEquals(20260501, latest!!.version)
     }
+
+    @Test fun currentThreeSourceArchiveIsReinstalledIfProvenanceWasLost() {
+        // Reproduces B810 screenshot: same published version/count, but Sources: 1.
+        assertTrue(needsVerifiedPostalInstall(20261106, 20261106, 124347, 124347, 1))
+        // Once verified and installed, the weekly check should not re-download it.
+        assertFalse(needsVerifiedPostalInstall(20261106, 20261106, 124347, 124347, 3))
+        assertTrue(needsVerifiedPostalInstall(20261106, 20261106, 124347, 124346, 3))
+        assertTrue(needsVerifiedPostalInstall(20261113, 20261106, 124500, 124347, 3))
+        assertFalse(needsVerifiedPostalInstall(20261101, 20261106, 124000, 124347, 1))
+    }
 }
