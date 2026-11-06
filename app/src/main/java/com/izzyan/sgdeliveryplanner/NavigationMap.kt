@@ -119,9 +119,9 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     return@setStyle
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
-                    // The drawable itself is transparent: only the 3D blue navigation arrow remains.
-                    // Keep the exact same 1.8x MapLibre scaling as #815.
-                    .gpsDrawable(R.drawable.ic_gps_vehicle_3d)
+                    // The supplied yellow Axia icon has a transparent canvas and points north.
+                    // Keep #816's size multiplier, GPS bearing rotation and camera anchoring.
+                    .gpsDrawable(R.drawable.ic_gps_axia_yellow_marker)
                     .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
