@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent vehicle position arrow. The layered faces give a raised 3D look. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Shape-only drop shadow; no circular puck, background or halo. -->
+    <path
+        android:fillColor="#66041527"
+        android:pathData="M48,33 L70,60 Q71,64 67,66 L50,60 Q48,59 46,60 L29,66 Q25,64 26,60 Z" />
+
+    <!-- Dark extrusion visible along the lower edge. -->
+    <path
+        android:fillColor="#11518E"
+        android:strokeColor="#0A294A"
+        android:strokeWidth="1.7"
+        android:strokeLineJoin="round"
+        android:pathData="M48,28 L68,54 L67,62 Q66,64 63,63 L50,57 Q48,56 46,57 L33,63 Q29,64 28,62 L28,54 Z" />
+
+    <!-- The upward chevron keeps the same silhouette as the existing GPS arrow. -->
+    <path
+        android:fillColor="#379DE7"
+        android:strokeColor="#1567AA"
+        android:strokeWidth="1.2"
+        android:strokeLineJoin="round"
+        android:pathData="M48,27 L68,53 Q69.5,56 66,57 L50,50 Q48,49 46,50 L30,57 Q26.5,56 28,53 Z" />
+
+    <!-- Light-facing left bevel. -->
+    <path
+        android:fillColor="#7CD6FF"
+        android:pathData="M48,27 L48,49 L46,50 L30,57 Q27,56 29,53 Z" />
+
+    <!-- Right-hand darker bevel creates the 3D side face. -->
+    <path
+        android:fillColor="#207DC6"
+        android:pathData="M48,27 L68,53 Q69.5,56 66,57 L50,50 L48,49 Z" />
+
+    <!-- A narrow highlight follows the leading edge. -->
+    <path
+        android:fillColor="#B5ECFF"
+        android:fillAlpha="0.9"
+        android:pathData="M48,29 L32,52 L35,51 L48,34 Z" />
+</vector>
