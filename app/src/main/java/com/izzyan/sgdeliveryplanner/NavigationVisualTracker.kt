@@ -125,7 +125,7 @@ internal class NavigationVisualTracker {
         val previous = previousDisplay
         val holdStill = !moving && previous != null && accuracyMeters.isFinite() &&
             accuracyMeters > 0f && navigationDistance(previous, raw) <=
-                (accuracyMeters * 1.6).coerceIn(6f, 16f).toDouble()
+                (accuracyMeters.toDouble() * 1.6).coerceIn(6.0, 16.0)
         val display = when {
             holdStill -> requireNotNull(previous)
             match != null -> match.point
