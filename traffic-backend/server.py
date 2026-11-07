@@ -80,6 +80,7 @@ class Edge:
 @dataclass(frozen=True)
 class Sample:
     received_ms: int
+    event_ms: int
     speed_kph: float
     session: str
 
@@ -161,7 +162,8 @@ class TrafficEngine:
         accepted = 0
         for obs in batch.observations:
             if (not obs.driving or obs.deliveryActivity or obs.accuracyM > 18
-                    or not (2.0 <= obs.speedKph / 3.6 <= 45.0)
+                    or not (0.9 <= obs.speedKph / 3.6 <= 45.0)
+                    or (obs.speedKph < 7.2 and obs.accuracyM > 8.0)
                     or abs(now_ms - obs.timestampMs) > 120_000):
                 continue
             current = (obs.latitude, obs.longitude)
@@ -176,7 +178,8 @@ class TrafficEngine:
             edge = self.match(obs)
             if edge is None:
                 continue
-            self.samples[edge.segment_id].append(Sample(now_ms, obs.speedKph, batch.sessionId))
+            self.samples[edge.segment_id].append(Sample(
+                now_ms, obs.timestampMs, obs.speedKph, batch.sessionId))
             accepted += 1
         self.prune(now_ms)
         return accepted
@@ -202,7 +205,7 @@ class TrafficEngine:
             usable = [r for r in readings if now_ms - r.received_ms <= WINDOW_MS]
             sessions = {r.session for r in usable}
             enough = (len(usable) >= 5 and len(sessions) >= 2
-                      and usable[-1].received_ms - usable[0].received_ms >= 15_000)
+                      and max(r.event_ms for r in usable) - min(r.event_ms for r in usable) >= 15_000)
             speed = statistics.median(r.speed_kph for r in usable) if enough else None
             ratio = speed / edge.free_flow_kph if speed is not None else None
             level = ("SMOOTH" if ratio is not None and ratio >= 0.70 else
