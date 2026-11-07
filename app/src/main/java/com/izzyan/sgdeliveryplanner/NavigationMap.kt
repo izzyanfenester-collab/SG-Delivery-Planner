@@ -55,6 +55,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var traveledLine by remember { mutableStateOf<Polyline?>(null) }
     val routeProgress = remember { NavigationRouteProgressTracker() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
+    val runnerTrafficPolylines = remember { mutableListOf<Polyline>() }
     val zoomController = remember { NavigationZoomController() }
     val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
@@ -186,7 +187,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     // Colored lines are wider than the navigation polyline and drawn FIRST. The blue route
     // stays in front so traffic never hides it. Unknown roads get no misleading color.
     LaunchedEffect(styleReady, session.route, session.trafficState,
-        session.localTrafficVisible, nightMode) {
+        session.sharedTrafficSegments, session.localTrafficVisible, nightMode) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         routeLine?.let { runCatching { native.removePolyline(it) } }
@@ -195,7 +196,25 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         traveledLine = null
         trafficPolylines.forEach { runCatching { native.removePolyline(it) } }
         trafficPolylines.clear()
-        if (session.localTrafficVisible) {
+        runnerTrafficPolylines.forEach { runCatching { native.removePolyline(it) } }
+        runnerTrafficPolylines.clear()
+        if (session.localTrafficVisible && session.runnerTrafficConfigured) {
+            // Actual directional OSM road edges returned by the authenticated backend.
+            // UNKNOWN is not colored. Draw behind the blue active navigation route.
+            for (segment in session.sharedTrafficSegments) {
+                val color = when (segment.level) {
+                    LocalTrafficLevel.SMOOTH -> android.graphics.Color.rgb(34, 197, 94)
+                    LocalTrafficLevel.SLOW -> android.graphics.Color.rgb(250, 204, 21)
+                    LocalTrafficLevel.JAMMED -> android.graphics.Color.rgb(239, 68, 68)
+                    LocalTrafficLevel.UNKNOWN -> continue
+                }
+                runnerTrafficPolylines += native.addPolyline(PolylineOptions()
+                    .addAll(listOf(LatLng(segment.start.lat, segment.start.lon),
+                        LatLng(segment.end.lat, segment.end.lon)))
+                    .color(color).width(18f))
+            }
+        }
+        if (session.localTrafficVisible && !session.runnerTrafficConfigured) {
             for (band in session.trafficState.bands) {
                 val routePoints = session.shape.drop(band.fromIndex)
                     .take(band.toIndex - band.fromIndex + 1)
