@@ -90,6 +90,12 @@ internal fun PremiumNavigationCockpit(
         NavigationMap(session, Modifier.matchParentSize(), permitted)
 
         Box(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Real3DCarAtTrackingAnchor(
+                visible = permitted && session.threeDimensional &&
+                    session.cameraMode == "follow" && session.location != null,
+                viewportHeight = maxHeight,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
             val bannerWidth = if (landscape) 0.70f else 1f
             Column(
                 Modifier.align(Alignment.TopCenter)
