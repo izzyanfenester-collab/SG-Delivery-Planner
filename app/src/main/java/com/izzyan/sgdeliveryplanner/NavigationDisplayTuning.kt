@@ -10,6 +10,26 @@ internal object NavigationDisplayTuning {
         else -> 17.6
     }
 
+    /** Maneuver-aware target; the camera controller handles hysteresis and time gating. */
+    fun adaptiveZoom(speedMetersPerSecond: Float?, turnMeters: Double?, remainingMeters: Double?, instruction: String): Double {
+        val base = zoomForSpeed(speedMetersPerSecond)
+        val maneuver = turnMeters?.takeIf { it.isFinite() && it >= 0.0 }
+        val roundabout = instruction.contains("roundabout", true) || instruction.contains("exit", true)
+        val nearTurn = when {
+            maneuver == null -> 0.0
+            maneuver < 65.0 -> 0.85
+            maneuver < 150.0 -> 0.65
+            maneuver < 350.0 -> if (roundabout) 0.55 else 0.35
+            else -> 0.0
+        }
+        val destination = if (remainingMeters != null && remainingMeters.isFinite() && remainingMeters < 250.0) 0.55 else 0.0
+        return (base + maxOf(nearTurn, destination)).coerceIn(16.5, 19.35)
+    }
+
+    /** Prevent oscillation when speed crosses a zoom band or maneuver distance fluctuates. */
+    fun shouldChangeZoom(current: Double, target: Double, elapsedMs: Long): Boolean =
+        current.isNaN() || (elapsedMs >= 2_000L && kotlin.math.abs(target - current) >= 0.25)
+
     /** Screen camera padding moves the vehicle from 50% down to about 72% of map height. */
     fun trackingPadding(mapHeightPixels: Int): DoubleArray =
         doubleArrayOf(0.0, mapHeightPixels.coerceAtLeast(0) * 0.44, 0.0, 0.0)
