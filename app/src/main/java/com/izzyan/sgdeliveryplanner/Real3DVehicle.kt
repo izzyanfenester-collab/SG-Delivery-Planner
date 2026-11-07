@@ -6,7 +6,6 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import android.view.MotionEvent
-import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -15,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
@@ -47,8 +47,9 @@ internal class Real3DVehicleSurface(context: Context) : GLSurfaceView(context) {
 }
 
 @Composable
-internal fun BoxWithConstraintsScope.Real3DCarAtTrackingAnchor(
+internal fun Real3DCarAtTrackingAnchor(
     visible: Boolean,
+    viewportHeight: Dp,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
@@ -61,7 +62,7 @@ internal fun BoxWithConstraintsScope.Real3DCarAtTrackingAnchor(
     }
     // Follow-mode MapLibre uses 44% top padding, positioning its camera puck
     // around 72% down the screen; stay aligned with the native follow anchor.
-    val top = maxHeight * .72f - 59.dp
+    val top = viewportHeight * .72f - 59.dp
     AndroidView(
         factory = { view },
         modifier = modifier.offset(y = top).size(width = 118.dp, height = 118.dp)
