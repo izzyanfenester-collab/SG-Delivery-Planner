@@ -1,6 +1,5 @@
 package com.izzyan.sgdeliveryplanner
 
-import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -32,7 +31,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -54,6 +52,7 @@ private val PanelShape = RoundedCornerShape(16.dp)
  * MapLibre view, and all UI actions delegate to the existing NavigationSession.
  * The cockpit never writes delivery/payment records.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PremiumNavigationCockpit(
     stop: Place,
