@@ -467,6 +467,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     if (localTrafficVisible && !arrived) {
                         val position = location?.let { GpsPoint(it.latitude, it.longitude) }
                         val snapshot = runnerTraffic.exchange(position)
+                        if (!localTrafficVisible) continue // consent may have been revoked during I/O
                         sharedTrafficSegments = snapshot.segments
                         runnerTrafficStatus = snapshot.status
                         baseRemainingSeconds?.let { base ->
