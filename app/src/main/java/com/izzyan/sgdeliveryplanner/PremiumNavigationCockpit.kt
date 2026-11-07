@@ -240,6 +240,18 @@ internal fun PremiumNavigationCockpit(
                 }
             }
 
+            // Keep OpenStreetMap/OpenFreeMap attribution visible above our bottom overlay.
+            Text(
+                "© OpenStreetMap contributors · OpenFreeMap",
+                color = Color.White,
+                fontSize = 10.sp,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = if (landscape) 94.dp else 105.dp)
+                    .background(CockpitNavy.copy(alpha = .87f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            )
+
             // Existing Delivery callback is retained: this returns to the existing
             // Delivery workflow and does not change an order's status in navigation.
             Surface(
@@ -359,6 +371,13 @@ internal fun PremiumNavigationCockpit(
                     if (session.localTrafficVisible) session.toggleLocalTraffic()
                     else onTrafficRequest()
                 }
+                if (session.localTrafficVisible)
+                    Text(
+                        if (session.runnerTrafficConfigured) session.runnerTrafficStatus
+                        else "Local traffic estimate only · shared runner service unavailable",
+                        color = CockpitMuted, fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 43.dp, bottom = 5.dp)
+                    )
                 MenuOption(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                     if (session.muted) "Enable voice guidance" else "Mute voice guidance") {
                     menuOpen = false; session.toggleMute()
