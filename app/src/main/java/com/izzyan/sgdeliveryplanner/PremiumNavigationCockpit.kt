@@ -86,17 +86,19 @@ internal fun PremiumNavigationCockpit(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(CockpitNavy)) {
-        val landscape = maxWidth > maxHeight
+        val viewportHeight = maxHeight
+        val landscape = maxWidth > viewportHeight
         val narrow = maxWidth < 365.dp
-        val tinyLandscape = landscape && maxHeight < 420.dp
+        val tinyLandscape = landscape && viewportHeight < 420.dp
         // The native map is genuinely full screen. All guidance sits on top.
         NavigationMap(session, Modifier.matchParentSize(), permitted)
 
         Box(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Real3DCarAtTrackingAnchor(
                 visible = permitted && session.threeDimensional &&
-                    session.cameraMode == "follow" && session.location != null,
-                viewportHeight = maxHeight,
+                    session.cameraMode == "follow" && session.location != null &&
+                    !menuOpen && !cancelPrompt,
+                viewportHeight = viewportHeight,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
             val bannerWidth = if (landscape) 0.70f else 1f
