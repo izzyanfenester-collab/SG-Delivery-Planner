@@ -463,7 +463,17 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
                 if (route == null && !initialAttempt) { initialAttempt = true; requestRoute(fix) }
-                else if (route != null && !loading && reroute.shouldReroute(distanceFromNavigationRoute(point, shape), fix.accuracy, now)) requestRoute(fix)
+                else if (route != null && !loading) {
+                    val routeDistance = distanceFromNavigationRoute(point, shape)
+                    val nearest = NavigationRoadMatcher.match(point, shape, fix.accuracy, null, null)
+                    val headingDifference = if (fix.hasSpeed() && fix.speed >= 4f &&
+                        fix.hasBearing() && nearest != null)
+                        NavigationRoadMatcher.angleDifference(fix.bearing, nearest.bearingDegrees)
+                    else null
+                    if (reroute.shouldReroute(routeDistance, fix.accuracy, now,
+                            headingDifference, fix.speed.takeIf { fix.hasSpeed() }))
+                        requestRoute(fix)
+                }
                 feed.updates.emit(org.maplibre.navigation.core.location.Location(
                     latitude = fix.latitude, longitude = fix.longitude, accuracyMeters = fix.accuracy,
                     speedMetersPerSeconds = if (fix.hasSpeed()) fix.speed else null,
