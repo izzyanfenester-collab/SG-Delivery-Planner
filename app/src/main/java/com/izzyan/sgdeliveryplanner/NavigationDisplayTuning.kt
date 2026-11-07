@@ -10,9 +10,16 @@ internal object NavigationDisplayTuning {
         else -> 17.6
     }
 
-    /** Screen camera padding moves the vehicle from 50% down to about 72% of map height. */
+    /** Portrait camera: native GPS puck stays around 72% from the top. */
     fun trackingPadding(mapHeightPixels: Int): DoubleArray =
         doubleArrayOf(0.0, mapHeightPixels.coerceAtLeast(0) * 0.44, 0.0, 0.0)
+
+    /** Short landscape has a bottom ETA bar, so move the puck to 60% height. */
+    fun trackingPadding(mapWidthPixels: Int, mapHeightPixels: Int): DoubleArray =
+        if (mapHeightPixels > 0 && mapWidthPixels > mapHeightPixels &&
+            mapHeightPixels < 1300) {
+            doubleArrayOf(0.0, mapHeightPixels * 0.20, 0.0, 0.0)
+        } else trackingPadding(mapHeightPixels)
 
     fun adjustedZoom(currentZoom: Double, step: Double): Double =
         (currentZoom + step).coerceIn(15.5, 19.5)
