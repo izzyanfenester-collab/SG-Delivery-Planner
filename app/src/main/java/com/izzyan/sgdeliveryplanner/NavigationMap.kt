@@ -53,6 +53,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
     val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
+    var lastZoomAt by remember { mutableLongStateOf(0L) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -135,6 +136,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
+                lastZoomAt = 0L
                 styleReady = true
                 session.mapMessage = null
             } catch (_: Exception) {
@@ -194,11 +196,14 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
         native.locationComponent.forceLocationUpdate(displayed)
         if (session.cameraMode == "follow") {
-            val zoom = session.zoomOverride ?:
-                NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
-            if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.4) {
-                native.locationComponent.zoomWhileTracking(zoom, 900)
+            val zoom = session.zoomOverride ?: NavigationDisplayTuning.adaptiveZoom(
+                fix.speed.takeIf { fix.hasSpeed() }, session.turnMeters,
+                session.remainingMeters, session.instruction)
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (NavigationDisplayTuning.shouldChangeZoom(lastZoom, zoom, now - lastZoomAt)) {
+                native.locationComponent.zoomWhileTracking(zoom, 1250)
                 lastZoom = zoom
+                lastZoomAt = now
             }
         }
     }
@@ -211,8 +216,9 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location
-                val zoom = session.zoomOverride ?:
-                    NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
+                val zoom = session.zoomOverride ?: NavigationDisplayTuning.adaptiveZoom(
+                    fix?.speed?.takeIf { fix.hasSpeed() }, session.turnMeters,
+                    session.remainingMeters, session.instruction)
                 val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
                 val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
                 component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 54.0,
@@ -226,6 +232,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 if (alreadyTracking && mapHeightPixels > 0)
                     component.paddingWhileTracking(padding, 350)
                 lastZoom = zoom
+                lastZoomAt = android.os.SystemClock.elapsedRealtime()
             }
             "overview" -> {
                 component.cameraMode = CameraMode.NONE
