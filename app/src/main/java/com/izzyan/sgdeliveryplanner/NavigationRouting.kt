@@ -152,10 +152,28 @@ internal class ReroutePolicy {
     fun failed(now: Long) { blockedUntil = now + 60_000; offSince = null }
     fun requested(now: Long) { lastRequest = now; offSince = null }
     fun resetDrift() { offSince = null }
-    fun shouldReroute(distance: Double, accuracy: Float, now: Long): Boolean {
-        if (accuracy > 35 || !accuracy.isFinite() || distance <= max(60.0, accuracy * 2.0)) { offSince = null; return false }
+
+    /** Requires repeated off-route observations, not a single drifting GPS sample. */
+    fun shouldReroute(
+        distance: Double, accuracy: Float, now: Long,
+        headingDifference: Float? = null, speedMetersPerSecond: Float? = null
+    ): Boolean {
+        if (!distance.isFinite() || !accuracy.isFinite() || accuracy > 35f || accuracy < 0f) {
+            offSince = null
+            return false
+        }
+        val definitelyOff = distance > max(60.0, accuracy * 2.0)
+        // A wrong exit on a nearby parallel road can begin only 20 m away. Require
+        // strong reverse-direction evidence, good accuracy and sustained movement.
+        val wrongExit = distance >= 22.0 && accuracy <= 18f &&
+            speedMetersPerSecond != null && speedMetersPerSecond.isFinite() &&
+            speedMetersPerSecond >= 4f &&
+            headingDifference != null && headingDifference.isFinite() &&
+            headingDifference > 115f
+        if (!definitelyOff && !wrongExit) { offSince = null; return false }
         if (offSince == null) offSince = now
-        return now - requireNotNull(offSince) >= 10_000 && requestAllowed(now)
+        val requiredDuration = if (definitelyOff) 10_000L else 12_000L
+        return now - requireNotNull(offSince) >= requiredDuration && requestAllowed(now)
     }
 }
 

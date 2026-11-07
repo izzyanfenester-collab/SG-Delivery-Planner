@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Raised, three-dimensional-looking blue navigation chevron.
+     Transparent canvas: NO circular white puck or background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="54dp"
+    android:height="60dp"
+    android:viewportWidth="100"
+    android:viewportHeight="110">
+
+    <!-- Soft offset shadow follows arrow geometry, not a round disk. -->
+    <path
+        android:fillColor="#5A06182A"
+        android:pathData="M50,23 L91,78 Q94,83 88,87 L76,91 L50,76 L24,91 L12,87 Q6,83 9,78 Z"/>
+
+    <!-- Side-wall extrusion visible below the raised face. -->
+    <path
+        android:fillColor="#11334F"
+        android:pathData="M50,12 L91,71 L88,84 L76,87 L50,71 L24,87 L12,84 L9,71 Z"/>
+    <path
+        android:fillColor="#0C395C"
+        android:pathData="M50,12 L91,71 L88,84 L76,87 L50,71 L50,61 Z"/>
+    <path
+        android:fillColor="#26739D"
+        android:pathData="M50,12 L50,61 L50,71 L24,87 L12,84 L9,71 Z"/>
+
+    <!-- Bright white perimeter on the upper elevated face. -->
+    <path
+        android:fillColor="#F7FBFF"
+        android:strokeColor="#D2EEFB"
+        android:strokeWidth="1.6"
+        android:strokeLineJoin="round"
+        android:pathData="M50,8 L91,67 Q95,72 89,76 L78,79 Q76,80 73,78 L52,66 Q50,65 48,66 L27,78 Q24,80 22,79 L11,76 Q5,72 9,67 Z"/>
+
+    <!-- Raised front surface; two beveled color faces imply depth. -->
+    <path
+        android:fillColor="#1C88CC"
+        android:pathData="M50,15 L83,68 L75,71 L53,58 Q50,56 47,58 L25,71 L17,68 Z"/>
+    <path
+        android:fillColor="#61C3F3"
+        android:pathData="M50,15 L50,56 L47,58 L25,71 L17,68 Z"/>
+    <path
+        android:fillColor="#1173B5"
+        android:pathData="M50,15 L83,68 L75,71 L53,58 L50,56 Z"/>
+
+    <!-- Reflections on the elevated edges and center ridge. -->
+    <path
+        android:fillColor="#D0F2FF"
+        android:fillAlpha="0.95"
+        android:pathData="M49,18 L24,64 L33,57 L50,26 Z"/>
+    <path
+        android:fillColor="#0D568B"
+        android:pathData="M50,28 L53,58 L75,71 L52,62 L50,61 Z"/>
+    <path
+        android:fillColor="#DAF7FF"
+        android:fillAlpha="0.85"
+        android:pathData="M46,54 L25,69 L28,72 L48,61 Q50,60 52,61 L72,72 L75,69 L54,54 L50,57 Z"/>
+</vector>
