@@ -63,6 +63,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
+    var mapWidthPixels by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(session.route) {
         // Rerouting starts a fresh travelled/remaining division; map style changes do not.
@@ -327,7 +328,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route,
         session.zoomOverride, session.threeDimensional, session.fuelPreview,
-        nightMode, mapHeightPixels) {
+        nightMode, mapHeightPixels, mapWidthPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
@@ -338,7 +339,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     fix?.speed?.takeIf { fix.hasSpeed() }, session.turnMeters,
                     session.instruction, session.remainingMeters)
                 zoomController.reset()
-                val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
+                val padding = NavigationDisplayTuning.trackingPadding(mapWidthPixels, mapHeightPixels)
                 val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
                 component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null,
                     if (session.threeDimensional) 54.0 else 0.0,
@@ -372,7 +373,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
 
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.matchParentSize()
-            .onSizeChanged { mapHeightPixels = it.height })
+            .onSizeChanged { mapHeightPixels = it.height; mapWidthPixels = it.width })
         session.mapMessage?.let { error ->
             Surface(Modifier.align(Alignment.Center).padding(12.dp), color = PremiumNavy) {
                 Column(Modifier.padding(12.dp)) {
