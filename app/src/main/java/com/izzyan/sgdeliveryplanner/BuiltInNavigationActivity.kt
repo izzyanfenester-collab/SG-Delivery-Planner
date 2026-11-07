@@ -263,7 +263,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                // Six-digit postal is the primary destination identifier for runners.
+                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 26.sp, lineHeight = 29.sp, letterSpacing = 0.4.sp,
+                                    maxLines = 1)
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF185477), contentColor = Color.White),

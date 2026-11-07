@@ -36,6 +36,22 @@ import kotlin.math.abs
 
 private const val NIGHT_MAP_STYLE = "https://tiles.openfreemap.org/styles/dark"
 
+private fun navigationArrowOptions(context: android.content.Context, threeD: Boolean) =
+    LocationComponentOptions.builder(context)
+        .gpsDrawable(if (threeD) R.drawable.ic_gps_vehicle_3d else R.drawable.ic_gps_vehicle_2d)
+        .foregroundDrawable(R.drawable.ic_gps_transparent)
+        .backgroundDrawable(R.drawable.ic_gps_transparent)
+        .bearingDrawable(R.drawable.ic_gps_transparent)
+        .foregroundDrawableStale(R.drawable.ic_gps_transparent)
+        .backgroundDrawableStale(R.drawable.ic_gps_transparent)
+        .accuracyAlpha(0f)
+        .pulseEnabled(false)
+        .elevation(0f)
+        .enableStaleState(false)
+        .minZoomIconScale(1.8f)
+        .maxZoomIconScale(1.8f)
+        .build()
+
 private fun nightInSingapore() = NavigationDisplayTuning.isNightSingapore(
     ZonedDateTime.now(ZoneId.of("Asia/Singapore")).hour)
 
@@ -52,6 +68,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
+    var passedLine by remember { mutableStateOf<Polyline?>(null) }
+    val routeTrail = remember { NavigationRouteTrail() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
     val zoomController = remember { NavigationZoomController() }
     val visualTracker = remember { NavigationVisualTracker() }
@@ -121,20 +139,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     session.mapMessage = "Allow precise location to use built-in GPS."
                     return@setStyle
                 }
-                locationComponent.applyStyle(LocationComponentOptions.builder(context)
-                    // TomTom-style blue 3D arrow; other puck layers stay invisible.
-                    .gpsDrawable(R.drawable.ic_gps_vehicle_3d)
-                    .foregroundDrawable(R.drawable.ic_gps_transparent)
-                    .backgroundDrawable(R.drawable.ic_gps_transparent)
-                    .bearingDrawable(R.drawable.ic_gps_transparent)
-                    .foregroundDrawableStale(R.drawable.ic_gps_transparent)
-                    .backgroundDrawableStale(R.drawable.ic_gps_transparent)
-                    .accuracyAlpha(0f)
-                    .pulseEnabled(false)
-                    .elevation(0f)
-                    .enableStaleState(false)
-                    // Keep the established GPS icon size, bearing and camera behavior.
-                    .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
+                locationComponent.applyStyle(navigationArrowOptions(context, session.threeDimensional))
                 locationComponent.renderMode = RenderMode.GPS
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
@@ -144,6 +149,15 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 session.mapMessage = "GPS display could not start. Try reopening navigation."
             }
         }
+    }
+
+    // Switching 2D/3D changes BOTH camera pitch and the visible vehicle arrow. It does not
+    // reload the map, discard route progress, or interrupt native GPS interpolation.
+    LaunchedEffect(styleReady, session.threeDimensional) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val component = native.locationComponent
+        component.applyStyle(navigationArrowOptions(context, session.threeDimensional))
     }
 
     LaunchedEffect(styleReady, session.route, session.destination, nightMode) {
@@ -166,8 +180,11 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         session.localTrafficVisible, nightMode) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
+        routeTrail.ensureRoute(session.route, session.shape)
         routeLine?.let { runCatching { native.removePolyline(it) } }
+        passedLine?.let { runCatching { native.removePolyline(it) } }
         routeLine = null
+        passedLine = null
         trafficPolylines.forEach { runCatching { native.removePolyline(it) } }
         trafficPolylines.clear()
         if (session.localTrafficVisible) {
@@ -186,9 +203,15 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     .color(color).width(19f))
             }
         }
-        if (session.shape.size >= 2) {
+        val split = routeTrail.split()
+        if (split.passed.size >= 2) {
+            passedLine = native.addPolyline(PolylineOptions()
+                .addAll(split.passed.map { LatLng(it.lat, it.lon) })
+                .color(android.graphics.Color.rgb(122, 135, 152)).width(10f))
+        }
+        if (split.remaining.size >= 2) {
             routeLine = native.addPolyline(PolylineOptions()
-                .addAll(session.shape.map { LatLng(it.lat, it.lon) })
+                .addAll(split.remaining.map { LatLng(it.lat, it.lon) })
                 .color(android.graphics.Color.rgb(0, 190, 245)).width(9f))
         }
     }
@@ -222,6 +245,37 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             visual.bearingDegrees?.let { bearing = it }
         }
         native.locationComponent.forceLocationUpdate(displayed)
+
+        // Both lines use the SAME matched geographic point as the navigation arrow.
+        // Update existing polyline geometry in place to prevent remove/recreate flicker.
+        routeTrail.ensureRoute(session.route, session.shape)
+        val index = visual.segmentIndex
+        if (index != null && routeTrail.advance(
+                NavigationRoadMatch(visual.position, visual.bearingDegrees ?: 0f, 0.0, index),
+                fix.speed.takeIf { fix.hasSpeed() }, SystemClock.elapsedRealtime())) {
+            val split = routeTrail.split()
+            if (split.passed.size >= 2) {
+                val points = split.passed.map { LatLng(it.lat, it.lon) }
+                val existing = passedLine
+                if (existing == null) {
+                    passedLine = native.addPolyline(PolylineOptions().addAll(points)
+                        .color(android.graphics.Color.rgb(122, 135, 152)).width(10f))
+                } else {
+                    existing.points = points
+                    native.updatePolyline(existing)
+                }
+            }
+            val existing = routeLine
+            if (existing != null) {
+                if (split.remaining.size < 2) {
+                    native.removePolyline(existing)
+                    routeLine = null
+                } else {
+                    existing.points = split.remaining.map { LatLng(it.lat, it.lon) }
+                    native.updatePolyline(existing)
+                }
+            }
+        }
         if (session.cameraMode == "follow") {
             val manualZoom = session.zoomOverride
             val proposed = manualZoom ?: NavigationCameraPolicy.targetZoom(
