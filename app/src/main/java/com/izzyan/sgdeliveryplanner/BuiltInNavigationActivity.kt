@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -114,12 +115,14 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Color(0xFF214E9C).copy(alpha = 0.98f), shape = RoundedCornerShape(20.dp)) {
+                    Surface(color = PremiumNavy.copy(alpha = 0.98f),
+                        border = BorderStroke(1.5.dp, PremiumGold.copy(alpha = 0.95f)),
+                        shape = RoundedCornerShape(20.dp)) {
                         Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = Color(0xFFE2EDFF), fontSize = 12.sp,
+                                Text("SG Delivery GPS Pro", color = PremiumGold, fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton(onClick = { session.toggleDimension() },
@@ -138,14 +141,17 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            Row(Modifier.fillMaxWidth()
+                                    .background(PremiumRoyal.copy(alpha = 0.88f), RoundedCornerShape(13.dp))
+                                    .padding(horizontal = 7.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
                                     color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Bold,
                                     modifier = Modifier.width(56.dp))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
-                                        color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold,
+                                        color = PremiumGold, fontSize = 36.sp, fontWeight = FontWeight.Bold,
                                         maxLines = 1)
                                     Text(if (session.arrived) "Destination reached" else
                                         NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
@@ -263,7 +269,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 24.sp, maxLines = 1)
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF185477), contentColor = Color.White),
