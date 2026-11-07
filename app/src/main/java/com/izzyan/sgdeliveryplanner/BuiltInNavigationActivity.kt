@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -86,6 +88,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
         var showFuelStations by remember { mutableStateOf(false) }
+        var showLocalTrafficConsent by remember { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -112,14 +115,22 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Color(0xFF214E9C).copy(alpha = 0.98f), shape = RoundedCornerShape(20.dp)) {
+                    Surface(color = PremiumNavy.copy(alpha = 0.98f),
+                        border = BorderStroke(1.5.dp, PremiumGold.copy(alpha = 0.95f)),
+                        shape = RoundedCornerShape(20.dp)) {
                         Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = Color(0xFFE2EDFF), fontSize = 12.sp,
+                                Text("SG Delivery GPS Pro", color = PremiumGold, fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(onClick = { session.toggleDimension() },
+                                        contentPadding = PaddingValues(horizontal = 5.dp)) {
+                                        Text(if (session.threeDimensional) "3D" else "2D",
+                                            color = Color.White, fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp)
+                                    }
                                     IconButton(onClick = { session.toggleMute() }, modifier = Modifier.size(38.dp)) {
                                         Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                                             contentDescription = if (session.muted) "Enable voice directions" else "Mute voice directions",
@@ -130,14 +141,17 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            Row(Modifier.fillMaxWidth()
+                                    .background(PremiumRoyal.copy(alpha = 0.88f), RoundedCornerShape(13.dp))
+                                    .padding(horizontal = 7.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
                                     color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Bold,
                                     modifier = Modifier.width(56.dp))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
-                                        color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold,
+                                        color = PremiumGold, fontSize = 36.sp, fontWeight = FontWeight.Bold,
                                         maxLines = 1)
                                     Text(if (session.arrived) "Destination reached" else
                                         NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
@@ -189,6 +203,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
+                    GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
+                        if (session.localTrafficVisible) session.toggleLocalTraffic()
+                        else showLocalTrafficConsent = true
+                    }
                 }
 
                 Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
@@ -238,10 +256,21 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                                 Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
                                     color = Color(0xFFB9C9E0), fontSize = 14.sp)
+                                if (session.localTrafficVisible) {
+                                    val level = session.trafficState.ahead
+                                    val label = when (level) {
+                                        LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
+                                        LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
+                                        LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
+                                        LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
+                                    }
+                                    Text(label, color = Color(0xFFACC3D8), fontSize = 11.sp)
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 24.sp, maxLines = 1)
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF185477), contentColor = Color.White),
@@ -259,6 +288,25 @@ class BuiltInNavigationActivity : ComponentActivity() {
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
+        if (showLocalTrafficConsent) {
+            AlertDialog(
+                onDismissRequest = { showLocalTrafficConsent = false },
+                title = { Text("Local traffic estimates") },
+                text = { Text("Use your phone's driving GPS speed to estimate traffic on roads you travel. " +
+                    "Measurements remain on this phone only, are not uploaded, and are not " +
+                    "Singapore-wide live traffic. Unknown roads remain uncolored. " +
+                    "Stopping for deliveries is excluded.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        session.toggleLocalTraffic()
+                        showLocalTrafficConsent = false
+                    }) { Text("Enable local estimates") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLocalTrafficConsent = false }) { Text("Cancel") }
+                }
+            )
+        }
     }
 
     @Composable
@@ -303,6 +351,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
+    var threeDimensional by mutableStateOf(true); private set
+    var localTrafficVisible by mutableStateOf(false); private set
+    var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
+    fun toggleDimension() { threeDimensional = !threeDimensional; cameraMode = "follow"; cameraRequest++ }
+    fun toggleLocalTraffic() {
+        localTrafficVisible = !localTrafficVisible
+        // Delete any in-memory traffic observations whenever consent changes.
+        localTraffic.reset(shape, route?.distance ?: 0.0, route?.duration ?: 0.0)
+        trafficState = LocalTrafficState.EMPTY
+    }
     var mapMessage by mutableStateOf<String?>(null)
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
@@ -329,6 +387,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
     val trafficCameras = TrafficCameraClient()
     private val adaptiveEta = AdaptiveNavigationEta()
+    private val localTraffic = LocalNavigationTraffic()
     private var baseRemainingSeconds: Double? = null
     private val feed = SessionLocationEngine()
     private val sdk = AndroidMapLibreNavigation(context, locationEngine = feed, options = MapLibreNavigationOptions(
@@ -393,12 +452,32 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if (message?.startsWith("GPS") == true) message = null
                 if (arrived) return@collect
                 val point = GpsPoint(fix.latitude, fix.longitude)
+                if (localTrafficVisible && shape.size >= 2) {
+                    val matched = NavigationRoadMatcher.match(point, shape, fix.accuracy,
+                        fix.speed.takeIf { fix.hasSpeed() }, fix.bearing.takeIf { fix.hasBearing() })
+                    localTraffic.observe(matched?.segmentIndex,
+                        fix.speed.takeIf { fix.hasSpeed() }, fix.accuracy, now,
+                        navigationDistance(point, GpsPoint(destination.lat, destination.lon)),
+                        driving = active && !arrived && !loading)
+                    val updatedTraffic = localTraffic.snapshot(now, matched?.segmentIndex)
+                    if (updatedTraffic != trafficState) trafficState = updatedTraffic
+                }
                 if (arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
                     arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
                 if (route == null && !initialAttempt) { initialAttempt = true; requestRoute(fix) }
-                else if (route != null && !loading && reroute.shouldReroute(distanceFromNavigationRoute(point, shape), fix.accuracy, now)) requestRoute(fix)
+                else if (route != null && !loading) {
+                    val routeDistance = distanceFromNavigationRoute(point, shape)
+                    val nearest = NavigationRoadMatcher.match(point, shape, fix.accuracy, null, null)
+                    val headingDifference = if (fix.hasSpeed() && fix.speed >= 4f &&
+                        fix.hasBearing() && nearest != null)
+                        NavigationRoadMatcher.angleDifference(fix.bearing, nearest.bearingDegrees)
+                    else null
+                    if (reroute.shouldReroute(routeDistance, fix.accuracy, now,
+                            headingDifference, fix.speed.takeIf { fix.hasSpeed() }))
+                        requestRoute(fix)
+                }
                 feed.updates.emit(org.maplibre.navigation.core.location.Location(
                     latitude = fix.latitude, longitude = fix.longitude, accuracyMeters = fix.accuracy,
                     speedMetersPerSeconds = if (fix.hasSpeed()) fix.speed else null,
@@ -420,7 +499,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             try {
                 val newRoute = client.route(GpsPoint(fix.latitude, fix.longitude), GpsPoint(destination.lat, destination.lon))
                 if (!active || arrived) return@launch
-                shape = decodeNavigationGeometry(newRoute.geometry); route = newRoute
+                shape = decodeNavigationGeometry(newRoute.geometry)
+                localTraffic.reset(shape, newRoute.distance, newRoute.duration)
+                trafficState = LocalTrafficState.EMPTY
+                route = newRoute
                 adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
                 instruction = "Follow the route"; voiceGate.reset(); sdk.startNavigation(newRoute)
@@ -460,8 +542,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
 private fun fusedLocations(context: Context): Flow<Location> = kotlinx.coroutines.flow.callbackFlow {
     val client = LocationServices.getFusedLocationProviderClient(context)
-    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000).setMinUpdateIntervalMillis(1_000)
-        .setMaxUpdateDelayMillis(2_000).setWaitForAccurateLocation(true).build()
+    // Foreground navigation only: request shorter, non-batched fixes for smoother puck animation.
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000)
+        .setMinUpdateIntervalMillis(750).setMaxUpdateDelayMillis(1_000)
+        .setWaitForAccurateLocation(true).build()
     val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) { result.locations.forEach { trySend(it) } }
     }
