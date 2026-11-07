@@ -106,6 +106,8 @@ internal class RunnerTrafficClient(
     fun clear() {
         pending.clear()
         lastAcceptedTime = Long.MIN_VALUE
+        // Revocation/closing navigation must also cancel any outstanding pilot requests.
+        http.dispatcher.cancelAll()
     }
 
     /** Invoked from the navigation coroutine every ~45 seconds, never from the GPS callback. */
