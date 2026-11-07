@@ -89,6 +89,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
         var showFuelStations by remember { mutableStateOf(false) }
+        var showLocalTrafficConsent by remember { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -199,7 +200,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
                     GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
-                        session.toggleLocalTraffic()
+                        if (session.localTrafficVisible) session.toggleLocalTraffic()
+                        else showLocalTrafficConsent = true
                     }
                 }
 
@@ -282,6 +284,25 @@ class BuiltInNavigationActivity : ComponentActivity() {
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
+        if (showLocalTrafficConsent) {
+            AlertDialog(
+                onDismissRequest = { showLocalTrafficConsent = false },
+                title = { Text("Local traffic estimates") },
+                text = { Text("Use your phone's driving GPS speed to estimate traffic on roads you travel. " +
+                    "Measurements remain on this phone only, are not uploaded, and are not " +
+                    "Singapore-wide live traffic. Unknown roads remain uncolored. " +
+                    "Stopping for deliveries is excluded.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        session.toggleLocalTraffic()
+                        showLocalTrafficConsent = false
+                    }) { Text("Enable local estimates") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLocalTrafficConsent = false }) { Text("Cancel") }
+                }
+            )
+        }
     }
 
     @Composable
@@ -326,6 +347,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
+    var threeDimensional by mutableStateOf(true); private set
+    var localTrafficVisible by mutableStateOf(false); private set
+    var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
+    fun toggleDimension() { threeDimensional = !threeDimensional; cameraMode = "follow"; cameraRequest++ }
+    fun toggleLocalTraffic() {
+        localTrafficVisible = !localTrafficVisible
+        // Delete any in-memory traffic observations whenever consent changes.
+        localTraffic.reset(shape, route?.distance ?: 0.0, route?.duration ?: 0.0)
+        trafficState = LocalTrafficState.EMPTY
+    }
     var mapMessage by mutableStateOf<String?>(null)
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
@@ -352,6 +383,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
     val trafficCameras = TrafficCameraClient()
     private val adaptiveEta = AdaptiveNavigationEta()
+    private val localTraffic = LocalNavigationTraffic()
     private var baseRemainingSeconds: Double? = null
     private val feed = SessionLocationEngine()
     private val sdk = AndroidMapLibreNavigation(context, locationEngine = feed, options = MapLibreNavigationOptions(
@@ -416,6 +448,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if (message?.startsWith("GPS") == true) message = null
                 if (arrived) return@collect
                 val point = GpsPoint(fix.latitude, fix.longitude)
+                if (localTrafficVisible && shape.size >= 2) {
+                    val matched = NavigationRoadMatcher.match(point, shape, fix.accuracy,
+                        fix.speed.takeIf { fix.hasSpeed() }, fix.bearing.takeIf { fix.hasBearing() })
+                    localTraffic.observe(matched?.segmentIndex,
+                        fix.speed.takeIf { fix.hasSpeed() }, fix.accuracy, now,
+                        navigationDistance(point, GpsPoint(destination.lat, destination.lon)),
+                        driving = active && !arrived && !loading)
+                    val updatedTraffic = localTraffic.snapshot(now, matched?.segmentIndex)
+                    if (updatedTraffic != trafficState) trafficState = updatedTraffic
+                }
                 if (arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
                     arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
@@ -443,7 +485,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             try {
                 val newRoute = client.route(GpsPoint(fix.latitude, fix.longitude), GpsPoint(destination.lat, destination.lon))
                 if (!active || arrived) return@launch
-                shape = decodeNavigationGeometry(newRoute.geometry); route = newRoute
+                shape = decodeNavigationGeometry(newRoute.geometry)
+                localTraffic.reset(shape, newRoute.distance, newRoute.duration)
+                trafficState = LocalTrafficState.EMPTY
+                route = newRoute
                 adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
                 instruction = "Follow the route"; voiceGate.reset(); sdk.startNavigation(newRoute)
