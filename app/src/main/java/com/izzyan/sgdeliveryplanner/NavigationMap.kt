@@ -30,6 +30,9 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.FillExtrusionLayer
+import org.maplibre.android.style.layers.PropertyFactory
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.math.abs
@@ -119,6 +122,32 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
         native.setStyle(Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)) { style ->
             try {
+                // Real vector 3D building extrusions where OpenFreeMap supplies height data.
+                // A missing source or unsupported style must never block navigation.
+                runCatching {
+                    val has3d = style.layers.any { it is FillExtrusionLayer }
+                    if (!has3d && style.getSource("openmaptiles") != null) {
+                        val layer = FillExtrusionLayer("sg-driving-buildings-3d", "openmaptiles").apply {
+                            sourceLayer = "building"
+                            minZoom = 15f
+                            setFilter(Expression.has("render_height"))
+                            setProperties(
+                                PropertyFactory.fillExtrusionHeight(Expression.get("render_height")),
+                                PropertyFactory.fillExtrusionBase(Expression.get("render_min_height")),
+                                PropertyFactory.fillExtrusionColor(
+                                    if (nightMode) android.graphics.Color.rgb(79, 94, 113)
+                                    else android.graphics.Color.rgb(185, 193, 202)),
+                                PropertyFactory.fillExtrusionOpacity(0.83f)
+                            )
+                        }
+                        // Put buildings below map labels wherever a label layer is available.
+                        val label = style.layers.firstOrNull {
+                            it is org.maplibre.android.style.layers.SymbolLayer
+                        }?.id
+                        if (label != null) style.addLayerBelow(layer, label)
+                        else style.addLayer(layer)
+                    }
+                }
                 val locationComponent = native.locationComponent
                 locationComponent.activateLocationComponent(
                     LocationComponentActivationOptions.builder(context, style)
