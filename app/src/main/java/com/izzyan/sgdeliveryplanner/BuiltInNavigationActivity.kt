@@ -62,7 +62,6 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = na
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
-        .putExtra("stopIndex", plan.current + 1).putExtra("stopTotal", plan.stops.size)
 }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
@@ -75,14 +74,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop, intent.getIntExtra("stopIndex", 1),
-                    intent.getIntExtra("stopTotal", 1))
+                NavigationContent(stop)
             }
         }
     }
 
     @Composable
-    private fun NavigationContent(stop: Place, stopIndex: Int, stopTotal: Int) {
+    private fun NavigationContent(stop: Place) {
         val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
@@ -248,8 +246,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 .atZone(ZoneId.of("Asia/Singapore"))
                                 .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
                             Column(Modifier.weight(1f)) {
-                                Text("STOP $stopIndex / $stopTotal  •  ARRIVAL",
-                                    color = Color(0xFFB9C9E0), fontSize = 11.sp)
+                                Text("ARRIVAL", color = Color(0xFFB9C9E0), fontSize = 11.sp)
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                                 Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
                                     color = Color(0xFFB9C9E0), fontSize = 14.sp)
