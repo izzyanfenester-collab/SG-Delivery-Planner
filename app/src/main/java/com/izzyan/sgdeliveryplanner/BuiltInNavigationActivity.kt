@@ -16,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -114,12 +116,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Color(0xFF214E9C).copy(alpha = 0.98f), shape = RoundedCornerShape(20.dp)) {
+                    Surface(color = Color(0xFF081B33), shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, Color(0xFFD4AF37).copy(alpha = 0.80f))) {
                         Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = Color(0xFFE2EDFF), fontSize = 12.sp,
+                                Text("SG Delivery GPS Pro", color = Color(0xFFD4AF37), fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton(onClick = { session.toggleDimension() },
@@ -141,7 +144,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
-                                    color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD4AF37), fontSize = 52.sp, fontWeight = FontWeight.Bold,
                                     modifier = Modifier.width(56.dp))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
@@ -153,7 +156,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                         lineHeight = 24.sp, fontWeight = FontWeight.Medium)
                                 }
                                 NavigationDisplayTuning.roundaboutExit(session.instruction)?.let { exit ->
-                                    Text(exit, color = Color.White, fontSize = 14.sp,
+                                    Text(exit, color = Color(0xFFD4AF37), fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold, maxLines = 1)
                                 }
                             }
@@ -263,7 +266,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = PremiumGold, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(stop.postal, color = Color(0xFFF1CC68),
+                                    fontWeight = FontWeight.Bold, fontSize = 26.sp,
+                                    letterSpacing = 0.8.sp, maxLines = 1, softWrap = false,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.widthIn(min = 114.dp)
+                                        .align(Alignment.CenterHorizontally))
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = Color(0xFF185477), contentColor = Color.White),
@@ -344,10 +352,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
-    var threeDimensional by mutableStateOf(true); private set
+    private val gpsModePreferences = GpsNavigationModePreferences(context)
+    var threeDimensional by mutableStateOf(gpsModePreferences.is3dEnabled()); private set
     var localTrafficVisible by mutableStateOf(false); private set
     var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
-    fun toggleDimension() { threeDimensional = !threeDimensional; cameraMode = "follow"; cameraRequest++ }
+    fun toggleDimension() {
+        threeDimensional = !threeDimensional
+        gpsModePreferences.set3dEnabled(threeDimensional)
+        cameraMode = "follow"
+        cameraRequest++
+    }
     fun toggleLocalTraffic() {
         localTrafficVisible = !localTrafficVisible
         // Delete any in-memory traffic observations whenever consent changes.
