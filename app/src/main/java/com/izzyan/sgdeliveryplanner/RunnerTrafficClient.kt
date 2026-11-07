@@ -58,7 +58,8 @@ internal data class RunnerTrafficObservation(
         ): RunnerTrafficObservation? {
             if (!driving || !fix.hasAccuracy() || !fix.hasSpeed() || !fix.hasBearing() ||
                 !fix.accuracy.isFinite() || fix.accuracy > 18f ||
-                !fix.speed.isFinite() || fix.speed !in 2f..45f ||
+                !fix.speed.isFinite() || fix.speed !in 0.9f..45f ||
+                (fix.speed < 2f && fix.accuracy > 8f) ||
                 !fix.bearing.isFinite() ||
                 !distanceToDestinationM.isFinite() || distanceToDestinationM < 120.0 ||
                 (fix.hasSpeedAccuracy() && fix.speedAccuracyMetersPerSecond > 3f)
