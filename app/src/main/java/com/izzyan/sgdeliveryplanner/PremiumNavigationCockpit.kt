@@ -99,6 +99,7 @@ internal fun PremiumNavigationCockpit(
                     session.cameraMode == "follow" && session.location != null &&
                     !menuOpen && !cancelPrompt,
                 viewportHeight = viewportHeight,
+                compactLandscape = tinyLandscape,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
             val bannerWidth = if (landscape) 0.70f else 1f
