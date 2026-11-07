@@ -1,0 +1,23 @@
+name: Runner Traffic Backend Tests
+on:
+  push:
+    paths:
+      - 'traffic-backend/**'
+      - '.github/workflows/runner-traffic-tests.yml'
+  pull_request:
+    paths:
+      - 'traffic-backend/**'
+      - '.github/workflows/runner-traffic-tests.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install API dependencies
+        run: python -m pip install -r traffic-backend/requirements.txt
+      - name: Run traffic unit and HTTP tests
+        working-directory: traffic-backend
+        run: python -m unittest test_server -v
