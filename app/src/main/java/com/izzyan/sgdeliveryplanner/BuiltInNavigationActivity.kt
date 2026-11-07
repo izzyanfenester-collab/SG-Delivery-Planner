@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -61,6 +62,7 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = na
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
+        .putExtra("stopIndex", plan.current + 1).putExtra("stopTotal", plan.stops.size)
 }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
@@ -73,13 +75,14 @@ class BuiltInNavigationActivity : ComponentActivity() {
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop)
+                NavigationContent(stop, intent.getIntExtra("stopIndex", 1),
+                    intent.getIntExtra("stopTotal", 1))
             }
         }
     }
 
     @Composable
-    private fun NavigationContent(stop: Place) {
+    private fun NavigationContent(stop: Place, stopIndex: Int, stopTotal: Int) {
         val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
@@ -120,6 +123,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 Text("SG Delivery GPS Pro", color = Color(0xFFE2EDFF), fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(onClick = { session.toggleDimension() },
+                                        contentPadding = PaddingValues(horizontal = 5.dp)) {
+                                        Text(if (session.threeDimensional) "3D" else "2D",
+                                            color = Color.White, fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp)
+                                    }
                                     IconButton(onClick = { session.toggleMute() }, modifier = Modifier.size(38.dp)) {
                                         Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                                             contentDescription = if (session.muted) "Enable voice directions" else "Mute voice directions",
@@ -189,6 +198,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
+                    GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
+                        session.toggleLocalTraffic()
+                    }
                 }
 
                 Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
@@ -234,10 +246,21 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 .atZone(ZoneId.of("Asia/Singapore"))
                                 .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
                             Column(Modifier.weight(1f)) {
-                                Text("ARRIVAL", color = Color(0xFFB9C9E0), fontSize = 11.sp)
+                                Text("STOP $stopIndex / $stopTotal  •  ARRIVAL",
+                                    color = Color(0xFFB9C9E0), fontSize = 11.sp)
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                                 Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
                                     color = Color(0xFFB9C9E0), fontSize = 14.sp)
+                                if (session.localTrafficVisible) {
+                                    val level = session.trafficState.ahead
+                                    val label = when (level) {
+                                        LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
+                                        LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
+                                        LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
+                                        LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
+                                    }
+                                    Text(label, color = Color(0xFFACC3D8), fontSize = 11.sp)
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {

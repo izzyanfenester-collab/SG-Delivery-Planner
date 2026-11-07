@@ -3,6 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.SystemClock
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +52,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
+    val trafficPolylines = remember { mutableListOf<Polyline>() }
+    val zoomController = remember { NavigationZoomController() }
     val visualTracker = remember { NavigationVisualTracker() }
     var lastZoom by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
@@ -155,8 +158,34 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             if (session.location == null) native.moveCamera(
                 CameraUpdateFactory.newLatLngZoom(LatLng(dest.lat, dest.lon), 14.0))
         }
+    }
+
+    // Colored lines are wider than the navigation polyline and drawn FIRST. The blue route
+    // stays in front so traffic never hides it. Unknown roads get no misleading color.
+    LaunchedEffect(styleReady, session.route, session.trafficState,
+        session.localTrafficVisible, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
         routeLine?.let { runCatching { native.removePolyline(it) } }
         routeLine = null
+        trafficPolylines.forEach { runCatching { native.removePolyline(it) } }
+        trafficPolylines.clear()
+        if (session.localTrafficVisible) {
+            for (band in session.trafficState.bands) {
+                val routePoints = session.shape.drop(band.fromIndex)
+                    .take(band.toIndex - band.fromIndex + 1)
+                if (routePoints.size < 2) continue
+                val color = when (band.level) {
+                    LocalTrafficLevel.SMOOTH -> android.graphics.Color.rgb(34, 197, 94)
+                    LocalTrafficLevel.SLOW -> android.graphics.Color.rgb(250, 204, 21)
+                    LocalTrafficLevel.JAMMED -> android.graphics.Color.rgb(239, 68, 68)
+                    LocalTrafficLevel.UNKNOWN -> continue
+                }
+                trafficPolylines += native.addPolyline(PolylineOptions()
+                    .addAll(routePoints.map { LatLng(it.lat, it.lon) })
+                    .color(color).width(19f))
+            }
+        }
         if (session.shape.size >= 2) {
             routeLine = native.addPolyline(PolylineOptions()
                 .addAll(session.shape.map { LatLng(it.lat, it.lon) })
@@ -194,28 +223,37 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
         native.locationComponent.forceLocationUpdate(displayed)
         if (session.cameraMode == "follow") {
-            val zoom = session.zoomOverride ?:
-                NavigationDisplayTuning.zoomForSpeed(fix.speed.takeIf { fix.hasSpeed() })
-            if (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.4) {
-                native.locationComponent.zoomWhileTracking(zoom, 900)
+            val manualZoom = session.zoomOverride
+            val proposed = manualZoom ?: NavigationCameraPolicy.targetZoom(
+                fix.speed.takeIf { fix.hasSpeed() }, session.turnMeters,
+                session.instruction, session.remainingMeters)
+            val urgent = session.turnMeters?.let { it.isFinite() && it in 0.0..130.0 } == true
+            val zoom = if (manualZoom != null) manualZoom else
+                zoomController.choose(proposed, SystemClock.elapsedRealtime(), urgent)
+            if (zoom != null && (lastZoom.isNaN() || abs(lastZoom - zoom) >= 0.24)) {
+                native.locationComponent.zoomWhileTracking(zoom, 1200)
                 lastZoom = zoom
             }
         }
     }
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest, session.route,
-        session.zoomOverride, session.fuelPreview, nightMode, mapHeightPixels) {
+        session.zoomOverride, session.threeDimensional, session.fuelPreview,
+        nightMode, mapHeightPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location
-                val zoom = session.zoomOverride ?:
-                    NavigationDisplayTuning.zoomForSpeed(fix?.speed?.takeIf { fix.hasSpeed() })
+                val zoom = session.zoomOverride ?: NavigationCameraPolicy.targetZoom(
+                    fix?.speed?.takeIf { fix.hasSpeed() }, session.turnMeters,
+                    session.instruction, session.remainingMeters)
+                zoomController.reset()
                 val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
                 val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
-                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null, 54.0,
+                component.setCameraMode(CameraMode.TRACKING_GPS, 850, zoom, null,
+                    if (session.threeDimensional) 54.0 else 0.0,
                     object : OnLocationCameraTransitionListener {
                         override fun onLocationCameraTransitionFinished(cameraMode: Int) {
                             if (cameraMode == CameraMode.TRACKING_GPS && session.cameraMode == "follow" &&

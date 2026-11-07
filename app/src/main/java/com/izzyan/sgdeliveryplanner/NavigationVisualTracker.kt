@@ -14,7 +14,8 @@ internal data class NavigationVisualFix(
 internal data class NavigationRoadMatch(
     val point: GpsPoint,
     val bearingDegrees: Float,
-    val distanceMeters: Double
+    val distanceMeters: Double,
+    val segmentIndex: Int
 )
 
 /**
@@ -67,7 +68,8 @@ internal object NavigationRoadMatcher {
                 nearest = NavigationRoadMatch(
                     GpsPoint(a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t),
                     bearing,
-                    distance
+                    distance,
+                    i
                 )
             }
         }
