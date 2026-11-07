@@ -50,6 +50,7 @@ internal class Real3DVehicleSurface(context: Context) : GLSurfaceView(context) {
 internal fun Real3DCarAtTrackingAnchor(
     visible: Boolean,
     viewportHeight: Dp,
+    compactLandscape: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
@@ -62,10 +63,12 @@ internal fun Real3DCarAtTrackingAnchor(
     }
     // Follow-mode MapLibre uses 44% top padding, positioning its camera puck
     // around 72% down the screen; stay aligned with the native follow anchor.
-    val top = viewportHeight * .72f - 59.dp
+    val vehicleSize = if (compactLandscape) 92.dp else 118.dp
+    val fraction = if (compactLandscape) .60f else .72f
+    val top = viewportHeight * fraction - vehicleSize / 2
     AndroidView(
         factory = { view },
-        modifier = modifier.offset(y = top).size(width = 118.dp, height = 118.dp)
+        modifier = modifier.offset(y = top).size(vehicleSize)
     )
 }
 
