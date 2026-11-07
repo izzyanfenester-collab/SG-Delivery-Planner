@@ -161,7 +161,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
                     // 3D uses an actual pre-rendered vehicle bitmap, not a tilted 2D arrow.
-                    .gpsDrawable(if (session.threeDimensional)
+                    .gpsDrawable(if (session.threeDimensional && session.cameraMode == "follow")
+                        R.drawable.ic_gps_transparent else if (session.threeDimensional)
                         R.drawable.ic_gps_car_3d_marker else R.drawable.ic_gps_vehicle_3d)
                     .foregroundDrawable(R.drawable.ic_gps_transparent)
                     .backgroundDrawable(R.drawable.ic_gps_transparent)
@@ -187,13 +188,14 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
 
     // Switching 2D/3D changes both the physical vehicle icon and the map pitch.
     // Reconfigure only the GPS drawable; do not reload the map or interrupt the route.
-    LaunchedEffect(styleReady, session.threeDimensional) {
+    LaunchedEffect(styleReady, session.threeDimensional, session.cameraMode) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
         val scale = if (session.threeDimensional) 1.0f else 1.8f
         component.applyStyle(component.locationComponentOptions.toBuilder()
-            .gpsDrawable(if (session.threeDimensional)
+            .gpsDrawable(if (session.threeDimensional && session.cameraMode == "follow")
+                R.drawable.ic_gps_transparent else if (session.threeDimensional)
                 R.drawable.ic_gps_car_3d_marker else R.drawable.ic_gps_vehicle_3d)
             .minZoomIconScale(scale).maxZoomIconScale(scale).build())
         component.renderMode = RenderMode.GPS
