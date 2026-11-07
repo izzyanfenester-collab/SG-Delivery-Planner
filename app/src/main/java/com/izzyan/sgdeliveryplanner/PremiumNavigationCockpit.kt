@@ -3,6 +3,8 @@ package com.izzyan.sgdeliveryplanner
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -86,6 +88,7 @@ internal fun PremiumNavigationCockpit(
     BoxWithConstraints(Modifier.fillMaxSize().background(CockpitNavy)) {
         val landscape = maxWidth > maxHeight
         val narrow = maxWidth < 365.dp
+        val tinyLandscape = landscape && maxHeight < 420.dp
         // The native map is genuinely full screen. All guidance sits on top.
         NavigationMap(session, Modifier.matchParentSize(), permitted)
 
@@ -192,16 +195,18 @@ internal fun PremiumNavigationCockpit(
             ) {
                 CockpitControl(Icons.Filled.MyLocation, "Recenter",
                     active = session.cameraMode == "follow") { session.recenter() }
-                CockpitControl(Icons.Filled.Map, "Route overview",
-                    active = session.cameraMode == "overview") {
-                    session.cameraMode = "overview"
-                    session.cameraRequest++
+                if (!tinyLandscape) {
+                    CockpitControl(Icons.Filled.Map, "Route overview",
+                        active = session.cameraMode == "overview") {
+                        session.cameraMode = "overview"
+                        session.cameraRequest++
+                    }
+                    CockpitControl(
+                        icon = Icons.Filled.Explore,
+                        description = if (session.threeDimensional) "Switch to 2D" else "Switch to 3D",
+                        active = session.threeDimensional
+                    ) { session.toggleDimension() }
                 }
-                CockpitControl(
-                    icon = Icons.Filled.Explore,
-                    description = if (session.threeDimensional) "Switch to 2D" else "Switch to 3D",
-                    active = session.threeDimensional
-                ) { session.toggleDimension() }
                 if (showZoom) {
                     CockpitControl(Icons.Filled.Add, "Zoom in") { session.adjustZoom(.5) }
                     CockpitControl(Icons.Filled.Remove, "Zoom out") { session.adjustZoom(-.5) }
@@ -323,6 +328,7 @@ internal fun PremiumNavigationCockpit(
             Column(
                 Modifier.fillMaxWidth()
                     .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -336,6 +342,10 @@ internal fun PremiumNavigationCockpit(
                 MenuOption(Icons.Filled.Map, "Route overview") {
                     menuOpen = false
                     session.cameraMode = "overview"; session.cameraRequest++
+                }
+                MenuOption(Icons.Filled.Explore,
+                    if (session.threeDimensional) "Switch to 2D" else "Switch to 3D") {
+                    menuOpen = false; session.toggleDimension()
                 }
                 MenuOption(Icons.Filled.Add, "Show zoom controls") {
                     showZoom = true; menuOpen = false
