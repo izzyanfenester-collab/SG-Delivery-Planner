@@ -2,7 +2,16 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.izzyan.sgdeliveryplanner"
  compileSdk = 36
- defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 23; versionName = "1.4.12-b823" }
+ defaultConfig {
+   applicationId = "com.izzyan.sgdeliveryplanner"
+   minSdk = 26
+   targetSdk = 36
+   versionCode = 24
+   versionName = "1.4.13-b824-testing"
+   // Pilot-only: extractable values in a distributed APK are NOT secure production credentials.
+   resValue("string", "runner_traffic_backend_url", System.getenv("SG_TRAFFIC_ENDPOINT").orEmpty())
+   resValue("string", "runner_traffic_pilot_key", System.getenv("SG_TRAFFIC_PILOT_TOKEN").orEmpty())
+ }
  // Release signing is intentionally supplied only by environment variables.
  // Never commit the keystore or passwords to the repository.
  val releaseKeystore = System.getenv("SG_DELIVERY_KEYSTORE_PATH")
