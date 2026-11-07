@@ -43,6 +43,24 @@ class NavigationDisplayTuningTest {
         assertNull(NavigationDisplayTuning.smoothBearing(null, null, 0f))
     }
 
+    @Test fun adaptiveZoomPrioritizesNearbyTurnsAndDestination() {
+        val highway = NavigationDisplayTuning.adaptiveZoom(30f, 3000.0, 10000.0, "Continue")
+        val turn = NavigationDisplayTuning.adaptiveZoom(30f, 45.0, 10000.0, "Turn left")
+        val roundabout = NavigationDisplayTuning.adaptiveZoom(14f, 250.0, 3000.0, "At roundabout take 2nd exit")
+        val ordinary = NavigationDisplayTuning.adaptiveZoom(14f, 250.0, 3000.0, "Continue")
+        assertTrue(turn > highway)
+        assertTrue(roundabout > ordinary)
+        assertTrue(NavigationDisplayTuning.adaptiveZoom(10f, null, 100.0, "Continue") >
+            NavigationDisplayTuning.adaptiveZoom(10f, null, 1000.0, "Continue"))
+    }
+
+    @Test fun zoomHysteresisPreventsCameraOscillation() {
+        assertTrue(NavigationDisplayTuning.shouldChangeZoom(Double.NaN, 18.0, 0))
+        assertTrue(!NavigationDisplayTuning.shouldChangeZoom(18.0, 18.15, 4000))
+        assertTrue(!NavigationDisplayTuning.shouldChangeZoom(18.0, 18.6, 1000))
+        assertTrue(NavigationDisplayTuning.shouldChangeZoom(18.0, 18.6, 2200))
+    }
+
     @Test fun maneuverArrowReflectsInstructions() {
         assertEquals("↱", NavigationDisplayTuning.maneuverArrow("Turn right onto Ang Mo Kio Avenue 3"))
         assertEquals("↰", NavigationDisplayTuning.maneuverArrow("Keep left"))
