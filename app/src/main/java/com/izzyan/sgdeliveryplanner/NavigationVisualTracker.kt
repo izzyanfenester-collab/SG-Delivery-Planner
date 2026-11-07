@@ -8,7 +8,8 @@ import kotlin.math.hypot
 internal data class NavigationVisualFix(
     val position: GpsPoint,
     val bearingDegrees: Float?,
-    val matchedToRoute: Boolean
+    val matchedToRoute: Boolean,
+    val matchedSegmentIndex: Int? = null
 )
 
 internal data class NavigationRoadMatch(
@@ -142,6 +143,6 @@ internal class NavigationVisualTracker {
         previousRaw = raw
         previousDisplay = display
         previousHeading = heading
-        return NavigationVisualFix(display, heading, match != null || holdStill)
+        return NavigationVisualFix(display, heading, match != null || holdStill, match?.segmentIndex)
     }
 }
