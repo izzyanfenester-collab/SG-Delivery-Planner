@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Real pre-rendered 3D car asset with transparent background. Sized for MapLibre puck. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="86dp" android:height="86dp" android:gravity="center">
+        <bitmap
+            android:src="@drawable/ic_gps_axia_3d"
+            android:antialias="true"
+            android:filter="true"
+            android:gravity="fill" />
+    </item>
+</layer-list>
