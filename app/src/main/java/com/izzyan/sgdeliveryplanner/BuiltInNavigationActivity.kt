@@ -109,187 +109,22 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 try { session.run() } finally { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
         }
-        Scaffold(containerColor = PremiumNavy) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                // Full-screen vector map: UI panels overlay the road view without shrinking it.
-                NavigationMap(session, Modifier.matchParentSize(), permitted)
-
-                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Color(0xFF081B33), shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, Color(0xFFD4AF37).copy(alpha = 0.80f))) {
-                        Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = Color(0xFFD4AF37), fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(onClick = { session.toggleDimension() },
-                                        contentPadding = PaddingValues(horizontal = 5.dp)) {
-                                        Text(if (session.threeDimensional) "3D" else "2D",
-                                            color = Color.White, fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp)
-                                    }
-                                    IconButton(onClick = { session.toggleMute() }, modifier = Modifier.size(38.dp)) {
-                                        Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                            contentDescription = if (session.muted) "Enable voice directions" else "Mute voice directions",
-                                            tint = Color.White)
-                                    }
-                                    IconButton(onClick = { showCameras = true }, modifier = Modifier.size(38.dp)) {
-                                        Icon(Icons.Filled.PhotoCamera, contentDescription = "Traffic cameras", tint = Color.White)
-                                    }
-                                }
-                            }
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
-                                    color = Color(0xFFD4AF37), fontSize = 52.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.width(56.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                    Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
-                                        color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold,
-                                        maxLines = 1)
-                                    Text(if (session.arrived) "Destination reached" else
-                                        NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
-                                        color = Color.White, fontSize = 21.sp, maxLines = 2,
-                                        lineHeight = 24.sp, fontWeight = FontWeight.Medium)
-                                }
-                                NavigationDisplayTuning.roundaboutExit(session.instruction)?.let { exit ->
-                                    Text(exit, color = Color(0xFFD4AF37), fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                    if (session.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)
-                    session.message?.let { message ->
-                        Surface(color = PremiumNavy.copy(alpha = 0.95f), shape = RoundedCornerShape(10.dp)) {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text(message, Modifier.weight(1f), color = Color(0xFFFFD492), fontSize = 13.sp)
-                                if (!session.loading && !session.arrived)
-                                    TextButton(onClick = { retry++ }) { Text("Retry", color = PremiumGold) }
-                            }
-                        }
-                    }
-                }
-
-                if (!permitted) {
-                    Surface(Modifier.align(Alignment.Center).padding(16.dp), color = PremiumNavy,
-                        shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(if (requestedPermission) "Precise GPS permission is needed. Allow location in Android settings if blocked."
-                                else "Allow precise location to start 3D navigation.", color = Color.White)
-                            Button(onClick = { requestPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow location / Retry") }
-                            if (requestedPermission) TextButton(onClick = {
-                                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    android.net.Uri.parse("package:$packageName")))
-                            }) { Text("Open app settings") }
-                        }
-                    }
-                }
-
-                Column(Modifier.align(Alignment.CenterEnd).padding(end = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode == "follow") {
-                        session.recenter()
-                    }
-                    GpsControl(Icons.Filled.Map, "Route", session.cameraMode == "overview") {
-                        session.cameraMode = "overview"; session.cameraRequest++
-                    }
-                    GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
-                    GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
-                    GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
-                        if (session.localTrafficVisible) session.toggleLocalTraffic()
-                        else showLocalTrafficConsent = true
-                    }
-                }
-
-                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { showFuelStations = true },
-                        enabled = permitted && session.location != null,
-                        modifier = Modifier.width(74.dp).height(70.dp),
-                        contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = PremiumGold, contentColor = PremiumNavy)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Icon(Icons.Filled.LocalGasStation, contentDescription = "Nearby petrol stations",
-                                modifier = Modifier.size(27.dp))
-                            Text("Petrol", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    session.location?.takeIf { it.hasSpeed() }?.let { fix ->
-                        Surface(color = PremiumNavy.copy(alpha = 0.96f),
-                            shape = RoundedCornerShape(14.dp)) {
-                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                                Text("km/h", color = Color(0xFFB9C9E0), fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
-
-                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
-                        modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp))
-                    Surface(color = PremiumNavy.copy(alpha = 0.97f), shape = RoundedCornerShape(18.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween) {
-                            val remaining = session.remainingSeconds
-                            val eta = if (remaining != null) Instant.ofEpochMilli(
-                                navigationEta(System.currentTimeMillis(), remaining))
-                                .atZone(ZoneId.of("Asia/Singapore"))
-                                .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
-                            Column(Modifier.weight(1f)) {
-                                Text("ARRIVAL", color = Color(0xFFB9C9E0), fontSize = 11.sp)
-                                Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
-                                Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
-                                    color = Color(0xFFB9C9E0), fontSize = 14.sp)
-                                if (session.localTrafficVisible && session.runnerTrafficConfigured)
-                                    Text(session.runnerTrafficStatus, color = Color(0xFFACC3D8),
-                                        fontSize = 11.sp, maxLines = 2)
-                                if (session.localTrafficVisible && !session.runnerTrafficConfigured) {
-                                    val level = session.trafficState.ahead
-                                    val label = when (level) {
-                                        LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
-                                        LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
-                                        LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
-                                        LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
-                                    }
-                                    Text(label, color = Color(0xFFACC3D8), fontSize = 11.sp)
-                                }
-                            }
-                            Column(horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = Color(0xFFF1CC68),
-                                    fontWeight = FontWeight.Bold, fontSize = 26.sp,
-                                    letterSpacing = 0.8.sp, maxLines = 1, softWrap = false,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(min = 114.dp)
-                                        .align(Alignment.CenterHorizontally))
-                                FilledTonalButton(onClick = { finish() },
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = Color(0xFF185477), contentColor = Color.White),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        PremiumNavigationCockpit(
+            stop = stop,
+            session = session,
+            permitted = permitted,
+            requestedPermission = requestedPermission,
+            onRequestLocation = { requestPermission() },
+            onOpenAppSettings = {
+                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:$packageName")))
+            },
+            onRetryRoute = { retry++ },
+            onPetrol = { showFuelStations = true },
+            onCameras = { showCameras = true },
+            onTrafficRequest = { showLocalTrafficConsent = true },
+            onDelivery = { finish() }
+        )
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
         if (showLocalTrafficConsent) {
