@@ -6,8 +6,8 @@ android {
    applicationId = "com.izzyan.sgdeliveryplanner"
    minSdk = 26
    targetSdk = 36
-   versionCode = 24
-   versionName = "1.4.13-b824-testing"
+   versionCode = 25
+   versionName = "1.4.14-b825-testing"
    // Pilot-only: extractable values in a distributed APK are NOT secure production credentials.
    resValue("string", "runner_traffic_backend_url", System.getenv("SG_TRAFFIC_ENDPOINT").orEmpty())
    resValue("string", "runner_traffic_pilot_key", System.getenv("SG_TRAFFIC_PILOT_TOKEN").orEmpty())
