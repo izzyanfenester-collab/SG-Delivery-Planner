@@ -52,6 +52,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
+    var traveledLine by remember { mutableStateOf<Polyline?>(null) }
+    val traveledTracker = remember { TraveledRouteTracker() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
     val zoomController = remember { NavigationZoomController() }
     val visualTracker = remember { NavigationVisualTracker() }
@@ -123,7 +125,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
                     // TomTom-style blue 3D arrow; other puck layers stay invisible.
-                    .gpsDrawable(R.drawable.ic_gps_vehicle_3d)
+                    .gpsDrawable(if (session.threeDimensional)
+                        R.drawable.ic_gps_arrow_perspective else R.drawable.ic_gps_vehicle_3d)
                     .foregroundDrawable(R.drawable.ic_gps_transparent)
                     .backgroundDrawable(R.drawable.ic_gps_transparent)
                     .bearingDrawable(R.drawable.ic_gps_transparent)
@@ -144,6 +147,36 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 session.mapMessage = "GPS display could not start. Try reopening navigation."
             }
         }
+    }
+
+    // Change the actual GPS marker graphic when 2D / 3D is selected; tilting the map
+    // alone does NOT turn a flat location icon into a 3D-looking navigation arrow.
+    LaunchedEffect(styleReady, session.threeDimensional) {
+        if (!styleReady) return@LaunchedEffect
+        val native = map ?: return@LaunchedEffect
+        native.locationComponent.applyStyle(LocationComponentOptions.builder(context)
+            .gpsDrawable(if (session.threeDimensional)
+                R.drawable.ic_gps_arrow_perspective else R.drawable.ic_gps_vehicle_3d)
+            .foregroundDrawable(R.drawable.ic_gps_transparent)
+            .backgroundDrawable(R.drawable.ic_gps_transparent)
+            .bearingDrawable(R.drawable.ic_gps_transparent)
+            .foregroundDrawableStale(R.drawable.ic_gps_transparent)
+            .backgroundDrawableStale(R.drawable.ic_gps_transparent)
+            .accuracyAlpha(0f)
+            .pulseEnabled(false).elevation(0f).enableStaleState(false)
+            .minZoomIconScale(1.8f).maxZoomIconScale(1.8f).build())
+        native.locationComponent.renderMode = RenderMode.GPS
+    }
+
+    // New route / new map style: clear progress so the gray segment never carries
+    // into the next postal-code destination or a newly calculated route.
+    LaunchedEffect(styleReady, session.route, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        traveledTracker.reset(session.shape)
+        visualTracker.reset()
+        traveledLine?.let { runCatching { native.removePolyline(it) } }
+        traveledLine = null
     }
 
     LaunchedEffect(styleReady, session.route, session.destination, nightMode) {
@@ -168,6 +201,8 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         if (!styleReady) return@LaunchedEffect
         routeLine?.let { runCatching { native.removePolyline(it) } }
         routeLine = null
+        traveledLine?.let { runCatching { native.removePolyline(it) } }
+        traveledLine = null
         trafficPolylines.forEach { runCatching { native.removePolyline(it) } }
         trafficPolylines.clear()
         if (session.localTrafficVisible) {
@@ -190,6 +225,14 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             routeLine = native.addPolyline(PolylineOptions()
                 .addAll(session.shape.map { LatLng(it.lat, it.lon) })
                 .color(android.graphics.Color.rgb(0, 190, 245)).width(9f))
+            // Gray is drawn OVER the blue road already passed, without replacing the
+            // navigable blue route ahead. Recreate after local-traffic redraw if needed.
+            val cut = traveledTracker.current()
+            if (cut != null && cut.completedMeters >= 3.0 && cut.grayBehind.size >= 2) {
+                traveledLine = native.addPolyline(PolylineOptions()
+                    .addAll(cut.grayBehind.map { LatLng(it.lat, it.lon) })
+                    .color(android.graphics.Color.rgb(144, 154, 169)).width(11f))
+            }
         }
     }
 
@@ -222,6 +265,24 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             visual.bearingDegrees?.let { bearing = it }
         }
         native.locationComponent.forceLocationUpdate(displayed)
+        // Geographic route progression uses the SAME map-matched position as the arrow.
+        // Native MapLibre polyline updates avoid remove/add flicker on every GPS fix.
+        val traveled = traveledTracker.advance(
+            visual.matchedSegmentIndex, visual.position,
+            fix.speed.takeIf { fix.hasSpeed() }, SystemClock.elapsedRealtime())
+        if (traveled != null && traveled.completedMeters >= 3.0 &&
+            traveled.grayBehind.size >= 2 && session.shape.size >= 2) {
+            val points = traveled.grayBehind.map { LatLng(it.lat, it.lon) }
+            val previous = traveledLine
+            if (previous == null) {
+                traveledLine = native.addPolyline(PolylineOptions()
+                    .addAll(points)
+                    .color(android.graphics.Color.rgb(144, 154, 169)).width(11f))
+            } else {
+                previous.points = points
+                native.updatePolyline(previous)
+            }
+        }
         if (session.cameraMode == "follow") {
             val manualZoom = session.zoomOverride
             val proposed = manualZoom ?: NavigationCameraPolicy.targetZoom(
