@@ -253,7 +253,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                                 Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
                                     color = Color(0xFFB9C9E0), fontSize = 14.sp)
-                                if (session.localTrafficVisible) {
+                                if (session.localTrafficVisible && session.runnerTrafficConfigured)
+                                    Text(session.runnerTrafficStatus, color = Color(0xFFACC3D8),
+                                        fontSize = 11.sp, maxLines = 2)
+                                if (session.localTrafficVisible && !session.runnerTrafficConfigured) {
                                     val level = session.trafficState.ahead
                                     val label = when (level) {
                                         LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
@@ -292,16 +295,21 @@ class BuiltInNavigationActivity : ComponentActivity() {
         if (showLocalTrafficConsent) {
             AlertDialog(
                 onDismissRequest = { showLocalTrafficConsent = false },
-                title = { Text("Local traffic estimates") },
-                text = { Text("Use your phone's driving GPS speed to estimate traffic on roads you travel. " +
-                    "Measurements remain on this phone only, are not uploaded, and are not " +
-                    "Singapore-wide live traffic. Unknown roads remain uncolored. " +
-                    "Stopping for deliveries is excluded.") },
+                title = { Text("Runner-powered traffic") },
+                text = { Text(if (session.runnerTrafficConfigured)
+                    "Share only moving, accurate GPS speed, coordinates, heading and a temporary " +
+                    "anonymous navigation session ID with the configured SG Delivery pilot server. " +
+                    "Nearby runners' observations may appear as road congestion. No order or payment " +
+                    "data is uploaded. Stop sharing any time using Traffic. Coverage is unavailable " +
+                    "without enough different runners; delivery stops are excluded."
+                    else "The shared runner traffic backend is not configured in this build. " +
+                    "Traffic can show on-device estimates only; this is NOT Singapore-wide live traffic. " +
+                    "No GPS readings will be uploaded.") },
                 confirmButton = {
                     TextButton(onClick = {
                         session.toggleLocalTraffic()
                         showLocalTrafficConsent = false
-                    }) { Text("Enable local estimates") }
+                    }) { Text(if (session.runnerTrafficConfigured) "Enable runner traffic" else "Local estimates only") }
                 },
                 dismissButton = {
                     TextButton(onClick = { showLocalTrafficConsent = false }) { Text("Cancel") }
@@ -356,6 +364,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var threeDimensional by mutableStateOf(gpsModePreferences.is3dEnabled()); private set
     var localTrafficVisible by mutableStateOf(false); private set
     var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
+    var sharedTrafficSegments by mutableStateOf<List<SharedTrafficSegment>>(emptyList()); private set
+    var runnerTrafficStatus by mutableStateOf("Runner traffic: unavailable"); private set
+    val runnerTrafficConfigured: Boolean get() = runnerTraffic.configured
     fun toggleDimension() {
         threeDimensional = !threeDimensional
         gpsModePreferences.set3dEnabled(threeDimensional)
@@ -367,6 +378,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         // Delete any in-memory traffic observations whenever consent changes.
         localTraffic.reset(shape, route?.distance ?: 0.0, route?.duration ?: 0.0)
         trafficState = LocalTrafficState.EMPTY
+        sharedTrafficSegments = emptyList()
+        runnerTrafficStatus = if (localTrafficVisible && !runnerTraffic.configured)
+            "Shared runner traffic not configured" else "Runner traffic: unavailable"
+        if (!localTrafficVisible) runnerTraffic.clear()
     }
     var mapMessage by mutableStateOf<String?>(null)
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
@@ -395,6 +410,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     val trafficCameras = TrafficCameraClient()
     private val adaptiveEta = AdaptiveNavigationEta()
     private val localTraffic = LocalNavigationTraffic()
+    private val runnerTraffic = RunnerTrafficClient(context)
     private var baseRemainingSeconds: Double? = null
     private val feed = SessionLocationEngine()
     private val sdk = AndroidMapLibreNavigation(context, locationEngine = feed, options = MapLibreNavigationOptions(
@@ -445,6 +461,22 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     }
                 }
             }
+            // Upload only after explicit traffic consent; never block GPS fixes on a network call.
+            launch {
+                while (isActive) {
+                    if (localTrafficVisible && !arrived) {
+                        val position = location?.let { GpsPoint(it.latitude, it.longitude) }
+                        val snapshot = runnerTraffic.exchange(position)
+                        sharedTrafficSegments = snapshot.segments
+                        runnerTrafficStatus = snapshot.status
+                        baseRemainingSeconds?.let { base ->
+                            remainingSeconds = etaWithTraffic(base, remainingMeters ?: 0.0,
+                                SystemClock.elapsedRealtime())
+                        }
+                    }
+                    delay(45_000)
+                }
+            }
             var initialAttempt = false
             fusedLocations(context).collect { fix ->
                 val now = SystemClock.elapsedRealtime()
@@ -455,17 +487,23 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 lastFix = now; location = fix
                 adaptiveEta.observe(if (fix.hasSpeed()) fix.speed.toDouble() else null, fix.accuracy.toDouble(), fix.elapsedRealtimeNanos / 1_000_000,
                     if (fix.hasSpeedAccuracy()) fix.speedAccuracyMetersPerSecond.toDouble() else null)
-                baseRemainingSeconds?.let { base -> remainingSeconds = adaptiveEta.remainingSeconds(base, remainingMeters ?: 0.0, now) }
+                baseRemainingSeconds?.let { base ->
+                    remainingSeconds = etaWithTraffic(base, remainingMeters ?: 0.0, now)
+                }
                 if (message?.startsWith("GPS") == true) message = null
                 if (arrived) return@collect
                 val point = GpsPoint(fix.latitude, fix.longitude)
                 if (localTrafficVisible && shape.size >= 2) {
                     val matched = NavigationRoadMatcher.match(point, shape, fix.accuracy,
                         fix.speed.takeIf { fix.hasSpeed() }, fix.bearing.takeIf { fix.hasBearing() })
+                    val distanceToStop = navigationDistance(
+                        point, GpsPoint(destination.lat, destination.lon))
                     localTraffic.observe(matched?.segmentIndex,
                         fix.speed.takeIf { fix.hasSpeed() }, fix.accuracy, now,
-                        navigationDistance(point, GpsPoint(destination.lat, destination.lon)),
-                        driving = active && !arrived && !loading)
+                        distanceToStop, driving = active && !arrived && !loading)
+                    // Only map-matched moving GPS may contribute to the shared backend.
+                    runnerTraffic.observe(fix, distanceToStop,
+                        driving = active && !arrived && !loading && matched != null)
                     val updatedTraffic = localTraffic.snapshot(now, matched?.segmentIndex)
                     if (updatedTraffic != trafficState) trafficState = updatedTraffic
                 }
@@ -493,7 +531,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "GPS or destination unavailable. Please retry." }
-        finally { active = false; requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); speech?.stop(); scope = null }
+        finally { active = false; runnerTraffic.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); speech?.stop(); scope = null }
     }
 
     private fun requestRoute(fix: Location) {
@@ -509,6 +547,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 shape = decodeNavigationGeometry(newRoute.geometry)
                 localTraffic.reset(shape, newRoute.distance, newRoute.duration)
                 trafficState = LocalTrafficState.EMPTY
+                sharedTrafficSegments = emptyList()
                 route = newRoute
                 adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
@@ -522,7 +561,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun updateProgress(p: RouteProgress) {
         remainingMeters = p.distanceRemaining.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         baseRemainingSeconds = p.durationRemaining.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
-        remainingSeconds = adaptiveEta.remainingSeconds(baseRemainingSeconds!!, remainingMeters!!, SystemClock.elapsedRealtime())
+        remainingSeconds = etaWithTraffic(baseRemainingSeconds!!, remainingMeters!!,
+            SystemClock.elapsedRealtime())
         turnMeters = p.stepDistanceRemaining.coerceAtLeast(0.0)
         val current = p.currentLegProgress.currentStepProgress
         val next = current.nextStep ?: current.step
@@ -541,9 +581,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         }
     }
+    private fun etaWithTraffic(baseSeconds: Double, remainingDistance: Double, now: Long): Double {
+        val localEstimate = adaptiveEta.remainingSeconds(baseSeconds, remainingDistance, now)
+        return if (localTrafficVisible && runnerTraffic.configured)
+            SharedTrafficEta.estimate(localEstimate, shape, remainingDistance, sharedTrafficSegments)
+        else localEstimate
+    }
+
     fun toggleMute() { muted = !muted; if (muted) speech?.stop() else voiceGate.reset() }
     private fun speak(text: String, id: String) { if (active && speechReady && !muted) speech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) }
-    override fun close() { active = false; requestJob?.cancel(); sdk.onDestroy(); speech?.stop(); speech?.shutdown(); speech = null }
+    override fun close() { active = false; runnerTraffic.clear(); requestJob?.cancel(); sdk.onDestroy(); speech?.stop(); speech?.shutdown(); speech = null }
 }
 
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
