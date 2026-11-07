@@ -6,8 +6,10 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class RunnerTrafficObservationTest {
     private fun moving(): Location = Location("fused").apply {
         latitude = 1.3000
