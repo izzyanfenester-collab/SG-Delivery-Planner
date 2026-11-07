@@ -51,7 +51,10 @@ internal object SharedTrafficEta {
             val actual = requireNotNull(matching.speedKph)
             val freeFlow = matching.freeFlowKph
             // Delta travel time (seconds), applied only to future route geometry.
-            correction += remainingPart * 3.6 * (1.0 / actual - 1.0 / freeFlow)
+            // Never extend a short observed road edge across an unobserved long route line.
+            val coveredMeters = min(remainingPart,
+                navigationDistance(matching.start, matching.end))
+            correction += coveredMeters * 3.6 * (1.0 / actual - 1.0 / freeFlow)
             matched++
         }
         if (matched == 0 || !correction.isFinite()) return baselineSeconds
