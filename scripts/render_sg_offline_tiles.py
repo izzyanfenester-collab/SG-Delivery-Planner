@@ -226,6 +226,7 @@ def natural_earth_land(shp: Path):
 def segments_from_graph(file: Path):
     """Avoid external map services and use the existing verified offline road geometry."""
     buf = file.read_bytes()
+    classes = file.with_suffix(".classes").read_bytes()
     magic, version, nodes, edges, turns, *_ = struct.unpack_from("<4s7i", buf)
     if magic != b"SGR1" or version not in (1, 2) or nodes < 1000:
         raise ValueError("SGR2 road network is missing or invalid")
@@ -236,14 +237,15 @@ def segments_from_graph(file: Path):
     coords = [node.unpack_from(buf, nbase + i * 16) for i in range(nodes)]
     for i, (lat, lon, first, count) in enumerate(coords):
         for j in range(first, first + (count & 0x7FFFFFFF)):
-            target, metres, seconds, _ = edge.unpack_from(buf, ebase + j * 16)
+            target, metres, seconds, way_id = edge.unpack_from(buf, ebase + j * 16)
             lt, ln, *_ = coords[target]
             if abs(lat - lt) > 1_000_000 or abs(lon - ln) > 1_000_000:
                 continue
-            # Classes derived from estimated driving speed; PBF supplies detailed land-use.
-            kmh = metres * 3.6 / max(1, seconds)
-            kind = "express" if kmh >= 65 else "major" if kmh >= 46 else (
-                "minor" if kmh >= 30 else "local")
+            # Use authoritative OSM highway category, not estimated speed.
+            # Integer-rounded driving seconds inflate speeds on tiny segments.
+            if way_id <= 0 or way_id >= len(classes):
+                raise RuntimeError("Offline road class table is not synchronized with SGR2")
+            kind = ("local", "minor", "major", "express")[classes[way_id]]
             yield (lat / 1e7, lon / 1e7, lt / 1e7, ln / 1e7, kind)
 
 
