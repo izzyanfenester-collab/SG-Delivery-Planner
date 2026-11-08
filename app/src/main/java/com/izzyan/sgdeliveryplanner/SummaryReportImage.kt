@@ -16,10 +16,10 @@ import java.util.UUID
 /** Renders only saved summary data, independent of windows, cards and system chrome. */
 fun generateSummaryReportImage(context: Context, plan: Plan): File {
     val text=buildSummaryReport(plan)
-    val gold=Color.rgb(231,190,91)
+    val gold=SGReportColors.Gold
     // Match the 1080px Delivery Report body; 72px preserves the preview's 24sp title hierarchy.
     val ink=TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color=Color.rgb(232,240,255);textSize=DeliveryReportTypography.bodyPx
+        color=SGReportColors.White;textSize=DeliveryReportTypography.bodyPx
         setShadowLayer(5f,1f,2f,Color.argb(220,0,0,0))
     }
     val styled=SpannableString(text).apply {
@@ -40,7 +40,7 @@ fun generateSummaryReportImage(context: Context, plan: Plan): File {
         val canvas=Canvas(bitmap)
         drawMarinaBayReportBackground(context,canvas,1080,height)
         // Export uses the same 70% transparent card as the report preview.
-        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=Color.argb(77,16,39,68)}
+        val panel=Paint(Paint.ANTI_ALIAS_FLAG).apply {color=SGReportColors.ReportPanel}
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)
         panel.color=gold;panel.style=Paint.Style.STROKE;panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,height-24f),24f,24f,panel)
