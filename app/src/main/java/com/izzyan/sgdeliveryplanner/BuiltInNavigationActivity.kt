@@ -515,7 +515,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 val installed = offlineRoads.loadOrNull()
                 val localPreferred = installed != null && !hasUsableInternet(context)
                 val newRoute = if (localPreferred) {
-                    routingSource = "OFFLINE – local roads (map tiles need internet)"
+                    routingSource = if (offlineRoads.offlineVectorTilePath() != null)
+                        "OFFLINE – local maps & road routing"
+                    else "OFFLINE – road routing only; map tiles missing"
                     withContext(Dispatchers.Default) {
                         offlineDrivingDirections(installed!!.route(origin, target))
                     }
@@ -525,7 +527,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     } catch (e: CancellationException) { throw e }
                       catch (e: Exception) {
                         if (installed == null) throw e
-                        routingSource = "OFFLINE – local roads (map tiles need internet)"
+                        routingSource = if (offlineRoads.offlineVectorTilePath() != null)
+                        "OFFLINE – local maps & road routing"
+                    else "OFFLINE – road routing only; map tiles missing"
                         withContext(Dispatchers.Default) {
                             offlineDrivingDirections(installed.route(origin, target))
                         }
