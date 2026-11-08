@@ -247,7 +247,7 @@ def package(pbf: Path, output: Path, version: str, land_shp: Path) -> dict:
             "schema": 2,
             "version": version,
             "built_at": datetime.now(timezone.utc).isoformat(),
-            "source": "© OpenStreetMap contributors (ODbL), Geofabrik extract",
+            "source": "© OpenStreetMap contributors (ODbL), Geofabrik OSM extract; Natural Earth land (Public Domain)",
             "scope": "Singapore driving road network plus border approaches",
             "graph": details,
             "road_tiles": {"sha256": tile_sha, "bytes": tiles.stat().st_size, "format": "mbtiles", "min_zoom": 9, "max_zoom": 16},
