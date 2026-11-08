@@ -12,14 +12,17 @@ import java.time.LocalDateTime
 import java.util.UUID
 import java.util.zip.*
 
-data class HistoryBackupResult(val routes:Int, val photos:Int, val missing:Int, val payments:Int = 0)
-data class HistoryRestoreResult(val restored:Int, val skipped:Int, val photos:Int, val payments:Int = 0)
+data class HistoryBackupResult(val routes:Int, val photos:Int, val missing:Int,
+    val payments:Int = 0, val expenses:Int = 0)
+data class HistoryRestoreResult(val restored:Int, val skipped:Int, val photos:Int,
+    val payments:Int = 0, val expenses:Int = 0)
 
 /** A portable, unencrypted ZIP with saved routes and their private proof images. */
 class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
     private val gson=Gson()
     private val store=OrderProofStore(context)
     private val paymentLedger=PaymentLedger(context)
+    private val expenseLedger=RunnerExpenseLedger(context)
     private val imageName=Regex("[A-Za-z0-9_-]+\\.jpg")
     private fun photoIds(plan:Plan)=plan.stops.flatMap { listOfNotNull(it.order?.proofFileId,it.order?.paymentProofFileId) }
         .filter { imageName.matches(it) }.distinct()
@@ -33,8 +36,12 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
         val payments=paymentLedger.read()
         val paymentJson=gson.toJson(payments).toByteArray()
         require(paymentJson.size<=5*1024*1024) { "Payment history file is too large." }
-        val manifest=gson.toJson(mapOf("format" to "sg-delivery-history","version" to 2,
+        val expenses=expenseLedger.read()
+        val expenseJson=gson.toJson(expenses).toByteArray()
+        require(expenseJson.size<=5*1024*1024) { "Expense history file is too large." }
+        val manifest=gson.toJson(mapOf("format" to "sg-delivery-history","version" to 3,
             "routeCount" to routes.size,"paymentCount" to payments.size,
+            "expenseCount" to expenses.size,
             "exportedAt" to LocalDateTime.now().toString()))
         val stream=context.contentResolver.openOutputStream(uri,"w") ?: error("Cannot write backup.")
         stream.use { target -> ZipOutputStream(target.buffered()).use { zip ->
@@ -44,6 +51,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             textEntry("manifest.json",manifest.toByteArray())
             textEntry("routes.json",json)
             textEntry("payments.json",paymentJson)
+            textEntry("expenses.json",expenseJson)
             available.forEach { (id,file) ->
                 require(file.length()<=20L*1024*1024) { "Proof file too large." }
                 zip.putNextEntry(ZipEntry("proofs/"+id))
@@ -51,7 +59,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 zip.closeEntry()
             }
         } }
-        HistoryBackupResult(routes.size,available.size,names.size-available.size,payments.size)
+        HistoryBackupResult(routes.size,available.size,names.size-available.size,payments.size,expenses.size)
     }
 
     private fun hash(file:File):ByteArray {
@@ -70,6 +78,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             var manifest:ByteArray?=null
             var routesJson:ByteArray?=null
             var paymentsJson:ByteArray?=null
+            var expensesJson:ByteArray?=null
             var total=0L
             val stream=context.contentResolver.openInputStream(uri) ?: error("Cannot read backup.")
             stream.use { source -> ZipInputStream(source.buffered()).use { zip ->
@@ -81,12 +90,13 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                         name=="manifest.json" -> 32768L
                         name=="routes.json" -> 30L*1024*1024
                         name=="payments.json" -> 5L*1024*1024
+                        name=="expenses.json" -> 5L*1024*1024
                         name.startsWith("proofs/")&&imageName.matches(name.removePrefix("proofs/")) -> 20L*1024*1024
                         else -> error("Unexpected backup file.")
                     }
                     var size=0L
                     val buffer=ByteArray(8192)
-                    val text=if(name=="manifest.json"||name=="routes.json"||name=="payments.json")ByteArrayOutputStream() else null
+                    val text=if(name=="manifest.json"||name=="routes.json"||name=="payments.json"||name=="expenses.json")ByteArrayOutputStream() else null
                     val id=name.removePrefix("proofs/")
                     if(text==null) require(images.size<5000) { "Too many images." }
                     val file=if(text==null)File(tmp,id) else null
@@ -103,15 +113,16 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                     if(name=="manifest.json")manifest=text!!.toByteArray()
                     else if(name=="routes.json")routesJson=text!!.toByteArray()
                     else if(name=="payments.json")paymentsJson=text!!.toByteArray()
+                    else if(name=="expenses.json")expensesJson=text!!.toByteArray()
                     else images[id]=file!!
                     zip.closeEntry()
                 }
             } }
             val header=JsonParser.parseString(requireNotNull(manifest) { "Not an SG Delivery backup." }.toString(Charsets.UTF_8)).asJsonObject
             val version=header.get("version")?.asInt
-            require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..2) { "Unsupported backup format." }
-            // v1 archives have routes and proofs only; v2 requires a payments.json entry.
-            val payments=if(version==2) {
+            require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..3) { "Unsupported backup format." }
+            // v1: routes/proofs; v2: +payments; v3: +expenses.
+            val payments=if(version!!>=2) {
                 val bytes=requireNotNull(paymentsJson) { "Payment history missing from backup." }
                 val parsed=gson.fromJson(bytes.toString(Charsets.UTF_8),Array<PaymentRecord>::class.java)?.toList()
                     ?: error("Invalid payment history in backup.")
@@ -120,6 +131,20 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 parsed
             } else {
                 require(paymentsJson==null) { "Unexpected payment history in legacy backup." }
+                emptyList()
+            }
+            val expenses=if(version==3) {
+                val bytes=requireNotNull(expensesJson) { "Expense history missing from backup." }
+                val parsed=gson.fromJson(bytes.toString(Charsets.UTF_8),Array<RunnerExpense>::class.java)?.toList()
+                    ?: error("Invalid expense history in backup.")
+                require(parsed.size<=10000 && parsed.size==header.get("expenseCount")?.asInt &&
+                    parsed.all(::validRunnerExpense) &&
+                    parsed.map { it.id }.distinct().size==parsed.size) {
+                    "Invalid expense history in backup."
+                }
+                parsed
+            } else {
+                require(expensesJson==null) { "Unexpected expense history in legacy backup." }
                 emptyList()
             }
             val rows=gson.fromJson(requireNotNull(routesJson) { "History data missing." }.toString(Charsets.UTF_8),
@@ -151,7 +176,8 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 val restored=dao.insertRestoredRoutes(rows).count { it!=-1L }
                 // Restore on top of existing data; repeated ZIP imports do not duplicate payments.
                 val restoredPayments=paymentLedger.mergeRestored(payments)
-                HistoryRestoreResult(restored,rows.size-restored,newFiles.size,restoredPayments)
+                val restoredExpenses=expenseLedger.mergeRestored(expenses)
+                HistoryRestoreResult(restored,rows.size-restored,newFiles.size,restoredPayments,restoredExpenses)
             } catch(e:Exception) {
                 newFiles.forEach { it.delete() }
                 throw e
