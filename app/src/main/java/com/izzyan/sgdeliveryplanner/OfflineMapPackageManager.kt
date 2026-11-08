@@ -220,7 +220,14 @@ internal class OfflineMapPackageManager(context: Context) {
                     expectedTiles in 1024..MAX_GRAPH_BYTES &&
                     expectedNodes >= 1000) { "Malformed offline map manifest" }
                 val currentVersion = prefs.getString("version", "") ?: ""
-                if (graphFile() != null && tilesFile() != null && version <= currentVersion) {
+                // Same-day package repairs must be installed when verified checksums change.
+                // Otherwise a defective map with the same YYYYMMDD version could get stuck.
+                val sameFiles = prefs.getString("file", null) ==
+                    "sg-routing-" + graphSha + ".bin" &&
+                    prefs.getString("tilesFile", null) ==
+                    "sg-road-map-" + tilesSha + ".mbtiles"
+                if (graphFile() != null && tilesFile() != null &&
+                    version <= currentVersion && sameFiles) {
                     prefs.edit().remove("error").apply()
                     return@withLock false
                 }
