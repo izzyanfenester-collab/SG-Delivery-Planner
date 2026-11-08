@@ -74,8 +74,15 @@ internal class OfflineMapPackageManager(context: Context) {
         return File(directory, fileName).takeIf { it.isFile && it.length() >= 64 }
     }
 
+    /** Local self-generated Singapore driving-road-only raster basemap. */
+    fun tilesFile(): File? {
+        val fileName = prefs.getString("tilesFile", null) ?: return null
+        if (!fileName.matches(Regex("sg-road-map-[a-f0-9]{64}\\.mbtiles"))) return null
+        return File(directory, fileName).takeIf { it.isFile && it.length() > 1024 }
+    }
+
     fun status(): OfflineMapStatus = OfflineMapStatus(
-        installed = graphFile() != null,
+        installed = graphFile() != null && tilesFile() != null,
         version = prefs.getString("version", "Not installed").orEmpty(),
         installedAt = prefs.getLong("installedAt", 0),
         checkedAt = prefs.getLong("checkedAt", 0),
@@ -128,37 +135,62 @@ internal class OfflineMapPackageManager(context: Context) {
         }
     }
 
-    private fun extractGraph(zip: File, graph: File, expectedSize: Long, expectedHash: String) {
-        val hash = digest()
-        var graphFound = false
+    private fun extractPack(
+        zip: File,
+        graph: File,
+        tiles: File,
+        graphSize: Long, graphHash: String,
+        tilesSize: Long, tilesHash: String
+    ) {
+        val found = HashSet<String>()
         ZipInputStream(zip.inputStream().buffered()).use { input ->
             while (true) {
                 val entry = input.nextEntry ?: break
-                if (entry.name == "sg-routing.bin" && !entry.isDirectory) {
-                    if (graphFound) throw IOException("Duplicate road graph entry")
-                    graphFound = true
-                    FileOutputStream(graph).use { output ->
-                        val buf = ByteArray(64 * 1024)
-                        var bytesWritten = 0L
+                val name = entry.name
+                val output = when (name) {
+                    "sg-routing.bin" -> graph
+                    "sg-road-map.mbtiles" -> tiles
+                    "metadata.json" -> null // Informational; checksums come from trusted manifest.
+                    else -> throw IOException("Unexpected offline map ZIP entry")
+                }
+                if (!found.add(name)) throw IOException("Duplicate offline map ZIP entry")
+                if (output != null) {
+                    if (entry.isDirectory) throw IOException("Invalid map ZIP directory entry")
+                    val expected = if (name == "sg-routing.bin") graphSize else tilesSize
+                    val hash = digest()
+                    FileOutputStream(output).use { stream ->
+                        val buffer = ByteArray(64 * 1024)
+                        var total = 0L
                         while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            bytesWritten += n
-                            if (bytesWritten > MAX_GRAPH_BYTES)
-                                throw IOException("Uncompressed road graph too large")
-                            output.write(buf, 0, n)
-                            hash.update(buf, 0, n)
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            if (total > MAX_GRAPH_BYTES) throw IOException("Offline map extracted file too large")
+                            hash.update(buffer, 0, count)
+                            stream.write(buffer, 0, count)
                         }
-                        output.fd.sync()
-                        if (bytesWritten != expectedSize)
-                            throw IOException("Offline graph uncompressed length mismatch")
+                        stream.fd.sync()
+                        if (total != expected) throw IOException("Offline map file size mismatch")
                     }
+                    val digest = hash.digest().hex()
+                    if (digest != (if (name == "sg-routing.bin") graphHash else tilesHash))
+                        throw IOException("Offline map file SHA-256 mismatch")
                 }
                 input.closeEntry()
             }
         }
-        if (!graphFound || hash.digest().hex() != expectedHash)
-            throw IOException("Offline road graph checksum mismatch")
+        if ("sg-routing.bin" !in found || "sg-road-map.mbtiles" !in found)
+            throw IOException("Offline package is missing road graph or rendered road map")
+        // Android SQLite validates MBTiles schema before activation.
+        val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+            tiles.absolutePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+        )
+        try {
+            val tileCount = db.rawQuery("SELECT COUNT(*) FROM tiles", null).use { cursor ->
+                if (!cursor.moveToFirst()) 0L else cursor.getLong(0)
+            }
+            require(tileCount >= 1000L) { "Offline map tiles are incomplete" }
+        } finally { db.close() }
     }
 
     /**
@@ -179,25 +211,31 @@ internal class OfflineMapPackageManager(context: Context) {
                 val expectedZip = manifest.getLong("bytes")
                 val expectedGraph = manifest.getLong("graph_bytes")
                 val expectedNodes = manifest.getInt("nodes")
+                val tilesSha = manifest.getString("tiles_sha256")
+                val expectedTiles = manifest.getLong("tiles_bytes")
                 require(version.matches(Regex("[0-9]{8}")) &&
-                    zipSha.isSha256() && graphSha.isSha256() &&
+                    zipSha.isSha256() && graphSha.isSha256() && tilesSha.isSha256() &&
                     expectedZip in 1024..MAX_PACKAGE_BYTES &&
                     expectedGraph in 1024..MAX_GRAPH_BYTES &&
+                    expectedTiles in 1024..MAX_GRAPH_BYTES &&
                     expectedNodes >= 1000) { "Malformed offline map manifest" }
                 val currentVersion = prefs.getString("version", "") ?: ""
-                if (graphFile() != null && version <= currentVersion) {
+                if (graphFile() != null && tilesFile() != null && version <= currentVersion) {
                     prefs.edit().remove("error").apply()
                     return@withLock false
                 }
                 val tempZip = File(directory, "download.partial")
                 val tempGraph = File(directory, "graph.partial")
+                val tempTiles = File(directory, "tiles.partial")
                 try {
                     tempZip.delete()
                     tempGraph.delete()
+                    tempTiles.delete()
                     progress("Downloading Singapore offline road network…")
                     download(url, tempZip, expectedZip, zipSha)
                     progress("Verifying road-network graph…")
-                    extractGraph(tempZip, tempGraph, expectedGraph, graphSha)
+                    extractPack(tempZip, tempGraph, tempTiles, expectedGraph, graphSha,
+                        expectedTiles, tilesSha)
                     OfflineRoadGraph.open(tempGraph).use { graph ->
                         require(graph.nodeCount == expectedNodes) {
                             "Offline road node count mismatch"
@@ -205,13 +243,20 @@ internal class OfflineMapPackageManager(context: Context) {
                     }
                     val finalName = "sg-routing-" + graphSha + ".bin"
                     val finalFile = File(directory, finalName)
+                    val tilesName = "sg-road-map-" + tilesSha + ".mbtiles"
+                    val finalTiles = File(directory, tilesName)
                     Files.move(tempGraph.toPath(), finalFile.toPath(),
                         StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    Files.move(tempTiles.toPath(), finalTiles.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
                     val previous = prefs.getString("file", null)
+                    val previousTiles = prefs.getString("tilesFile", null)
                     // Atomic SharedPreferences commit: old package remains active on failed update.
                     val saved = prefs.edit()
                         .putString("file", finalName)
                         .putString("previous", previous)
+                        .putString("tilesFile", tilesName)
+                        .putString("previousTiles", previousTiles)
                         .putString("version", version)
                         .putLong("installedAt", System.currentTimeMillis())
                         .putLong("packageBytes", expectedZip)
@@ -222,7 +267,11 @@ internal class OfflineMapPackageManager(context: Context) {
                         it.name.startsWith("sg-routing-") && it.name.endsWith(".bin") &&
                             it.name != finalName && it.name != previous
                     }?.forEach { it.delete() }
-                    progress("Offline Singapore road network installed: " + version)
+                    directory.listFiles()?.filter {
+                        it.name.startsWith("sg-road-map-") && it.name.endsWith(".mbtiles") &&
+                            it.name != tilesName && it.name != previousTiles
+                    }?.forEach { it.delete() }
+                    progress("Offline Singapore road network and road map installed: " + version)
                     true
                 } catch (failure: Exception) {
                     prefs.edit().putString("error", failure.message ?: "Map update failed").apply()
@@ -230,6 +279,7 @@ internal class OfflineMapPackageManager(context: Context) {
                 } finally {
                     tempZip.delete()
                     tempGraph.delete()
+                    tempTiles.delete()
                 }
             }
         }
