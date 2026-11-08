@@ -22,7 +22,7 @@ internal fun FuelStationDialog(session: NavigationSession, onDismiss: () -> Unit
         result = origin?.takeIf { it.valid() }?.let { session.fuelStations.nearby(it) }
             ?: FuelSnapshot(emptyList(), unavailable = true)
     }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SGColors.Card,
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SGColors.SolidCard,
         titleContentColor = PremiumGold,
         title = { Text("Petrol Stations Nearby") },
         text = {
