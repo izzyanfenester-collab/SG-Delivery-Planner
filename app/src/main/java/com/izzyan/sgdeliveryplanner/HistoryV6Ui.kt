@@ -67,7 +67,7 @@ internal fun HistoryViewV6(
         MarinaBayBackdrop(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().background(V6Background.copy(alpha = .12f))) {
             Surface(
-                color = SGColors.Background.copy(alpha = 0.96f),
+                color = SGColors.Card,
                 shadowElevation = 2.dp
             ) {
                 Row(
@@ -106,7 +106,8 @@ internal fun HistoryViewV6(
                     Surface(
                         modifier = Modifier.heightIn(min = 56.dp),
                         shape = headerShape,
-                        color = SGColors.SecondaryBackground,
+                        // A nested date card uses the parent glass fill, avoiding double opacity.
+                        color = Color.Transparent,
                         border = BorderStroke(1.dp, SGColors.Divider),
                         shadowElevation = 2.dp
                     ) {
@@ -133,7 +134,7 @@ internal fun HistoryViewV6(
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(SGDimensions.RadiusCard))
-                                .background(SGColors.SecondaryBackground)
+                                .background(SGColors.Card)
                                 .border(1.dp, V6Outline, RoundedCornerShape(SGDimensions.RadiusCard))
                                 .padding(7.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -190,7 +191,7 @@ internal fun HistoryViewV6(
 @Composable
 private fun V6StatBox(count: String, label: String, tint: Color, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.background(SGColors.Card, RoundedCornerShape(SGDimensions.RadiusSmall))
+        modifier = modifier.background(Color.Transparent, RoundedCornerShape(SGDimensions.RadiusSmall))
             .padding(horizontal = 7.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -214,7 +215,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth().clip(shape)
-            .background(SGColors.Card.copy(alpha = 0.30f))
+            .background(SGColors.Card)
             .border(1.dp, V6Outline.copy(alpha = .48f), shape)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -303,7 +304,7 @@ private fun V9ProofTile(
         Box(
             Modifier.fillMaxWidth().height(140.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(SGColors.Background)
+                .background(Color.Transparent) // Nested under V6DeliveryCard: do not stack glass fills.
                 .border(1.dp, V6Outline.copy(alpha = .7f), RoundedCornerShape(10.dp))
                 .clickable(enabled = thumbnail != null, onClick = onExpand),
             contentAlignment = Alignment.Center
