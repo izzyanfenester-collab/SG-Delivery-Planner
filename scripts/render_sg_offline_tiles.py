@@ -31,7 +31,7 @@ def pixel(lat, lon, zoom):
 def read_segments(path):
     blob = path.read_bytes()
     magic, version, nodes, edges, turns, *_ = struct.unpack_from("<4s7i", blob, 0)
-    assert magic == b"SGR1" and version == 1 and nodes > 1000
+    assert magic == b"SGR1" and version in (1, 2) and nodes > 1000
     node = struct.Struct("<4i")
     edge = struct.Struct("<4i")
     positions = []
@@ -42,6 +42,7 @@ def read_segments(path):
     offset += nodes * 16
     for index, (lat, lon) in enumerate(positions):
         _, _, first, degree = node.unpack_from(blob, 32 + index * 16)
+        degree &= 0x7fffffff  # SGR2 highest bit marks the connected snap core.
         if degree == 0:
             continue
         for e in range(first, first + degree):
