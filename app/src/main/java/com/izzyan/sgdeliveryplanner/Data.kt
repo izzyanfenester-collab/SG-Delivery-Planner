@@ -55,6 +55,27 @@ class Repository(context:Context) {
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
  private val api=createRoutingApi()
  private val offlinePostals=OfflinePostalIndex(context)
+ private val offlineApp = context.applicationContext
+
+ /** Plan only with the installed on-device directed Singapore road graph. */
+ suspend fun planOffline(
+  codes: List<String>, start: LocalDateTime, service: Int, mode: String,
+  location: StartLocation, orders: List<CustomerOrder>,
+  endSelection: EndLocationSelection, progress: (String) -> Unit
+ ): Plan {
+  val file = OfflineMapPackageManager(offlineApp).graphFile()
+   ?: throw PlannerError("Offline Singapore road package is not installed. Open Settings to download it while online.")
+  return withContext(Dispatchers.IO) {
+   OfflineRoadGraph.open(file).use { graph ->
+    val planned = OfflineRoutePlanner(graph, this@Repository::resolve).plan(
+     codes, start, service, mode, location, orders, endSelection, progress
+    )
+    save(planned)
+    planned
+   }
+  }
+ }
+
  suspend fun save(plan:Plan) = dao.save(SavedRoute(plan.id,PlanJson.encode(plan),plan.created))
  fun decode(r:SavedRoute): Plan = PlanJson.decode(r.json)
  suspend fun resolve(postal:String):Place {
