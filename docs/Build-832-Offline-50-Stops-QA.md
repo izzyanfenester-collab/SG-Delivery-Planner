@@ -1,10 +1,10 @@
 # SG Delivery Build #832 – Offline Singapore Road Maps and 50-Stop QA
 
-**Status: TESTING ONLY. Not merged into Official #831. Physical Android Airplane Mode acceptance tests NOT completed.**
+**Status: Build #832 approved for source merge on 9 November 2026. Physical Android Airplane Mode acceptance tests NOT completed; release remains unverified on real devices.**
 
 ## Source & scope
 - Base: SG Delivery Official Build #831, app version 1.4.19-b831.
-- Isolated Android testing app version 1.4.20-b832-offline50-testing, versionCode 31, suffix .offline50test.
+- Release version 1.4.20-b832, versionCode 31, same production applicationId. Debug variants use suffix .testing.
 - Added locally stored road graph, road-only MBTiles Map page display, 50-stop pre-delivery optimization and automatic offline optimization fallback.
 - Existing GPS navigation, voice, camera, online rerouting, saved delivery history, payment schema, COD/PayNow, proof and backup/restore implementations are not modified.
 - No new automatic offline rerouting or turn-by-turn offline navigation was implemented.
@@ -50,4 +50,4 @@
 - [ ] Capture and inspect actual-device screenshots.
 
 ## Release gate
-Do not merge #832 into Official, or call 50-stop offline optimization fully validated, until actual-device Airplane Mode tests, route-quality checks and acceptance gates pass. Code and published road data do not by themselves prove device correctness.
+Owner requested merge of Build #832 on 9 November 2026 despite outstanding physical-device acceptance checks. Merging the source does **not** certify offline 50-stop routing or map display as validated on Android. Before wide runner rollout, complete the checks above; keep the previous signed Official #831 APK available for rollback, and back up delivery data before installation. Code and published road data do not by themselves prove device correctness.
