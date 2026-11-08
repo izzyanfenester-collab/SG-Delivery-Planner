@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq osmium-tool
-          python3 -m pip install --disable-pip-version-check osmium pillow numpy scipy
+          python3 -m pip install --disable-pip-version-check osmium pillow numpy scipy pyshp shapely
       - name: Download permitted source PBF (Geofabrik, not public map tile servers)
         run: |
           set -euo pipefail
@@ -43,12 +43,22 @@ jobs:
             -o singapore.osm.pbf --overwrite
           test -s singapore.osm.pbf
           rm -f source.osm.pbf
+      - name: Download public-domain Natural Earth coastline
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --connect-timeout 30 \
+            https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip \
+            --output natural-earth-land.zip
+          mkdir -p ne_land
+          unzip -q natural-earth-land.zip -d ne_land
+          test -s ne_land/ne_10m_land.shp
       - name: Build and verify compact directed road graph
         run: |
           set -euo pipefail
           export SG_VERSION=$(date -u +%Y%m%d)
           echo "SG_VERSION=$SG_VERSION" >> "$GITHUB_ENV"
           python3 scripts/build_sg_road_graph.py singapore.osm.pbf \
+            --land-shp ne_land/ne_10m_land.shp \
             --output "SG-Offline-Roads-$SG_VERSION.zip" --version "$SG_VERSION"
           python3 - <<'PY'
           import hashlib, json, os, zipfile
@@ -103,7 +113,7 @@ jobs:
           if ! gh release view sg-offline-data >/dev/null 2>&1; then
             gh release create sg-offline-data --target "$GITHUB_SHA" \
               --title "Singapore Offline Road Graph (OSM, ODbL)" \
-              --notes "Generated from © OpenStreetMap contributors via Geofabrik. Driving graph and road-only MBTiles basemap; not offline GPS navigation. Local graph handles motor-vehicle access, one-way streets and supported via-node restrictions; via-way restrictions remain unsupported."
+              --notes "Generated from © OpenStreetMap contributors via Geofabrik. Driving graph and OSM/Natural Earth daylight MBTiles cartographic basemap; not offline GPS navigation. Local graph handles motor-vehicle access, one-way streets and supported via-node restrictions; via-way restrictions remain unsupported."
           fi
           gh release upload sg-offline-data "SG-Offline-Roads-$SG_VERSION.zip" --clobber
           gh release upload sg-offline-data latest.json --clobber
