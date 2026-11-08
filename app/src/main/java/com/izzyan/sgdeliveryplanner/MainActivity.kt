@@ -673,9 +673,9 @@ private fun statusColor(status: String): Color = when (normalizedStatus(status))
 private fun statusCountColor(status: String): Color {
     val light = MaterialTheme.colorScheme.onSurface == PremiumNavy
     return when (normalizedStatus(status)) {
-        "DELIVERED" -> if (light) PremiumEmerald else Color(0xFF80E7BE)
-        "ON_HOLD" -> if (light) PremiumAmber else Color(0xFFFFD492)
-        "SKIPPED" -> if (light) SGColors.Disabled else Color(0xFFC3CBDA)
+        "DELIVERED" -> if (light) PremiumEmerald else SGColors.SuccessText
+        "ON_HOLD" -> if (light) PremiumAmber else SGColors.SelectedGold
+        "SKIPPED" -> if (light) SGColors.Disabled else SGColors.Silver
         else -> MaterialTheme.colorScheme.onSurface
     }
 }
@@ -827,7 +827,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         Spacer(Modifier.weight(1f))
                         PaymentModeStamp(stop.order, size = 78.dp)
                     }
-                    holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
+                    holdDetails(stop)?.let { Text(it, color = SGColors.SelectedGold, style = MaterialTheme.typography.bodyMedium) }
                     HorizontalDivider(color = SGColors.Divider)
                     Text("Planned arrival: ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = SGColors.Silver)
