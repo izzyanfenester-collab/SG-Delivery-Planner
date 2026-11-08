@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
+        runCatching { OfflineRoadUpdateScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
@@ -465,6 +466,7 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        OfflineRoadSettingsPanel()
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
