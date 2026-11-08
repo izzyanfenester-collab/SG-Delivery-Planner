@@ -122,7 +122,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     LazyColumn(Modifier.heightIn(max=340.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         items(result.failedOrders.size) { index ->
                             val failure = result.failedOrders[index]
-                            Card(Modifier.fillMaxWidth()) {
+                            SGCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                                     Text("Customer: ${failure.customerName ?: "Unknown — check original message"}",style=MaterialTheme.typography.titleSmall)
                                     Text("Reason: ${failure.reason}",color=MaterialTheme.colorScheme.error)
@@ -153,7 +153,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     if (duplicateGroups.isNotEmpty()) {
                         Text(
                             "⚠ ${duplicateGroups.size} postal code(s) shared by multiple customers. Check the duplicates below; every parcel stays separate.",
-                            color = Color(0xFFFFCC80),
+                            color = SGColors.Warning,
                             style = MaterialTheme.typography.bodySmall
                         )
                         OutlinedButton(
@@ -169,12 +169,12 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(duplicateGroups, key = { it.postalCode }) { group ->
-                                    Card(Modifier.fillMaxWidth()) {
+                                    SGCard(Modifier.fillMaxWidth()) {
                                         Column(Modifier.padding(10.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text(
                                                 "⚠ ${group.postalCode} — ${group.orders.size} customers",
-                                                color = Color(0xFFFFCC80),
+                                                color = SGColors.Warning,
                                                 style = MaterialTheme.typography.titleSmall
                                             )
                                             group.orders.forEachIndexed { index, customer ->
@@ -212,7 +212,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                                 style=MaterialTheme.typography.bodySmall,
                                 maxLines=1, overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             duplicateCounts[order.postalCode]?.let { count ->
-                                Text("DUP ×$count", color=Color(0xFFFFCC80),
+                                Text("DUP ×$count", color=SGColors.Warning,
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }
@@ -293,7 +293,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(vm.failedRoutePostalChecks, key = { it.postalCode }) { failure ->
                             val affected = orders.filter { it.postalCode == failure.postalCode }
-                            Card(Modifier.fillMaxWidth()) {
+                            SGCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text("Postal: ${failure.postalCode}", style = MaterialTheme.typography.titleMedium)
@@ -396,7 +396,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
                 val choice=vm.whatsappPreferences.default
                 if(choice==null || !openCustomerWhatsApp(context,order.phoneNumber!!,choice)) {selected=choice ?: WhatsAppChoice.PERSONAL; choosing=true}
             },modifier=Modifier.size(48.dp)) {
-                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_customer_whatsapp),"Open customer's WhatsApp",tint=Color(0xFF25D366),modifier=Modifier.size(30.dp))
+                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_customer_whatsapp),"Open customer's WhatsApp",tint=SGColors.Success,modifier=Modifier.size(30.dp))
             }
         }
         Text("Address : ${customerAddress(stop)}")
@@ -452,7 +452,7 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
         enabled = !vm.busy,
         modifier = Modifier.heightIn(min = 44.dp),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF156082), contentColor = Color.White)
+        colors = ButtonDefaults.buttonColors(containerColor = SGColors.SecondaryBackground, contentColor = Color.White)
     ) { Text("Send message", style = MaterialTheme.typography.labelLarge) }
 
     if (choosing) AlertDialog(

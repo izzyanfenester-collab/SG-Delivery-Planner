@@ -40,7 +40,7 @@ internal fun TrafficCameraDialog(session: NavigationSession, onDismiss: () -> Un
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Singapore public traffic images · data.gov.sg", color = Color.White)
                 if (snapshot == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (snapshot?.unavailable == true) Text("Traffic camera service unavailable. Navigation continues normally. Cached images may be older.", color = Color(0xFFFFD492))
+                if (snapshot?.unavailable == true) Text("Traffic camera service unavailable. Navigation continues normally. Cached images may be older.", color = SGColors.Warning)
                 if (snapshot != null && selected.isEmpty()) Text("No nearby traffic cameras available.", color = Color.White)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(selected, key = { it.camera.id }) { item ->

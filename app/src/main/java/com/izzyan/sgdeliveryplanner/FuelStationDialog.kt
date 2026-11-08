@@ -22,17 +22,17 @@ internal fun FuelStationDialog(session: NavigationSession, onDismiss: () -> Unit
         result = origin?.takeIf { it.valid() }?.let { session.fuelStations.nearby(it) }
             ?: FuelSnapshot(emptyList(), unavailable = true)
     }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = PremiumNavy,
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SGColors.Card,
         titleContentColor = PremiumGold,
         title = { Text("Petrol Stations Nearby") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Within 5 km · approximate straight-line distance",
-                    color = Color(0xFFB9C9E0), style = MaterialTheme.typography.bodySmall)
+                    color = SGColors.Silver, style = MaterialTheme.typography.bodySmall)
                 if (result == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (result?.unavailable == true)
                     Text("Live petrol search is temporarily unavailable. Try again later. Your delivery route is unchanged.",
-                        color = Color(0xFFFFD492))
+                        color = SGColors.Warning)
                 if (result?.unavailable == false && result?.stations?.isEmpty() == true)
                     Text("No mapped petrol stations found nearby.", color = Color.White)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 365.dp),
@@ -44,7 +44,7 @@ internal fun FuelStationDialog(session: NavigationSession, onDismiss: () -> Unit
                                 Text(station.name, color = Color.White, fontWeight = FontWeight.Bold)
                                 Text("${metricDistance(station.meters)} away", color = PremiumGold,
                                     style = MaterialTheme.typography.bodyMedium)
-                                station.address?.let { Text(it, color = Color(0xFFB9C9E0),
+                                station.address?.let { Text(it, color = SGColors.Silver,
                                     style = MaterialTheme.typography.bodySmall) }
                             }
                             FilledTonalButton(onClick = { session.previewFuelStation(station); onDismiss() },
@@ -57,7 +57,7 @@ internal fun FuelStationDialog(session: NavigationSession, onDismiss: () -> Unit
                     }
                 }
                 Text("OpenStreetMap data · Searching sends your current approximate GPS position. 'Show' previews a map pin, not a route change. Tap Follow to resume.",
-                    color = Color(0xFFB9C9E0), style = MaterialTheme.typography.bodySmall)
+                    color = SGColors.Silver, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })

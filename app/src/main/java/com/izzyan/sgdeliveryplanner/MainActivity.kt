@@ -33,6 +33,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -75,7 +85,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(7, 23, 45))
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(8, 27, 51))
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
@@ -128,15 +138,17 @@ fun App(vm: PlannerViewModel) {
                                 onClick = vm::goBack, enabled = !vm.busy,
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = PremiumGold,
-                                    disabledContentColor = Color(0xFF8292AC)
+                                    disabledContentColor = SGColors.Disabled
                                 ),
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
                         Spacer(Modifier.weight(1f))
                         if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History", "Payment")) {
-                            IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
-                                Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_settings), contentDescription = "Settings", tint = PremiumGold, modifier = Modifier.size(30.dp))
+                            SGIconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy) {
+                                Icon(androidx.compose.material.icons.Icons.Outlined.Settings,
+                                    contentDescription = "Settings", tint = SGColors.White,
+                                    modifier = Modifier.size(SGDimensions.Icon))
                             }
                             ChatGptHeaderButton()
                         }
@@ -146,41 +158,8 @@ fun App(vm: PlannerViewModel) {
         },
         bottomBar = {
             if (vm.screen != "LocationPicker") {
-                Surface(color = PremiumNavy, shadowElevation = 6.dp) {
-                    Row(
-                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        // Icon-only navigation, based on official Build #669.
-                        // Keep tab targets and touch dimensions identical to the original.
-                        listOf(
-                            "Home" to R.drawable.ic_nav_home,
-                            "Route" to R.drawable.ic_nav_route,
-                            "Delivery" to R.drawable.ic_nav_delivery,
-                            "Map" to R.drawable.ic_nav_map,
-                            "History" to R.drawable.ic_nav_history,
-                            "Payment" to R.drawable.ic_nav_payment
-                        ).forEach { (label, iconRes) ->
-                            val selected = vm.screen == label
-                            TextButton(
-                                onClick = { vm.screen = label }, enabled = !vm.busy,
-                                modifier = Modifier.weight(1f).heightIn(min = 64.dp),
-                                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 8.dp),
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.textButtonColors(
-                                    containerColor = if (selected) PremiumRoyal else Color.Transparent,
-                                    contentColor = if (selected) Color.White else Color(0xFFD0DBEC),
-                                    disabledContentColor = Color(0xFF8292AC)
-                                )
-                            ) {
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(iconRes),
-                                    contentDescription = label,
-                                    modifier = Modifier.size(34.dp)
-                                )
-                            }
-                        }
-                    }
+                SGBottomNavigation(selected = vm.screen, enabled = !vm.busy) { destination ->
+                    vm.screen = destination
                 }
             }
         }
@@ -227,9 +206,9 @@ fun App(vm: PlannerViewModel) {
                     else -> {
                         val p = vm.route
                         if (p == null) {
-                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 PremiumCard(Modifier.fillMaxWidth()) {
-                                    Text("Your next delivery starts here", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
+                                    Text("Your next delivery starts here", Modifier.padding(SGDimensions.Normal), style = MaterialTheme.typography.titleLarge)
                                     Text("Plan a route on Home or open a saved route from History.", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp))
                                 }
                                 PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
@@ -253,10 +232,7 @@ fun App(vm: PlannerViewModel) {
 
 @Composable
 private fun PageTitle(title: String, subtitle: String? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        if (subtitle != null) Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-    }
+    SGPageHeader(title, subtitle)
 }
 
 @Composable
@@ -265,24 +241,28 @@ private fun PrimaryAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    color: Color = PremiumRoyal,
-    minHeight: Dp = 64.dp
+    color: Color = SGColors.Gold,
+    minHeight: Dp = 52.dp
 ) {
-    Button(
-        onClick = onClick, enabled = enabled,
-        modifier = modifier.fillMaxWidth().heightIn(min = minHeight),
-        shape = RoundedCornerShape(18.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
-    ) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+    if (color == SGColors.Gold || color == PremiumRoyal) {
+        SGPrimaryButton(label, onClick, modifier.fillMaxWidth(), enabled, minHeight)
+    } else {
+        Button(onClick = onClick, enabled = enabled,
+            modifier = modifier.fillMaxWidth().heightIn(min = minHeight),
+            colors = ButtonDefaults.buttonColors(containerColor = color,
+                contentColor = Color.White),
+            shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
 }
 
 @Composable
-private fun SecondaryAction(label: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier, minHeight: Dp = 64.dp) {
-    OutlinedButton(
-        onClick = onClick, enabled = enabled,
-        modifier = modifier.fillMaxWidth().heightIn(min = minHeight), shape = RoundedCornerShape(18.dp)
-    ) { Text(label, style = MaterialTheme.typography.titleMedium) }
+private fun SecondaryAction(
+    label: String, onClick: () -> Unit, enabled: Boolean = true,
+    modifier: Modifier = Modifier, minHeight: Dp = 52.dp
+) {
+    SGSecondaryButton(label, onClick, modifier.fillMaxWidth(), enabled, minHeight)
 }
 
 @Composable
@@ -317,8 +297,11 @@ private fun HomeDateTimeAction(
 ) {
     OutlinedButton(
         onClick = onClick, enabled = enabled,
-        modifier = modifier.fillMaxWidth().height(50.dp),
-        shape = RoundedCornerShape(13.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = SGDimensions.Touch),
+        shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+        border = BorderStroke(1.dp, SGColors.Gold),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = SGColors.SecondaryBackground, contentColor = SGColors.White),
         contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally,
@@ -336,26 +319,9 @@ private fun HomeSmallAction(
     enabled: Boolean = true, filled: Boolean = false
 ) {
     if (filled) {
-        Button(
-            onClick = onClick, enabled = enabled,
-            modifier = modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(13.dp),
-            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PremiumRoyal, contentColor = Color.White)
-        ) {
-            Text(label, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 2)
-        }
+        SGPrimaryButton(label, onClick, modifier.fillMaxWidth(), enabled)
     } else {
-        OutlinedButton(
-            onClick = onClick, enabled = enabled,
-            modifier = modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(13.dp),
-            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp)
-        ) {
-            Text(label, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 2)
-        }
+        SGSecondaryButton(label, onClick, modifier.fillMaxWidth(), enabled)
     }
 }
 
@@ -412,13 +378,12 @@ fun Home(vm: PlannerViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall)
 
-        OutlinedTextField(
+        SGTextField(
             value = vm.input, onValueChange = vm::updatePostalInput,
-            label = { Text("Singapore postal codes") },
-            placeholder = { Text("Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208") },
-            modifier = Modifier.fillMaxWidth().height(168.dp),
-            minLines = 5, maxLines = 5,
-            shape = RoundedCornerShape(17.dp), enabled = !vm.busy
+            label = "Singapore postal codes",
+            placeholder = "Paste Singapore postal codes here\n730120\n730301\n760270\n560211\n460079\n640208",
+            modifier = Modifier.fillMaxWidth().heightIn(min = 168.dp),
+            minLines = 5, maxLines = 5, singleLine = false, enabled = !vm.busy
         )
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -496,7 +461,7 @@ fun Settings(vm: PlannerViewModel) {
             .format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH))
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = SGDimensions.ScreenHorizontal, vertical = SGDimensions.Small),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
@@ -701,7 +666,7 @@ private fun trafficLabel(mode: String): String = when (mode) {
 private fun statusColor(status: String): Color = when (normalizedStatus(status)) {
     "DELIVERED" -> PremiumEmerald
     "ON_HOLD" -> PremiumAmber
-    "SKIPPED" -> Color(0xFF4F5E73)
+    "SKIPPED" -> SGColors.Disabled
     else -> PremiumRoyal
 }
 
@@ -709,18 +674,16 @@ private fun statusColor(status: String): Color = when (normalizedStatus(status))
 private fun statusCountColor(status: String): Color {
     val light = MaterialTheme.colorScheme.onSurface == PremiumNavy
     return when (normalizedStatus(status)) {
-        "DELIVERED" -> if (light) PremiumEmerald else Color(0xFF80E7BE)
-        "ON_HOLD" -> if (light) PremiumAmber else Color(0xFFFFD492)
-        "SKIPPED" -> if (light) Color(0xFF4F5E73) else Color(0xFFC3CBDA)
+        "DELIVERED" -> if (light) PremiumEmerald else SGColors.SuccessText
+        "ON_HOLD" -> if (light) PremiumAmber else SGColors.SelectedGold
+        "SKIPPED" -> if (light) SGColors.Disabled else SGColors.Silver
         else -> MaterialTheme.colorScheme.onSurface
     }
 }
 
 @Composable
 private fun StatusBadge(status: String) {
-    Surface(color = statusColor(status), contentColor = Color.White, shape = RoundedCornerShape(50)) {
-        Text(statusLabel(status), Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
-    }
+    SGStatusBadge(status)
 }
 
 fun holdDetails(stop: Stop): String? {
@@ -733,7 +696,7 @@ fun holdDetails(stop: Stop): String? {
 @Composable
 private fun CompactDeliveryAction(
     label: String,
-    iconRes: Int,
+    iconRes: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -741,14 +704,16 @@ private fun CompactDeliveryAction(
     compactText: Boolean = false,
     completed: Boolean = false
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(SGDimensions.RadiusCard)
     val contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)
     if (color == null) {
         OutlinedButton(
             onClick = onClick, enabled = enabled,
             modifier = modifier.height(52.dp),
             shape = shape, contentPadding = contentPadding,
-            border = BorderStroke(1.dp, Color(0xFF4B617C))
+            border = BorderStroke(1.dp, SGColors.Gold),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = SGColors.SecondaryBackground, contentColor = SGColors.White)
         ) {
             CompactDeliveryActionContent(label, iconRes, compactText, completed)
         }
@@ -757,7 +722,8 @@ private fun CompactDeliveryAction(
             onClick = onClick, enabled = enabled,
             modifier = modifier.height(52.dp),
             shape = shape, contentPadding = contentPadding,
-            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = color,
+                contentColor = if (color == SGColors.Warning) SGColors.Background else SGColors.White),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
         ) {
             CompactDeliveryActionContent(label, iconRes, compactText, completed)
@@ -768,11 +734,11 @@ private fun CompactDeliveryAction(
 @Composable
 private fun CompactDeliveryActionContent(
     label: String,
-    iconRes: Int,
+    iconRes: ImageVector,
     compactText: Boolean,
     completed: Boolean
 ) {
-    val iconSize = if (compactText) 31.dp else 35.dp
+    val iconSize = SGDimensions.Icon
     val currentColor = LocalContentColor.current
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -781,7 +747,7 @@ private fun CompactDeliveryActionContent(
     ) {
         Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
             Icon(
-                painter = androidx.compose.ui.res.painterResource(iconRes),
+                imageVector = iconRes,
                 contentDescription = if (completed) "$label attached" else null,
                 modifier = Modifier.fillMaxSize()
             )
@@ -831,7 +797,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
         )
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = SGDimensions.ScreenHorizontal, vertical = SGDimensions.Small),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         if (p.current !in p.stops.indices) {
@@ -856,16 +822,16 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     }
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
+                    if (stop.order == null) Text(stop.place.address, color = SGColors.Silver, style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         StatusBadge(stop.status)
                         Spacer(Modifier.weight(1f))
                         PaymentModeStamp(stop.order, size = 78.dp)
                     }
-                    holdDetails(stop)?.let { Text(it, color = Color(0xFFFFD492), style = MaterialTheme.typography.bodyMedium) }
-                    HorizontalDivider(color = Color(0xFF31486B))
+                    holdDetails(stop)?.let { Text(it, color = SGColors.SelectedGold, style = MaterialTheme.typography.bodyMedium) }
+                    HorizontalDivider(color = SGColors.Divider)
                     Text("Planned arrival: ${time(stop.arrival)}", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = Color(0xFFB7C7E1))
+                    Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = SGColors.Silver)
                     stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", color = PremiumGold) }
                     stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", color = PremiumGold) }
                     Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
@@ -874,13 +840,13 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "Proof of Delivery", iconRes = R.drawable.ic_delivery_camera,
+                        label = "Proof of Delivery", iconRes = Icons.Outlined.CameraAlt,
                         onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.DELIVERY, chooseSource = true) },
                         modifier = Modifier.weight(1f), enabled = !vm.busy,
                         compactText = true, completed = stop.order?.proofFileId != null
                     )
                     CompactDeliveryAction(
-                        label = "Proof of Payment", iconRes = R.drawable.ic_delivery_receipt,
+                        label = "Proof of Payment", iconRes = Icons.Outlined.ReceiptLong,
                         onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.PAYMENT, chooseSource = true) },
                         modifier = Modifier.weight(1f), enabled = !vm.busy,
                         compactText = true, completed = stop.order?.paymentProofFileId != null
@@ -888,7 +854,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "Navigate", iconRes = R.drawable.ic_delivery_navigation,
+                        label = "Navigate", iconRes = Icons.Outlined.Navigation,
                         onClick = {
                             val choice = vm.navigationPreferences.default
                             showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
@@ -896,7 +862,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         modifier = Modifier.weight(1f), enabled = !vm.busy, color = PremiumRoyal
                     )
                     CompactDeliveryAction(
-                        label = "Delivered", iconRes = R.drawable.ic_delivery_delivered,
+                        label = "Delivered", iconRes = Icons.Outlined.CheckCircle,
                         onClick = { vm.progress("DELIVERED") },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
@@ -905,25 +871,25 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "On Hold", iconRes = R.drawable.ic_delivery_hold,
+                        label = "On Hold", iconRes = Icons.Outlined.PauseCircle,
                         onClick = { holdStop = p.current },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
                         color = PremiumAmber
                     )
                     CompactDeliveryAction(
-                        label = "Skipped", iconRes = R.drawable.ic_delivery_skipped,
+                        label = "Skipped", iconRes = Icons.Outlined.SkipNext,
                         onClick = { vm.progress("SKIP") },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
-                        color = Color(0xFF4F5E73)
+                        color = SGColors.Disabled
                     )
                 }
             }
             if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
             if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             CompactDeliveryAction(
-                label = "Next stop", iconRes = R.drawable.ic_delivery_next,
+                label = "Next stop", iconRes = Icons.Outlined.ArrowForward,
                 onClick = { vm.progress("NEXT") },
                 modifier = Modifier.fillMaxWidth(), enabled = !vm.busy
             )
@@ -990,9 +956,9 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
 }
 @Composable
 private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
-    PremiumCard(
+    SGDeliveryCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
-        borderColor = if (current) PremiumGold else null
+        borderColor = if (current) SGColors.Gold else null
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1051,7 +1017,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
     val summary = deliverySummary(p)
     var scheduleExpanded by rememberSaveable(p.id) { mutableStateOf(true) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(SGDimensions.Normal),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
@@ -1069,7 +1035,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.endDisplayName}")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(p.startLocation.reportLabel, style = MaterialTheme.typography.titleLarge)
                 DetailRow("Start location", p.startLocation.displayName)
                 DetailRow("End location", p.endReportLabel)
@@ -1088,7 +1054,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         PrimaryAction("Start or resume deliveries", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
         SecondaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Planning estimate • ${trafficLabel(p.mode)}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
                 DetailRow("Driving time without allowance", duration(p.baseSeconds))
                 DetailRow("Traffic allowance", duration(p.bufferSeconds))
@@ -1119,7 +1085,7 @@ fun ScheduleTable(p: Plan) {
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm), stop.etaArrival?.let(::time) ?: "—", stop.etaLeave?.let(::time) ?: "—", stop.completedAt?.let(::time) ?: "—")
     }
     val end = listOf("END", endPlace.postal, endPlace.block, endPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
-    Surface(shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    Surface(shape = RoundedCornerShape(SGDimensions.RadiusCard), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
                 val background = if (index == 0) PremiumNavy else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
@@ -1144,15 +1110,15 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
     LaunchedEffect(p.id) { vm.refreshExchangeRate() }
     val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
     Column(
-        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(SGDimensions.Normal),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         PageTitle("Delivery Report Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
                 Text("%.1f%%".format(Locale.US, summary.successRate), color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
-                Text("${summary.delivered} of ${summary.totalParcel} parcels delivered", color = Color(0xFFB7C7E1), style = MaterialTheme.typography.titleMedium)
+                Text("${summary.delivered} of ${summary.totalParcel} parcels delivered", color = SGColors.Silver, style = MaterialTheme.typography.titleMedium)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1165,7 +1131,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
             CountTile("Pending", summary.pending, Modifier.weight(1f))
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
                 DetailRow("Date", p.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 DetailRow("Start location", p.startLocation.reportLabel)
@@ -1178,7 +1144,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Cash on hand and tax", style = MaterialTheme.typography.titleLarge)
                 Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CurrencyField("Cash on hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
@@ -1215,7 +1181,7 @@ private fun CurrencyField(label: String, value: String, onChange: (String) -> Un
         value, onChange, label = { Text(label) }, prefix = { Text("SGD ") }, placeholder = { Text("0.00") },
         supportingText = { Text(if (value.isNotBlank() && normalizedCurrency(value) == null) "Enter a non-negative amount with up to 2 decimal places, such as 12.50." else formatCurrency(value)) },
         isError = value.isNotBlank() && normalizedCurrency(value) == null,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = RoundedCornerShape(SGDimensions.RadiusCard),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true, enabled = enabled
     )
@@ -1245,7 +1211,7 @@ fun History(vm: PlannerViewModel) {
             dismissButton = { TextButton(onClick = { confirmIds = null }) { Text("Cancel") } })
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
+        modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(SGDimensions.Normal),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -1260,7 +1226,7 @@ fun History(vm: PlannerViewModel) {
             }
         }
         if (saved.isEmpty()) item {
-            PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(20.dp)) }
+            PremiumCard(Modifier.fillMaxWidth()) { Text("Your saved routes will appear here after you optimize your first route.", Modifier.padding(SGDimensions.Normal)) }
         }
         items(saved, key = { it.id }) { record ->
             val p = runCatching { vm.repo.decode(record) }.getOrNull()
@@ -1269,7 +1235,7 @@ fun History(vm: PlannerViewModel) {
                 onClick = { if (selecting) toggle(record.id) else opened = record },
                 onLongClick = { selecting = true; toggle(record.id) }
             )) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (selecting) Checkbox(record.id in selected, { toggle(record.id) }, enabled = !vm.busy)
                     if (p == null) {
                         Text("This saved route could not be read. Its stored data has been kept.")

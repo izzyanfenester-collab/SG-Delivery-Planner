@@ -79,8 +79,8 @@ private class SingleDeliveryReportView(
     private val payment: Bitmap?,
     private val delivery: Bitmap?
 ) : View(context) {
-    private val gold = Color.rgb(231,190,91)
-    private val white = Color.rgb(232,240,255)
+    private val gold = SGReportColors.Gold
+    private val white = SGReportColors.White
     private val bodyInk = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = white; textSize = DeliveryReportTypography.bodyPx
         setShadowLayer(5f, 1f, 2f, Color.argb(220, 0, 0, 0))
@@ -132,7 +132,7 @@ private class SingleDeliveryReportView(
     override fun onDraw(canvas: Canvas) {
         drawMarinaBayReportBackground(context, canvas, 1080, reportHeight)
         // 30% navy tint: 70% transparent so the Marina Bay Sands backdrop shows through.
-        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(77, 16, 39, 68) }
+        val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SGReportColors.ReportPanel }
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)
         panel.color=gold; panel.style=Paint.Style.STROKE; panel.strokeWidth=2f
         canvas.drawRoundRect(RectF(24f,24f,1056f,reportHeight-24f),24f,24f,panel)

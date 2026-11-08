@@ -10,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -22,6 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +48,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -224,151 +230,135 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
 
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
 
-// Keep only five payment history rows visible; older entries remain scrollable.
-private const val VISIBLE_PAYMENT_HISTORY_ROWS = 5
-private val PAYMENT_HISTORY_ROW_HEIGHT = 50.dp
+/** Payment-only dimensions: responsive minimum heights, never fixed-size text containers. */
+internal object PaymentCompactLayout {
+    val ScreenHorizontal = 12.dp
+    val ScreenVertical = 6.dp
+    val SectionGap = 10.dp
+    val IntraCardGap = 6.dp
+    val CardPadding = 10.dp
+    val TableCardPadding = 8.dp
+    val OverviewMinHeight = 56.dp
+    val CalculatorTitleMinHeight = 40.dp
+    val FieldMinHeight = 48.dp
+    val InputMinHeight = 42.dp
+    val GrandTotalMinHeight = 56.dp
+    val TableRowMinHeight = 48.dp
+    val HistoryRowMinHeight = 48.dp
+    const val HistoryVisibleRows = 5
+}
+
+// Older entries remain scrollable within a maximum of five visible rows.
+private const val VISIBLE_PAYMENT_HISTORY_ROWS = PaymentCompactLayout.HistoryVisibleRows
+private val PAYMENT_HISTORY_ROW_HEIGHT = PaymentCompactLayout.HistoryRowMinHeight
 
 private fun displayPaymentDate(value: String): String = runCatching {
     LocalDate.parse(value).format(rowDate)
 }.getOrDefault(value)
 
-/** Payment-only styling: keeps calculator state and payment ledger logic untouched. */
+
+/** Compact surfaces are local to Payment and do not change any other screen. */
 @Composable
-private fun PaymentSectionTitle(title: String) {
-    Text(
-        title,
-        color = PremiumGold,
-        style = MaterialTheme.typography.titleLarge,
-        fontSize = 26.sp,
-        fontWeight = FontWeight.Bold,
-        fontStyle = FontStyle.Italic,
-        modifier = Modifier.padding(top = 5.dp, bottom = 1.dp)
-    )
+private fun PaymentSectionTitle(title: String, modifier: Modifier = Modifier) {
+    Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 18.sp,
+        lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
 private fun PaymentGlassPanel(compact: Boolean = false, content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(SGDimensions.RadiusSmall)
     Column(
-        modifier = Modifier.fillMaxWidth()
-            .border(BorderStroke(1.dp, PremiumGold.copy(alpha = 0.48f)), shape)
-            .background(Color(0xFF122B4B).copy(alpha = 0.38f), shape)
-            .padding(horizontal = if (compact) 10.dp else 12.dp,
-                vertical = if (compact) 9.dp else 12.dp),
-        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp)
-    ) {
-        content()
-    }
+        Modifier.fillMaxWidth()
+            .border(BorderStroke(1.dp, SGColors.Divider.copy(alpha = 0.75f)), shape)
+            .background(SGColors.Card.copy(alpha = 0.84f), shape)
+            .padding(if (compact) PaymentCompactLayout.CardPadding else PaymentCompactLayout.TableCardPadding),
+        verticalArrangement = Arrangement.spacedBy(if (compact) PaymentCompactLayout.IntraCardGap else 4.dp),
+        content = { content() }
+    )
 }
 
 @Composable
 private fun PaymentOverviewCard(date: String) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(SGDimensions.RadiusSmall)
     Row(
-        modifier = Modifier.fillMaxWidth()
-            .border(BorderStroke(1.dp, Color(0xFF9CBDF3).copy(alpha = 0.62f)), shape)
-            .background(Color(0xFF244269).copy(alpha = 0.38f), shape)
-            .padding(horizontal = 13.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().heightIn(min = PaymentCompactLayout.OverviewMinHeight)
+            .border(BorderStroke(1.dp, SGColors.Divider), shape)
+            .background(SGColors.SecondaryBackground.copy(alpha = 0.72f), shape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("Payment overview", color = PremiumGold,
-                style = MaterialTheme.typography.titleMedium,
-                fontSize = 18.sp, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
-            Text("Track your delivery earnings",
-                color = Color(0xFFDAE6F6), fontSize = 14.sp, lineHeight = 19.sp)
-        }
-        Box(
-            modifier = Modifier.border(1.dp, PremiumGold, RoundedCornerShape(24.dp))
-                .background(PremiumNavy.copy(alpha = 0.60f), RoundedCornerShape(24.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(date, color = Color(0xFFFFE5AD), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        }
+        Text("Payment Overview", modifier = Modifier.weight(1f),
+            color = SGColors.Gold, fontSize = 17.sp, lineHeight = 22.sp,
+            fontWeight = FontWeight.SemiBold)
+        Text(date, color = SGColors.White, fontSize = 14.sp, lineHeight = 19.sp,
+            fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
     }
 }
 
+/** Minimum row height adapts to long translated labels and Android font scaling. */
 @Composable
 private fun PaymentRow(label: String, strong: Boolean = false, content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
-    val labelIcon = when (label) {
-        "Date" -> "◷"
-        "Qty parcel" -> "▣"
-        "Commission per parcel (RM)" -> "◉"
-        "Total payment (RM)" -> "≋"
-        "Tax (RM)" -> "%"
-        "Others (RM)" -> "✎"
-        else -> "◆"
-    }
-    val cellBackground = if (strong) Color(0xFF173B79).copy(alpha = 0.88f)
-        else Color(0xFF0B2343).copy(alpha = 0.50f)
-    val line = if (strong) Color(0xFF639FFE) else Color(0xFF6987AD).copy(alpha = 0.58f)
+    val shape = RoundedCornerShape(SGDimensions.RadiusSmall)
     Row(
         Modifier.fillMaxWidth()
-            .border(BorderStroke(if (strong) 1.25.dp else 0.65.dp, line), shape)
-            .background(cellBackground, shape)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .heightIn(min = if (strong) PaymentCompactLayout.GrandTotalMinHeight
+                else PaymentCompactLayout.FieldMinHeight)
+            .border(BorderStroke(if (strong) 1.dp else 0.6.dp,
+                if (strong) SGColors.Gold else SGColors.Divider), shape)
+            .background(
+                if (strong) SGColors.SecondaryBackground.copy(alpha = 0.94f)
+                else SGColors.SecondaryBackground.copy(alpha = 0.53f), shape)
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(
-            Modifier.weight(0.52f).heightIn(min = 40.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Box(
-                Modifier.background(PremiumGold.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(labelIcon, color = PremiumGold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            }
-            Text(
-                label,
-                color = if (strong) Color.White else Color(0xFFF0F5FF),
-                fontSize = if (strong) 16.sp else 15.sp,
-                lineHeight = 20.sp,
-                fontWeight = if (strong) FontWeight.Bold else FontWeight.SemiBold
-            )
-        }
-        Box(Modifier.weight(0.48f).padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
-            content()
-        }
+        Text(label, Modifier.weight(if (strong) 0.47f else 0.52f),
+            color = SGColors.White, fontSize = if (strong) 15.sp else 14.sp,
+            lineHeight = 19.sp, fontWeight = if (strong) FontWeight.Bold else FontWeight.Medium)
+        Box(Modifier.weight(if (strong) 0.53f else 0.48f),
+            contentAlignment = Alignment.CenterEnd) { content() }
     }
 }
 
 @Composable
 private fun PaymentInput(
-    value: String,
-    hint: String,
-    keyboardType: KeyboardType,
-    onChange: (String) -> Unit
+    value: String, hint: String, keyboardType: KeyboardType, onChange: (String) -> Unit
 ) {
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
+        value = value, onValueChange = onChange, singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        cursorBrush = SolidColor(PremiumGold),
-        textStyle = TextStyle(color = Color(0xFFF6F9FF), fontSize = 16.sp, fontWeight = FontWeight.Medium),
+        cursorBrush = SolidColor(SGColors.Gold),
+        textStyle = TextStyle(color = SGColors.White, fontSize = 16.sp,
+            fontWeight = FontWeight.Medium),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { input ->
             Box(
-                Modifier.fillMaxWidth()
-                    .border(BorderStroke(0.8.dp, Color(0xFF9DB6D8).copy(alpha = 0.85f)), RoundedCornerShape(9.dp))
-                    .background(PremiumNavy.copy(alpha = 0.72f), RoundedCornerShape(9.dp))
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                Modifier.fillMaxWidth().heightIn(min = PaymentCompactLayout.InputMinHeight)
+                    .border(BorderStroke(0.8.dp, SGColors.Divider), RoundedCornerShape(8.dp))
+                    .background(SGColors.Background.copy(alpha = 0.72f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (value.isEmpty()) {
-                    Text(hint, color = Color(0xFFDFE8F7), fontSize = 14.sp, lineHeight = 18.sp)
-                }
+                if (value.isEmpty()) Text(hint, color = SGColors.Silver, fontSize = 12.sp,
+                    lineHeight = 17.sp, maxLines = 2)
                 input()
             }
         }
     )
 }
 
+/** Header values use intentional line breaks rather than relying on unstable device wrapping. */
+internal fun paymentTableHeaderValue(label: String): String = when (label) {
+    "Total payment (RM)" -> "Total\npayment (RM)"
+    "Grand total payment (RM)" -> "Grand total\npayment (RM)"
+    else -> label
+}
+
+internal fun paymentTableAlignment(columnIndex: Int): TextAlign =
+    if (columnIndex == 0) TextAlign.Start else TextAlign.Center
+
+/** Payment History and Monthly Summary use centered amounts in matching columns. */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
@@ -378,38 +368,39 @@ private fun PaymentTableRow(
 ) {
     val emphasized = isHeader || isTotal
     val fill = when {
-        isHeader -> Color(0xFF20467F).copy(alpha = 0.90f)
-        isTotal -> Color(0xFF173B79).copy(alpha = 0.86f)
-        else -> PremiumNavy.copy(alpha = 0.55f)
+        isHeader -> SGColors.SecondaryBackground.copy(alpha = 0.95f)
+        isTotal -> SGColors.SecondaryBackground.copy(alpha = 0.90f)
+        else -> SGColors.Background.copy(alpha = 0.42f)
     }
-    val textColor = if (emphasized) Color(0xFFFFE8B8) else Color(0xFFF1F6FF)
-    val gesture = if (onLongClick != null) {
-        Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
-    } else Modifier
+    val textColor = if (emphasized) SGColors.SelectedGold else SGColors.White
+    val gesture = if (onLongClick != null) Modifier.combinedClickable(
+        onClick = {}, onLongClick = onLongClick) else Modifier
     Row(
         Modifier.fillMaxWidth().padding(vertical = 1.dp)
             .then(gesture)
-            .border(BorderStroke(0.6.dp, Color(0xFF829FC8).copy(alpha = 0.50f)), RoundedCornerShape(9.dp))
-            .background(fill, RoundedCornerShape(9.dp)),
+            .heightIn(min = fixedRowHeight ?: PaymentCompactLayout.TableRowMinHeight)
+            .border(BorderStroke(0.6.dp, SGColors.Divider.copy(alpha = 0.65f)),
+                RoundedCornerShape(7.dp))
+            .background(fill, RoundedCornerShape(7.dp))
+            .padding(horizontal = 5.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
-            Box(
-                Modifier.weight(if (index == 0) 1.04f else 1.12f)
-                    .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight - 2.dp)
-                        else Modifier.heightIn(min = if (isHeader) 70.dp else 48.dp))
-                    .padding(horizontal = 4.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    value, color = textColor, fontSize = if (isHeader) 14.sp else 16.sp,
-                    lineHeight = if (isHeader) 18.sp else 21.sp,
-                    fontWeight = if (emphasized) FontWeight.Bold else FontWeight.SemiBold
-                )
-            }
+            Text(
+                if (isHeader) paymentTableHeaderValue(value) else value,
+                modifier = Modifier.weight(if (index == 0) 1.04f else 1.12f),
+                color = textColor,
+                fontSize = if (isHeader) 12.sp else 14.sp,
+                lineHeight = if (isHeader) 16.sp else 19.sp,
+                fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
+                softWrap = true,
+                maxLines = if (isHeader) 2 else Int.MAX_VALUE,
+                textAlign = paymentTableAlignment(index)
+            )
         }
     }
 }
+
 
 /** Edit one entry rather than an aggregate; calculated totals stay consistent with the fields. */
 @Composable
@@ -514,32 +505,33 @@ fun PaymentScreen(vm: PlannerViewModel) {
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = PaymentCompactLayout.ScreenHorizontal,
+                vertical = PaymentCompactLayout.ScreenVertical),
+        verticalArrangement = Arrangement.spacedBy(PaymentCompactLayout.SectionGap)
     ) {
-        Text("Payment", color = Color(0xFFF8F6FF), fontSize = 28.sp,
-            fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
         PaymentOverviewCard(displayPaymentDate(vm.deliveryDate.toString()))
         PaymentGlassPanel(compact = true) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(min = PaymentCompactLayout.CalculatorTitleMinHeight),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Box(
-                    modifier = Modifier.border(BorderStroke(1.dp, PremiumGold), RoundedCornerShape(12.dp))
-                        .background(PremiumGold.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.border(BorderStroke(1.dp, PremiumGold), RoundedCornerShape(SGDimensions.RadiusSmall))
+                        .background(PremiumGold.copy(alpha = 0.18f), RoundedCornerShape(SGDimensions.RadiusSmall))
+                        .padding(horizontal = 5.dp, vertical = 3.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("▤", color = PremiumGold, fontSize = 29.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = PremiumGold, modifier = Modifier.size(19.dp))
                 }
-                Text("Payment calculator", color = Color(0xFFFFE5AB),
-                    style = MaterialTheme.typography.titleMedium, fontSize = 22.sp,
-                    fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
+                Text("Payment calculator", color = SGColors.SelectedGold,
+                    style = MaterialTheme.typography.titleMedium, fontSize = 18.sp,
+                    fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold)
             }
             PaymentRow("Date") {
-                Text(displayPaymentDate(vm.deliveryDate.toString()), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(displayPaymentDate(vm.deliveryDate.toString()), color = SGColors.Silver,
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
             PaymentRow("Qty parcel") {
                 PaymentInput(quantity, "Enter quantity", KeyboardType.Number) {
@@ -552,21 +544,24 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             }
             PaymentRow("Total payment (RM)") {
-                Text(amounts?.totalPaymentRm ?: "—", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(amounts?.totalPaymentRm ?: "—", color = SGColors.White, fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
             PaymentRow("Tax (RM)") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     PaymentInput(taxRm, "Enter tax (RM)", KeyboardType.Decimal) {
                         if (validCurrencyInput(it)) manualTaxRm = it
                     }
                     if (reportTax != null && manualTaxRm != null) {
                         TextButton(onClick = { manualTaxRm = null }) {
-                            Text("Use report tax: RM $reportTax", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Use report tax: RM $reportTax", fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium)
                         }
                     } else if (reportTax != null) {
                         Text(
                             "From Delivery Report Summary",
-                            fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 12.sp, lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -579,20 +574,22 @@ fun PaymentScreen(vm: PlannerViewModel) {
             PaymentRow("Grand total payment", strong = true) {
                 Text(
                     if (amounts == null) "—" else "RM " + amounts.grandTotalPaymentRm,
-                    color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp
+                    color = SGColors.SelectedGold, fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp, textAlign = TextAlign.End
                 )
             }
-            Spacer(Modifier.height(2.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    border = BorderStroke(1.4.dp, Color(0xFF90BBFC)),
+                    shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    border = BorderStroke(1.dp, SGColors.Gold),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumNavy.copy(alpha = 0.45f),
-                        contentColor = Color(0xFFEDF5FF)
+                        contentColor = SGColors.White
                     )
-                ) { Text("↶  Reset", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+                ) { Text("Reset", style = MaterialTheme.typography.labelLarge) }
                 OutlinedButton(
                     onClick = {
                         val value = amounts ?: return@OutlinedButton
@@ -611,6 +608,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     },
                     enabled = amounts != null && !vm.busy,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     border = BorderStroke(1.dp, PremiumGold),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = PremiumGold,
@@ -618,21 +617,21 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                ) { Text("▣  Save", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+                ) { Text("Save", style = MaterialTheme.typography.labelLarge) }
             }
         }
         if (reportTax == null) {
             Text(
                 "No saved Delivery Report Summary for this date. Tax defaults to RM 0.00; you can edit it manually.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp, lineHeight = 19.sp
+                fontSize = 12.sp, lineHeight = 16.sp
             )
         }
-        PaymentSectionTitle("Payment history")
-        Text("Press and hold a saved date to edit or delete its payment.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp, lineHeight = 19.sp
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            PaymentSectionTitle("Payment history", Modifier.weight(1f))
+            Text("Long-press to edit/delete", color = SGColors.Silver,
+                fontSize = 11.sp, lineHeight = 15.sp)
+        }
         PaymentGlassPanel {
             // Header stays visible while the records scroll in a five-row-high viewport.
             PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
@@ -650,14 +649,11 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             }
         }
-        PaymentSectionTitle("Summary payment in month")
-        Text(
-            "Totals for the current calendar year, calculated from saved payment records.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp, lineHeight = 19.sp
-        )
-        // Current year is captured by the Payment screen and its month-management dialog.
-        Text(currentYear.toString(), style = MaterialTheme.typography.titleMedium, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            PaymentSectionTitle("Monthly Summary", Modifier.weight(1f))
+            Text(currentYear.toString(), color = SGColors.Silver,
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
         val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
         val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
         PaymentGlassPanel {
@@ -674,14 +670,13 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     "No payment records for $currentYear.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
-                    modifier = Modifier.padding(vertical = 12.dp)
+                    modifier = Modifier.padding(vertical = 6.dp)
                 )
             }
             PaymentTableRow("Total", yearTotal.totalPaymentRm, yearTotal.grandTotalPaymentRm, isTotal = true)
         }
-        Text("Press and hold a month to manage the saved payments within it.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp, lineHeight = 19.sp
+        Text("Long-press a month to manage saved records.",
+            color = SGColors.Silver, fontSize = 11.sp, lineHeight = 15.sp
         )
     }
 

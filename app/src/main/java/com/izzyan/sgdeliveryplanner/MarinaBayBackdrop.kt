@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,7 +27,6 @@ internal fun MarinaBayBackdrop(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val lightTheme = MaterialTheme.colorScheme.background.red > 0.5f
     Box(modifier) {
         Image(
             painter = painterResource(R.drawable.marina_bay_sands_dark),
@@ -39,8 +37,7 @@ internal fun MarinaBayBackdrop(
         )
         Box(
             Modifier.fillMaxSize().background(
-                if (lightTheme) Color.White.copy(alpha = 0.90f)
-                else Color(0xFF06172A).copy(alpha = 0.58f)
+                SGColors.Background.copy(alpha = 0.67f)
             )
         )
         content()
@@ -57,7 +54,7 @@ internal fun drawMarinaBayReportBackground(
     width: Int,
     height: Int
 ) {
-    canvas.drawColor(AndroidColor.rgb(7, 23, 45))
+    canvas.drawColor(AndroidColor.rgb(8, 27, 51))
     val options = BitmapFactory.Options().apply { inScaled = false }
     val background = BitmapFactory.decodeResource(
         context.resources, R.drawable.marina_bay_sands_dark, options
@@ -75,5 +72,5 @@ internal fun drawMarinaBayReportBackground(
     }
     // Reports need a brighter skyline than the app background; the card and text shadows
     // keep the white/gold report details legible even when exporting the PNG.
-    canvas.drawColor(AndroidColor.argb(28, 4, 14, 27))
+    canvas.drawColor(AndroidColor.argb(66, 8, 27, 51))
 }

@@ -106,7 +106,7 @@ private fun ReadOnlyHistoryProof(id:String?,title:String) {
             }
         }
         Dialog(onDismissRequest={enlarge=false},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-            Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
+            Column(Modifier.fillMaxSize().background(SGColors.Background).padding(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Text(title,Modifier.weight(1f),color=PremiumGold)
                     TextButton(onClick={enlarge=false}) {Text("Close")}
@@ -137,7 +137,7 @@ private fun HistoryReportImageDialog(plan:Plan,stopIndex:Int?,onClose:()->Unit) 
         catch(_:Exception){error=true}
     }
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
+        Column(Modifier.fillMaxSize().background(SGColors.Background).padding(12.dp)) {
             Text(if(stopIndex==null)"Delivery Report Summary" else "Delivery Report",
                 color=PremiumGold,style=MaterialTheme.typography.titleMedium)
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
