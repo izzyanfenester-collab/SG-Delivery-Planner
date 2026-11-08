@@ -116,7 +116,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = SGColors.Background, shape = RoundedCornerShape(SGDimensions.RadiusCard),
+                    Surface(color = SGColors.Card, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
                         Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -222,7 +222,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         }
                     }
                     session.location?.takeIf { it.hasSpeed() }?.let { fix ->
-                        Surface(color = PremiumNavy.copy(alpha = 0.96f),
+                        Surface(color = SGColors.Card,
                             shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -239,7 +239,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
-                    Surface(color = PremiumNavy.copy(alpha = 0.97f), shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
+                    Surface(color = SGColors.Card, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
