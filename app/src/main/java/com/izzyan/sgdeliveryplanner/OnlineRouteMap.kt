@@ -21,10 +21,10 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
-/** Uses OpenFreeMap vector tiles, not the OSM Foundation's blocked MAPNIK raster server.
+/** Daylight OpenFreeMap Bright vector basemap; never the blocked OSM raster MAPNIK server.
  * This is the Route Map page only, and never changes built-in GPS navigation.
  */
-private const val ROUTE_MAP_STYLE = "https://tiles.openfreemap.org/styles/dark"
+private const val ROUTE_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright"
 
 @Composable
 internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
