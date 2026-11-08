@@ -270,7 +270,7 @@ private fun PaymentGlassPanel(compact: Boolean = false, content: @Composable () 
     Column(
         Modifier.fillMaxWidth()
             .border(BorderStroke(1.dp, SGColors.Divider.copy(alpha = 0.75f)), shape)
-            .background(SGColors.Card.copy(alpha = 0.84f), shape)
+            .background(SGColors.Card, shape)
             .padding(if (compact) PaymentCompactLayout.CardPadding else PaymentCompactLayout.TableCardPadding),
         verticalArrangement = Arrangement.spacedBy(if (compact) PaymentCompactLayout.IntraCardGap else 4.dp),
         content = { content() }
@@ -283,7 +283,7 @@ private fun PaymentOverviewCard(date: String) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = PaymentCompactLayout.OverviewMinHeight)
             .border(BorderStroke(1.dp, SGColors.Divider), shape)
-            .background(SGColors.SecondaryBackground.copy(alpha = 0.72f), shape)
+            .background(SGColors.Card, shape)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -307,8 +307,8 @@ private fun PaymentRow(label: String, strong: Boolean = false, content: @Composa
             .border(BorderStroke(if (strong) 1.dp else 0.6.dp,
                 if (strong) SGColors.Gold else SGColors.Divider), shape)
             .background(
-                if (strong) SGColors.SecondaryBackground.copy(alpha = 0.94f)
-                else SGColors.SecondaryBackground.copy(alpha = 0.53f), shape)
+                // Rows are nested in a 30%-opaque PaymentGlassPanel; no second fill.
+                Color.Transparent, shape)
             .padding(horizontal = 9.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -367,11 +367,8 @@ private fun PaymentTableRow(
     onLongClick: (() -> Unit)? = null, fixedRowHeight: Dp? = null
 ) {
     val emphasized = isHeader || isTotal
-    val fill = when {
-        isHeader -> SGColors.SecondaryBackground.copy(alpha = 0.95f)
-        isTotal -> SGColors.SecondaryBackground.copy(alpha = 0.90f)
-        else -> SGColors.Background.copy(alpha = 0.42f)
-    }
+    // No extra tinted layer: the outer PaymentGlassPanel already supplies 30% Navy.
+    val fill = Color.Transparent
     val textColor = if (emphasized) SGColors.SelectedGold else SGColors.White
     val gesture = if (onLongClick != null) Modifier.combinedClickable(
         onClick = {}, onLongClick = onLongClick) else Modifier

@@ -19,8 +19,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 
 /**
- * Shared dimmed Marina Bay Sands backdrop. The content sits above a strong
- * theme-aware scrim so text, controls, and accessibility contrast stay intact.
+ * Shared Marina Bay Sands backdrop. A moderate image-only Navy scrim keeps
+ * the skyline visible behind transparent cards while preserving contrast.
  */
 @Composable
 internal fun MarinaBayBackdrop(
@@ -37,7 +37,7 @@ internal fun MarinaBayBackdrop(
         )
         Box(
             Modifier.fillMaxSize().background(
-                SGColors.Background.copy(alpha = 0.67f)
+                SGColors.Background.copy(alpha = 0.42f)
             )
         )
         content()
