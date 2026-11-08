@@ -15,7 +15,7 @@ import java.time.ZoneId
 class PlannerViewModel @JvmOverloads constructor(app: Application, private val exchangeRateProvider: ExchangeRateProvider = OnlineExchangeRateProvider()) : AndroidViewModel(app) {
     val repo = Repository(app)
     private val offlineMaps = OfflineMapPackageManager(app)
-    var offlineMapStatus by mutableStateOf(offlineMaps.status())
+    internal var offlineMapStatus by mutableStateOf(offlineMaps.status())
         private set
     var offlineMapBusy by mutableStateOf(false)
         private set
