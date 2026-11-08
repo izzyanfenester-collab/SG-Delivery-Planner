@@ -122,8 +122,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = SGColors.Gold, fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold)
+                                Column {
+                                    Text("SG Delivery GPS Pro", color = SGColors.Gold, fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold)
+                                    Text(session.routingSource, color = SGColors.Silver, fontSize = 10.sp,
+                                        maxLines = 1)
+                                }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton(onClick = { session.toggleDimension() },
                                         contentPadding = PaddingValues(horizontal = 5.dp)) {
@@ -348,6 +352,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var arrived by mutableStateOf(false); private set
     var loading by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null); private set
+    var routingSource by mutableStateOf("Not connected"); private set
     var muted by mutableStateOf(false); private set
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
@@ -402,6 +407,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         manuallyEndNavigationUponCompletion = true, isDebugLoggingEnabled = false
     ))
     private val client = ValhallaClient()
+    private val offlineRoads = OfflineRoadPackageStore(context.applicationContext)
     private val reroute = ReroutePolicy()
     private var arrival = ArrivalDetector()
     private val voiceGate = VoiceCueGate()
@@ -504,7 +510,31 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         reroute.requested(SystemClock.elapsedRealtime()); loading = true; message = null
         requestJob = scope?.launch {
             try {
-                val newRoute = client.route(GpsPoint(fix.latitude, fix.longitude), GpsPoint(destination.lat, destination.lon))
+                val origin = GpsPoint(fix.latitude, fix.longitude)
+                val target = GpsPoint(destination.lat, destination.lon)
+                val installed = offlineRoads.loadOrNull()
+                val localPreferred = installed != null && !hasUsableInternet(context)
+                val newRoute = if (localPreferred) {
+                    routingSource = if (offlineRoads.offlineVectorTilePath() != null)
+                        "OFFLINE – local maps & road routing"
+                    else "OFFLINE – road routing only; map tiles missing"
+                    withContext(Dispatchers.Default) {
+                        offlineDrivingDirections(installed!!.route(origin, target))
+                    }
+                } else {
+                    try {
+                        client.route(origin, target).also { routingSource = "ONLINE – network routing" }
+                    } catch (e: CancellationException) { throw e }
+                      catch (e: Exception) {
+                        if (installed == null) throw e
+                        routingSource = if (offlineRoads.offlineVectorTilePath() != null)
+                        "OFFLINE – local maps & road routing"
+                    else "OFFLINE – road routing only; map tiles missing"
+                        withContext(Dispatchers.Default) {
+                            offlineDrivingDirections(installed.route(origin, target))
+                        }
+                    }
+                }
                 if (!active || arrived) return@launch
                 shape = decodeNavigationGeometry(newRoute.geometry)
                 localTraffic.reset(shape, newRoute.distance, newRoute.duration)
@@ -514,7 +544,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
                 instruction = "Follow the route"; voiceGate.reset(); sdk.startNavigation(newRoute)
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { reroute.failed(SystemClock.elapsedRealtime()); message = ROUTE_UNAVAILABLE }
+            catch (_: Exception) {
+                reroute.failed(SystemClock.elapsedRealtime())
+                message = if (!hasUsableInternet(context))
+                    "No offline route available. Install a Singapore driving-road graph in Settings."
+                else ROUTE_UNAVAILABLE
+            }
             finally { loading = false }
         }
     }

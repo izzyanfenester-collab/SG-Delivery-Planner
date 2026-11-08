@@ -52,6 +52,10 @@ class PostalResolutionException(val failures: List<PostalLookupFailure>) : Plann
 
 class Repository(context:Context) {
  private val gson=Gson()
+ private val appContext=context.applicationContext
+ private val offlineRoads=OfflineRoadPackageStore(appContext)
+ @Volatile var lastRouteUsedOffline: Boolean = false
+   private set
  val dao=Room.databaseBuilder(context,PlannerDb::class.java,"planner.db").build().dao()
  private val api=createRoutingApi()
  private val offlinePostals=OfflinePostalIndex(context)
@@ -68,7 +72,57 @@ class Repository(context:Context) {
   if(cached!=null && cached.postal==postal && cached.lat in 1.1..1.6 && cached.lon in 103.5..104.1) return cached
   throw PlannerError("Postal code $postal is not in the saved Singapore index. Check this code or choose its location on the map.")
  }
+ /**
+  * Prefer online OSRM only while internet is validated. If it fails, switch to a
+  * verified installed on-device road graph; no cached-online geometry is forged.
+  */
  suspend fun plan(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),endSelection:EndLocationSelection = EndLocationSelection(false, null),progress:(String)->Unit):Plan = coroutineScope {
+  lastRouteUsedOffline = false
+  val installed = offlineRoads.loadOrNull()
+  if (installed != null && !hasUsableInternet(appContext)) {
+   progress("OFFLINE: using installed Singapore driving-road graph")
+   return@coroutineScope planOffline(installed,codes,start,service,mode,location,orders,endSelection,progress)
+  }
+  try {
+   return@coroutineScope planOnline(codes,start,service,mode,endpoint,location,orders,endSelection,progress)
+  } catch (e: CancellationException) { throw e }
+    catch (e: PostalResolutionException) { throw e }
+    catch (e: Exception) {
+     if (installed == null) {
+      if (!hasUsableInternet(appContext)) throw PlannerError(
+       "No internet and offline Singapore road graph is not installed. Open Settings to import a complete road graph package.", e)
+      throw e
+     }
+     progress("Online routing unavailable. Switching automatically to installed offline road network…")
+     return@coroutineScope planOffline(installed,codes,start,service,mode,location,orders,endSelection,progress)
+    }
+ }
+
+ private suspend fun planOffline(
+  graph:OfflineRoadGraph,codes:List<String>,start:LocalDateTime,service:Int,mode:String,
+  location:StartLocation,orders:List<CustomerOrder>,endSelection:EndLocationSelection,
+  progress:(String)->Unit
+ ):Plan {
+  require(codes.size in 1..30) { "Offline route supports up to 30 distinct locations." }
+  val resolved = codes.mapIndexed { i, code ->
+   progress("Resolving offline postal ${i+1} of ${codes.size}…")
+   runCatching { resolve(code) }
+  }
+  val errors = resolved.mapIndexedNotNull { i, result ->
+   result.exceptionOrNull()?.let { PostalLookupFailure(codes[i], "No verified offline coordinates for this postal code.") }
+  }
+  if (errors.isNotEmpty()) throw PostalResolutionException(errors)
+  val plan = withContext(Dispatchers.Default) {
+   buildOfflineDeliveryPlan(graph,resolved.map { it.getOrThrow() },start,service,mode,
+    location,endSelection,orders,progress)
+  }
+  save(plan)
+  lastRouteUsedOffline = true
+  progress("OFFLINE road-based route saved. ETA uses stored speed assumptions, not live traffic.")
+  return plan
+ }
+
+ private suspend fun planOnline(codes:List<String>,start:LocalDateTime,service:Int,mode:String,endpoint:String,location:StartLocation=woodlandsStartLocation,orders:List<CustomerOrder> = emptyList(),endSelection:EndLocationSelection = EndLocationSelection(false, null),progress:(String)->Unit):Plan = coroutineScope {
   checkPlanning(codes.size in 1..50) { "Plan 1–50 unique stops per route. Split larger lists into separate routes." }
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
   checkPlanning(location.isValid()) { "Choose a valid start location before planning." }

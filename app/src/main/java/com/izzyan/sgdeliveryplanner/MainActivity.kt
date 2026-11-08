@@ -47,6 +47,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
@@ -89,6 +90,7 @@ class MainActivity : ComponentActivity() {
         )
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
+        runCatching { OfflineRoadUpdateScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
@@ -465,6 +467,7 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        OfflineRoadSettingsPanel()
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
@@ -1260,7 +1263,7 @@ fun History(vm: PlannerViewModel) {
 }
 
 /** Small numbered red stop markers matching the route map reference: red fill, dark rim, white stop number. */
-private fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
+internal fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
     val density = resources.displayMetrics.density
     val diameter = (16f * density + 0.5f).toInt().coerceAtLeast(16)
     val bitmap = android.graphics.Bitmap.createBitmap(diameter, diameter, android.graphics.Bitmap.Config.ARGB_8888)
@@ -1289,6 +1292,17 @@ private fun numberedMapStopIcon(resources: android.content.res.Resources, stopNu
 @Composable
 fun RouteMap(p: Plan) {
     val context = LocalContext.current
+    var online by remember { mutableStateOf(hasUsableInternet(context)) }
+    LaunchedEffect(context) {
+        while (true) {
+            online = hasUsableInternet(context)
+            delay(8_000)
+        }
+    }
+    if (!online && OfflineRoadPackageStore(context).offlineVectorTilePath() != null) {
+        OfflineRouteOverview(p)
+        return
+    }
     val numberedStopIcons = remember(context, p.stops.size) {
         (1..p.stops.size).map { numberedMapStopIcon(context.resources, it) }
     }
