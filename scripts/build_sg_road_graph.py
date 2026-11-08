@@ -80,6 +80,9 @@ class RoadHandler(osmium.SimpleHandler):
         self.coords: dict[int, tuple[float, float]] = {}
         self.edges: list[tuple[int, int, int, int, int]] = []
         self.way_ids: dict[int, int] = {}
+        # Cartographic road classification is separate from driving time and cannot
+        # be guessed from integer-rounded seconds on very short road segments.
+        self.way_classes: dict[int, int] = {}
         self.turns: list[tuple[int, int, int, int]] = []
         self.via_way_skipped = 0
 
@@ -108,6 +111,12 @@ class RoadHandler(osmium.SimpleHandler):
         if len(pairs) < 2:
             return
         compact_way = self.way_ids.setdefault(way.id, len(self.way_ids) + 1)
+        self.way_classes[compact_way] = (
+            3 if cls in {"motorway", "motorway_link", "trunk", "trunk_link"}
+            else 2 if cls in {"primary", "primary_link", "secondary", "secondary_link"}
+            else 1 if cls in {"tertiary", "tertiary_link", "unclassified"}
+            else 0
+        )
         oneway = direction(tags, cls)
         speed = speed_kmh(tags, cls)
         for a, b in zip(pairs, pairs[1:]):
@@ -209,6 +218,12 @@ def write_graph(pbf: Path, target: Path) -> dict:
             f.write(struct.pack("<4i", to, length, duration, way))
         for data in accepted:
             f.write(struct.pack("<4i", *data))
+    # Build-time-only sidecar: the app still installs the exact same SGR2 graph.
+    # Class IDs index the existing compact OSM way IDs; sidecar is not shipped.
+    class_codes = bytearray(len(handler.way_ids) + 1)
+    for compact_id, kind in handler.way_classes.items():
+        class_codes[compact_id] = kind
+    target.with_suffix(".classes").write_bytes(class_codes)
     print("Graph: nodes", len(node_ids), "edges", len(edges),
           "restrictions", len(accepted), "unhandled via-way", handler.via_way_skipped)
     return {
