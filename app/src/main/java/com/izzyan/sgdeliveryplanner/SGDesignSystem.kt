@@ -98,8 +98,9 @@ fun SGSecondaryButton(
 
 @Composable
 fun SGIconButton(
-    onClick: () -> Unit, icon: @Composable () -> Unit,
-    modifier: Modifier = Modifier, selected: Boolean = false, enabled: Boolean = true
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier, selected: Boolean = false, enabled: Boolean = true,
+    icon: @Composable () -> Unit
 ) {
     Surface(
         modifier = modifier.size(SGDimensions.Touch),
