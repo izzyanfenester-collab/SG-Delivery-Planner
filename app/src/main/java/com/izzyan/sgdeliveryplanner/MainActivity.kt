@@ -136,9 +136,10 @@ fun App(vm: PlannerViewModel) {
                         }
                         Spacer(Modifier.weight(1f))
                         if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History", "Payment")) {
-                            IconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy, modifier = Modifier.size(48.dp)) {
-                                Icon(androidx.compose.material.icons.Icons.Outlined.Settings, contentDescription = "Settings",
-                                    tint = SGColors.Gold, modifier = Modifier.size(SGDimensions.Icon))
+                            SGIconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy) {
+                                Icon(androidx.compose.material.icons.Icons.Outlined.Settings,
+                                    contentDescription = "Settings", tint = SGColors.White,
+                                    modifier = Modifier.size(SGDimensions.Icon))
                             }
                             ChatGptHeaderButton()
                         }
@@ -943,9 +944,9 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
 }
 @Composable
 private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
-    PremiumCard(
+    SGDeliveryCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
-        borderColor = if (current) PremiumGold else null
+        borderColor = if (current) SGColors.Gold else null
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
