@@ -1295,15 +1295,37 @@ fun RouteMap(p: Plan) {
     val numberedStopIcons = remember(context, p.stops.size) {
         (1..p.stops.size).map { numberedMapStopIcon(context.resources, it) }
     }
-    val map = remember { MapView(context).apply {
+    // Offline Map tab only: keep the existing built-in GPS navigation untouched.
+    // MBTiles is self-rendered from licensed OSM PBF, not scraped online tiles.
+    val offlineTiles = if (!hasValidatedNetwork(context)) {
+        OfflineMapPackageManager(context).tilesFile()
+    } else null
+    val map = remember(offlineTiles) { MapView(context).apply {
         setMultiTouchControls(true)
-        setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+        if (offlineTiles != null) {
+            try {
+                val provider = org.osmdroid.tileprovider.modules.OfflineTileProvider(
+                    org.osmdroid.tileprovider.util.SimpleRegisterReceiver(context),
+                    arrayOf(offlineTiles)
+                )
+                setTileProvider(provider)
+                setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                setUseDataConnection(false)
+                setBackgroundColor(android.graphics.Color.rgb(16, 42, 76))
+            } catch (_: Exception) {
+                setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                setUseDataConnection(false)
+            }
+        } else {
+            setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+            if (!hasValidatedNetwork(context)) setUseDataConnection(false)
+        }
     } }
     DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
     Column(Modifier.fillMaxSize()) {
         MarinaBayBackdrop(Modifier.fillMaxWidth().height(68.dp)) {
             Text(
-                "Red dots: Delivery stops • © OpenStreetMap contributors",
+                if (offlineTiles != null) "Offline roads • Red dots: Delivery stops • © OpenStreetMap contributors" else "Red dots: Delivery stops • © OpenStreetMap contributors",
                 Modifier.align(Alignment.CenterStart).padding(horizontal = 16.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground
