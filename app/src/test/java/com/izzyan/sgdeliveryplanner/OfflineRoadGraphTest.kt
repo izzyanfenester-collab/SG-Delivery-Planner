@@ -28,12 +28,12 @@ class OfflineRoadGraphTest {
         val b = ByteBuffer.allocate(32 + 6 * 16 + edges.size * 16 + 16)
             .order(ByteOrder.LITTLE_ENDIAN)
         b.put("SGR1".toByteArray(Charsets.US_ASCII))
-        listOf(1, 6, edges.size, 1, 0, 0, 0).forEach(b::putInt)
+        listOf(2, 6, edges.size, 1, 0, 0, 0).forEach(b::putInt)
         for (n in 0..5) {
             b.putInt((1.3 + n * 0.001).times(1e7).toInt())
             b.putInt((103.8 + n * 0.001).times(1e7).toInt())
             b.putInt(starts[n])
-            b.putInt(degrees[n])
+            b.putInt(degrees[n] or Int.MIN_VALUE)
         }
         edges.forEach { edge -> edge.forEach(b::putInt) }
         listOf(1, 1, 3, 0).forEach(b::putInt) // NO turn at node 1 from way 1 to way 3
