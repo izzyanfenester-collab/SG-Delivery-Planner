@@ -14,6 +14,33 @@ import java.time.ZoneId
 
 class PlannerViewModel @JvmOverloads constructor(app: Application, private val exchangeRateProvider: ExchangeRateProvider = OnlineExchangeRateProvider()) : AndroidViewModel(app) {
     val repo = Repository(app)
+    private val offlineMaps = OfflineMapPackageManager(app)
+    internal var offlineMapStatus by mutableStateOf(offlineMaps.status())
+        private set
+    var offlineMapBusy by mutableStateOf(false)
+        private set
+    var offlineMapProgress by mutableStateOf("")
+        private set
+
+    fun downloadOrUpdateOfflineMaps() {
+        if (offlineMapBusy) return
+        offlineMapBusy = true
+        offlineMapProgress = "Checking Singapore road package…"
+        viewModelScope.launch {
+            try {
+                val changed = offlineMaps.checkAndUpdate { offlineMapProgress = it }
+                offlineMapStatus = offlineMaps.status()
+                offlineMapProgress = if (changed) "Singapore offline roads installed." else "Offline Singapore roads already up to date."
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                offlineMapStatus = offlineMaps.status()
+                offlineMapProgress = "Map update failed: " + (e.message ?: "Try again when online.")
+            } finally {
+                offlineMapBusy = false
+            }
+        }
+    }
+
     private val prefs = app.getSharedPreferences("settings", 0)
     private val locationSettings = StartLocationSettings(app)
     internal val navigationPreferences = NavigationPreferences(app)
@@ -384,10 +411,31 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         notice = ""
         viewModelScope.launch {
             try {
-                val planned = repo.plan(
-                    parsed.valid, routeStart,
-                    service, traffic, endpoint, selectedStartLocation, orders, selectedEndLocation
-                ) { message = it }
+                val planned = if (!hasValidatedNetwork(getApplication())) {
+                    // Airplane mode: never contact the network; fail clearly if graph absent.
+                    repo.planOffline(
+                        parsed.valid, routeStart, service, traffic,
+                        selectedStartLocation, orders, selectedEndLocation
+                    ) { message = it }
+                } else {
+                    try {
+                        repo.plan(
+                            parsed.valid, routeStart, service, traffic, endpoint,
+                            selectedStartLocation, orders, selectedEndLocation
+                        ) { message = it }
+                    } catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                        val transientNetworkFailure =
+                            failure is java.io.IOException ||
+                                (failure is retrofit2.HttpException && failure.code() >= 500)
+                        if (!transientNetworkFailure || offlineMaps.graphFile() == null) throw failure
+                        message = "Online routing unavailable. Switching to installed offline Singapore roads…"
+                        repo.planOffline(
+                            parsed.valid, routeStart, service, traffic,
+                            selectedStartLocation, orders, selectedEndLocation
+                        ) { message = it }
+                    }
+                }
                 val withRate = planned.copy(exchangeRate = latestExchangeRate)
                 repo.save(withRate)
                 route = withRate

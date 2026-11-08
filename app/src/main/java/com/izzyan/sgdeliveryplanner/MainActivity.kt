@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
+        runCatching { OfflineMapUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
@@ -465,6 +466,7 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        OfflineMapSettingsCard(vm)
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
@@ -1041,6 +1043,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
                 DetailRow("End location", p.endReportLabel)
                 DetailRow("Start", time(p.start))
                 DetailRow("Total parcels", p.stops.size.toString())
+                if (p.routingSource == "Offline") DetailRow("Route calculation source", "Offline Singapore roads")
                 DetailRow("Distance", km(p.totalKm))
                 DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
                 DetailRow("End arrival", time(p.returned))
@@ -1260,7 +1263,7 @@ fun History(vm: PlannerViewModel) {
 }
 
 /** Small numbered red stop markers matching the route map reference: red fill, dark rim, white stop number. */
-private fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
+internal fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
     val density = resources.displayMetrics.density
     val diameter = (16f * density + 0.5f).toInt().coerceAtLeast(16)
     val bitmap = android.graphics.Bitmap.createBitmap(diameter, diameter, android.graphics.Bitmap.Config.ARGB_8888)
@@ -1286,43 +1289,69 @@ private fun numberedMapStopIcon(resources: android.content.res.Resources, stopNu
     return android.graphics.drawable.BitmapDrawable(resources, bitmap)
 }
 
+/**
+ * Route Map screen selects a permitted online vector map when connected, and the
+ * local OSM-derived MBTiles (never tile.openstreetmap.org) in airplane mode.
+ * This does not change the separate built-in GPS navigation Activity.
+ */
 @Composable
 fun RouteMap(p: Plan) {
+    val context = LocalContext.current
+    val online = hasValidatedNetwork(context)
+    val localTiles = if (online) null else OfflineMapPackageManager(context).tilesFile()
+    // The map now occupies all available height below the existing app header.
+    // MapLibre provides its own online attribution; the offline branch shows it locally.
+    if (online) {
+        OnlineRouteMap(p, Modifier.fillMaxSize())
+    } else {
+        OfflinePlannedRouteMap(p, localTiles, Modifier.fillMaxSize())
+    }
+}
+
+/** Visualize saved route and 50 distinct delivery markers without network calls. */
+@Composable
+private fun OfflinePlannedRouteMap(p: Plan, archive: java.io.File?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val numberedStopIcons = remember(context, p.stops.size) {
         (1..p.stops.size).map { numberedMapStopIcon(context.resources, it) }
     }
-    val map = remember { MapView(context).apply {
-        setMultiTouchControls(true)
-        setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
-    } }
-    DisposableEffect(map) { map.onResume(); onDispose { map.onPause(); map.onDetach() } }
-    Column(Modifier.fillMaxSize()) {
-        MarinaBayBackdrop(Modifier.fillMaxWidth().height(68.dp)) {
-            Text(
-                "Red dots: Delivery stops • © OpenStreetMap contributors",
-                Modifier.align(Alignment.CenterStart).padding(horizontal = 16.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+    val map = remember(archive) {
+        MapView(context).apply {
+            setMultiTouchControls(true)
+            setUseDataConnection(false)
+            setBackgroundColor(android.graphics.Color.rgb(175, 211, 226))
+            // Never select MAPNIK: cached raster tiles may be poisoned with 403
+            // images and the OSM Foundation server is not an offline map source.
+            setTileSource(org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "SG_DAYLIGHT_BASEMAP", 9, 16, 256, ".png", arrayOf("")
+            ))
+            if (archive != null) {
+                runCatching {
+                    setTileProvider(org.osmdroid.tileprovider.modules.OfflineTileProvider(
+                        org.osmdroid.tileprovider.util.SimpleRegisterReceiver(context),
+                        arrayOf(archive)
+                    ))
+                }
+            }
         }
-        AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().weight(1f), update = { view ->
+    }
+    DisposableEffect(map) {
+        map.onResume()
+        onDispose { map.onPause(); map.onDetach() }
+    }
+    Box(modifier) {
+        AndroidView(factory = { map }, modifier = Modifier.fillMaxSize(), update = { view ->
             view.overlays.clear()
             val line = Polyline().apply {
-                setPoints(p.geometry.map { GeoPoint(it[1], it[0]) })
-                outlinePaint.color = android.graphics.Color.rgb(24, 60, 120)
+                setPoints(p.geometry.filter { it.size >= 2 }.map { GeoPoint(it[1], it[0]) })
+                outlinePaint.color = android.graphics.Color.rgb(24, 104, 218)
                 outlinePaint.strokeWidth = 7f
             }
             view.overlays.add(line)
-            // Show all delivery stops as compact numbered red dots, matching the reference image.
-            // Center the drawable on each actual GPS coordinate to avoid visual offset.
-            // Route line stays underneath the markers, preserving the existing blue route.
             p.stops.forEachIndexed { index, stop ->
                 view.overlays.add(Marker(view).apply {
                     position = GeoPoint(stop.place.lat, stop.place.lon)
-                    title = if (index == p.current)
-                        "Current Target - Stop ${index + 1}: ${stop.place.postal}"
-                    else "Stop ${index + 1}: ${stop.place.postal}"
+                    title = "Stop " + (index + 1) + ": " + stop.place.postal
                     snippet = stop.place.address
                     icon = numberedStopIcons[index]
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
@@ -1330,15 +1359,38 @@ fun RouteMap(p: Plan) {
             }
             if (!p.endAtLastDelivery) view.overlays.add(Marker(view).apply {
                 position = GeoPoint(p.endPlace.lat, p.endPlace.lon)
-                title = "END — ${p.endDisplayName}"
+                title = "END — " + p.endDisplayName
                 snippet = p.endPlace.address
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             })
-            val startPlace = p.startLocation.asPlace()
-            val finalPlace = p.endPlace
-            val points = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } + GeoPoint(startPlace.lat, startPlace.lon) + GeoPoint(finalPlace.lat, finalPlace.lon)
-            view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 80) }
+            val start = p.startLocation.asPlace()
+            val end = p.endPlace
+            val pins = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } +
+                GeoPoint(start.lat, start.lon) + GeoPoint(end.lat, end.lon)
+            view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(pins), false, 80) }
             view.invalidate()
         })
+        if (archive != null) {
+            Text(
+                "© OpenStreetMap contributors · Natural Earth",
+                Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp)
+                    .background(Color.White.copy(alpha = 0.88f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.DarkGray
+            )
+        }
+        if (archive == null) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
+                color = SGColors.SolidCard
+            ) {
+                Text(
+                    "Singapore Offline Maps are not installed. Connect to the Internet, open Settings and download the offline package. Route markers remain visible.",
+                    Modifier.padding(12.dp),
+                    color = SGColors.White
+                )
+            }
+        }
     }
 }
