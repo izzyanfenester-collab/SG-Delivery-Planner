@@ -79,7 +79,12 @@ class HistoryBackupTest {
 
     @Test fun backupAndRestoreIncludePaymentHistoryWithoutDuplicatingOnRetry()=runBlocking {
         val prefs = app.getSharedPreferences("payment_ledger", android.content.Context.MODE_PRIVATE)
+        val expensePrefs = app.getSharedPreferences("runner_expense_ledger", android.content.Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
+        expensePrefs.edit().clear().commit()
+        val expenseLedger = RunnerExpenseLedger(app)
+        val petrol = requireNotNull(createRunnerExpense("2026-10-26", "Petrol", "10.00", "SGD", "3.20"))
+        assertTrue(expenseLedger.append(petrol))
         val ledger = PaymentLedger(app)
         val firstPayment = PaymentRecord("2026-10-26", 2, "15.00", "30.00", "2.00", "3.00", "35.00")
         val secondPayment = PaymentRecord("2026-10-27", 1, "10.00", "10.00", "0.00", "0.00", "10.00")
@@ -90,22 +95,31 @@ class HistoryBackupTest {
             val source = db()
             val summary = HistoryBackup(app, source.dao()).export(Uri.fromFile(archive))
             assertEquals(2, summary.payments)
+            assertEquals(1, summary.expenses)
             ZipFile(archive).use { zip ->
                 assertNotNull(zip.getEntry("payments.json"))
+                assertNotNull(zip.getEntry("expenses.json"))
                 assertTrue(zip.getInputStream(zip.getEntry("manifest.json"))
                     .bufferedReader().readText().contains("\"version\":3"))
             }
             prefs.edit().clear().commit()
+            expensePrefs.edit().clear().commit()
             assertTrue(ledger.read().isEmpty())
+            assertTrue(expenseLedger.read().isEmpty())
             val destination = db()
             val restored = HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive))
             assertEquals(2, restored.payments)
+            assertEquals(1, restored.expenses)
             assertEquals(listOf(firstPayment, secondPayment), ledger.read())
-            assertEquals(0, HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive)).payments)
+            assertEquals(listOf(petrol), expenseLedger.read())
+            val repeated = HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive))
+            assertEquals(0, repeated.payments)
+            assertEquals(0, repeated.expenses)
             assertEquals(listOf(firstPayment, secondPayment), ledger.read())
         } finally {
             archive.delete()
             prefs.edit().clear().commit()
+            expensePrefs.edit().clear().commit()
         }
     }
 
