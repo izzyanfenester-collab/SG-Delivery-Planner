@@ -31,6 +31,7 @@ internal data class OfflineRoadStatus(
     val nodeCount: Int,
     val archiveBytes: Long,
     val lastUpdated: Long,
+    val visualTilesReady: Boolean,
     val detail: String
 )
 
@@ -70,6 +71,8 @@ internal class OfflineRoadPackageStore(private val context: Context) {
     private val folder = File(context.filesDir, "offline_sg_roads").apply { if (!exists()) mkdirs() }
     private val active = File(folder, "sg-road-graph.zip")
     private val old = File(folder, "sg-road-graph.previous.zip")
+    private val tiles = File(folder, "singapore.pmtiles")
+    private val oldTiles = File(folder, "singapore.previous.pmtiles")
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS)
         .callTimeout(120, TimeUnit.SECONDS).build()
@@ -81,6 +84,8 @@ internal class OfflineRoadPackageStore(private val context: Context) {
     }
 
     private fun fingerprint(): String = "${active.absolutePath}:${active.length()}:${active.lastModified()}"
+    fun offlineVectorTilePath(): String? =
+        tiles.takeIf { it.isFile && it.length() > 1000L }?.absolutePath
 
     suspend fun loadOrNull(): OfflineRoadGraph? = withContext(Dispatchers.IO) {
         if (!active.isFile) return@withContext null
@@ -101,8 +106,12 @@ internal class OfflineRoadPackageStore(private val context: Context) {
             graph?.nodes?.size ?: 0,
             if (active.isFile) active.length() else 0,
             prefs.getLong("installed_at", 0),
-            if (graph == null) "Offline driving road graph not installed. Online routing still required."
-            else "Offline road graph installed. Full offline map tiles and voice navigation require separate validation."
+            offlineVectorTilePath() != null,
+            when {
+                graph == null -> "Offline driving road graph not installed. Online routing still required."
+                offlineVectorTilePath() == null -> "Road routing ready; offline visual vector maps not yet installed."
+                else -> "Singapore road graph and vector tiles installed. Airplane-mode navigation still needs phone verification."
+            }
         )
     }
 
@@ -153,24 +162,62 @@ internal class OfflineRoadPackageStore(private val context: Context) {
                 // Full Singapore release must contain enough car road data. Small
                 // fixtures are accepted only in unit tests, never via user import.
                 require(graph.nodes.size >= 10_000) { "Not a complete Singapore driving graph." }
-                ZipFile(tmp).use { zip ->
-                    val meta = zip.getEntry("metadata.json") ?: error("Missing road graph metadata.")
-                    val json = JsonParser.parseString(zip.getInputStream(meta).bufferedReader().readText()).asJsonObject
-                    require(json["schema"]?.asInt == 1 && json["country"]?.asString == "SG")
-                }
-                if (old.exists()) old.delete()
-                if (active.exists()) check(active.renameTo(old)) { "Cannot preserve old offline graph." }
+                val stagedTiles = File(folder, "tiles-${System.nanoTime()}.pmtiles")
                 try {
-                    check(tmp.renameTo(active)) { "Could not install offline road package." }
-                    cached = fingerprint() to graph
-                    check(prefs.edit().putString("version", version)
-                        .putLong("installed_at", System.currentTimeMillis())
-                        .commit()) { "Offline map installation metadata could not be written." }
-                } catch (failure: Exception) {
-                    if (active.exists()) active.delete()
-                    if (old.exists()) old.renameTo(active)
-                    cached = null
-                    throw failure
+                    ZipFile(tmp).use { zip ->
+                        val meta = zip.getEntry("metadata.json") ?: error("Missing road graph metadata.")
+                        val json = JsonParser.parseString(zip.getInputStream(meta).bufferedReader().readText()).asJsonObject
+                        require(json["schema"]?.asInt == 1 && json["country"]?.asString == "SG")
+                        zip.getEntry("singapore.pmtiles")?.let { entry ->
+                            require(entry.size in 1001..150_000_000L) { "Invalid offline vector map size." }
+                            zip.getInputStream(entry).use { input ->
+                                stagedTiles.outputStream().use { output ->
+                                    val bytes=ByteArray(32768)
+                                    var total=0L
+                                    while (true) {
+                                        val read=input.read(bytes)
+                                        if (read<0) break
+                                        total+=read
+                                        require(total<=150_000_000L)
+                                        output.write(bytes,0,read)
+                                    }
+                                }
+                            }
+                            require(stagedTiles.length()==entry.size)
+                            val magic=ByteArray(7)
+                            stagedTiles.inputStream().use { require(it.read(magic)==7) }
+                            require(String(magic,Charsets.US_ASCII)=="PMTiles") {
+                                "Offline map file is not PMTiles."
+                            }
+                        }
+                    }
+                    if (stagedTiles.exists()) {
+                        if (oldTiles.exists()) oldTiles.delete()
+                        if (tiles.exists()) check(tiles.renameTo(oldTiles)) { "Cannot back up old vector map." }
+                    }
+                    if (old.exists()) old.delete()
+                    if (active.exists()) check(active.renameTo(old)) { "Cannot preserve old offline graph." }
+                    try {
+                        check(tmp.renameTo(active)) { "Could not install offline road package." }
+                        if (stagedTiles.exists()) check(stagedTiles.renameTo(tiles)) {
+                            "Could not install offline visual map."
+                        }
+                        cached = fingerprint() to graph
+                        check(prefs.edit().putString("version", version)
+                            .putLong("installed_at", System.currentTimeMillis())
+                            .commit()) { "Offline map installation metadata could not be written." }
+                    } catch (failure: Exception) {
+                        if (active.exists()) active.delete()
+                        if (old.exists()) old.renameTo(active)
+                        if (oldTiles.exists()) {
+                            tiles.delete()
+                            oldTiles.renameTo(tiles)
+                        }
+                        cached = null
+                        throw failure
+                    }
+                } finally {
+                    stagedTiles.delete()
                 }
             } finally {
                 tmp.delete()
