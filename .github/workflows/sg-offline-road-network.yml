@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq osmium-tool
-          python3 -m pip install --disable-pip-version-check osmium pillow
+          python3 -m pip install --disable-pip-version-check osmium pillow numpy scipy
       - name: Download permitted source PBF (Geofabrik, not public map tile servers)
         run: |
           set -euo pipefail
