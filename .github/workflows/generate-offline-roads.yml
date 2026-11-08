@@ -61,7 +61,8 @@ jobs:
               raise RuntimeError('Could not fetch a verified Singapore boundary from open-data providers.')
           with open('singapore-boundary.geojson','w') as output:
               json.dump(boundary,output)
-          PY      - name: Build Singapore local-road graph and SHA manifest
+          PY
+      - name: Build Singapore local-road graph and SHA manifest
         shell: bash
         run: |
           set -euo pipefail
