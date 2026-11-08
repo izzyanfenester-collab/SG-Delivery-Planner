@@ -5,6 +5,7 @@ on:
     branches: [feature/build-832-offline-50-road-optimizer]
     paths:
       - 'scripts/build_sg_road_graph.py'
+      - 'scripts/render_sg_offline_tiles.py'
       - '.github/workflows/sg-offline-road-network.yml'
   schedule:
     - cron: '0 3 * * 1'
@@ -26,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq osmium-tool
-          python3 -m pip install --disable-pip-version-check osmium
+          python3 -m pip install --disable-pip-version-check osmium pillow
       - name: Download permitted source PBF (Geofabrik, not public map tile servers)
         run: |
           set -euo pipefail
@@ -57,10 +58,13 @@ jobs:
           with zipfile.ZipFile(package) as z:
               meta = json.loads(z.read("metadata.json"))
               graph = z.read("sg-routing.bin")
+              tiles = z.read("sg-road-map.mbtiles")
           assert meta["graph"]["nodes"] >= 1000
           assert meta["graph"]["edges"] >= 1000
           assert len(graph) == meta["graph"]["bytes"]
           assert hashlib.sha256(graph).hexdigest() == meta["graph"]["sha256"]
+          assert len(tiles) == meta["road_tiles"]["bytes"]
+          assert hashlib.sha256(tiles).hexdigest() == meta["road_tiles"]["sha256"]
           assert package.stat().st_size <= 180 * 1024 * 1024
           payload = {
               "version": version,
@@ -69,6 +73,8 @@ jobs:
               "sha256": hashlib.sha256(package.read_bytes()).hexdigest(),
               "graph_sha256": meta["graph"]["sha256"],
               "graph_bytes": meta["graph"]["bytes"],
+              "tiles_sha256": meta["road_tiles"]["sha256"],
+              "tiles_bytes": meta["road_tiles"]["bytes"],
               "nodes": meta["graph"]["nodes"],
               "source": meta["source"],
               "generated_at": meta["built_at"],
@@ -97,7 +103,7 @@ jobs:
           if ! gh release view sg-offline-data >/dev/null 2>&1; then
             gh release create sg-offline-data --target "$GITHUB_SHA" \
               --title "Singapore Offline Road Graph (OSM, ODbL)" \
-              --notes "Generated from © OpenStreetMap contributors via Geofabrik. Driving graph only: not an offline visual basemap or GPS navigation. Local graph handles motor-vehicle access, one-way streets and supported via-node restrictions; via-way restrictions remain unsupported."
+              --notes "Generated from © OpenStreetMap contributors via Geofabrik. Driving graph and road-only MBTiles basemap; not offline GPS navigation. Local graph handles motor-vehicle access, one-way streets and supported via-node restrictions; via-way restrictions remain unsupported."
           fi
           gh release upload sg-offline-data "SG-Offline-Roads-$SG_VERSION.zip" --clobber
           gh release upload sg-offline-data latest.json --clobber
