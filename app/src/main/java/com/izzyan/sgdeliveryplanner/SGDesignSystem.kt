@@ -129,8 +129,10 @@ fun SGCard(
 }
 
 @Composable
-fun SGDeliveryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) =
-    SGCard(modifier, content = content)
+fun SGDeliveryCard(
+    modifier: Modifier = Modifier, borderColor: Color? = null,
+    content: @Composable ColumnScope.() -> Unit
+) = SGCard(modifier = modifier, borderColor = borderColor, content = content)
 
 @Composable
 fun SGPaymentCard(
