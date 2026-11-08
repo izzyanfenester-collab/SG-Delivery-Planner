@@ -350,8 +350,8 @@ private fun PaymentInput(
 
 /** Header values use intentional line breaks rather than relying on unstable device wrapping. */
 internal fun paymentTableHeaderValue(label: String): String = when (label) {
-    "Total payment (RM)" -> "Total\\npayment (RM)"
-    "Grand total payment (RM)" -> "Grand total\\npayment (RM)"
+    "Total payment (RM)" -> "Total\npayment (RM)"
+    "Grand total payment (RM)" -> "Grand total\npayment (RM)"
     else -> label
 }
 
