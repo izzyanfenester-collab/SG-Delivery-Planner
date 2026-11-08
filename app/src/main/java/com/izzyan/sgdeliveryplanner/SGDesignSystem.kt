@@ -1,6 +1,8 @@
 package com.izzyan.sgdeliveryplanner
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -164,11 +166,17 @@ fun SGSectionHeader(text: String, modifier: Modifier = Modifier) =
 @Composable
 fun SGTextField(
     value: String, onValueChange: (String) -> Unit, label: String,
-    modifier: Modifier = Modifier, enabled: Boolean = true, singleLine: Boolean = true
+    modifier: Modifier = Modifier, enabled: Boolean = true, singleLine: Boolean = true,
+    placeholder: String? = null, minLines: Int = 1, maxLines: Int = Int.MAX_VALUE,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     OutlinedTextField(
         value = value, onValueChange = onValueChange,
         label = { Text(label) }, enabled = enabled, singleLine = singleLine,
+        placeholder = { if (!placeholder.isNullOrBlank()) Text(placeholder) },
+        minLines = minLines, maxLines = maxLines,
+        keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
         modifier = modifier,
         shape = RoundedCornerShape(SGDimensions.RadiusSmall),
         colors = OutlinedTextFieldDefaults.colors(
