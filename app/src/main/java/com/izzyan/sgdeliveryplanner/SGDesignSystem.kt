@@ -39,6 +39,8 @@ object SGColors {
     val Divider = Color(0xFF29415D)
     val Disabled = Color(0xFF728096)
     val Success = Color(0xFF219E74)
+    // Brighter text-only variant, maintaining contrast over dark cards.
+    val SuccessText = Color(0xFF80E7BE)
     val Warning = Color(0xFFE7B94B)
     val Error = Color(0xFFF16B72)
     val ErrorContainer = Color(0xFF5C2636)
