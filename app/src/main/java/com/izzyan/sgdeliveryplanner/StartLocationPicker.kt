@@ -44,7 +44,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import java.util.Locale
 
-private val LocationMuted = Color(0xFFB7C7E1)
+private val LocationMuted = SGColors.Silver
 
 private fun locationCoordinates(location: StartLocation): String =
     String.format(Locale.ENGLISH, "%.6f, %.6f", location.latitude, location.longitude)
@@ -278,24 +278,13 @@ private fun LocationChoice(label: String, description: String, selected: Boolean
 
 @Composable
 private fun LocationGoldButton(label: String, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(
-        onClick = onClick, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)
-    ) { Text(label, fontWeight = FontWeight.Bold) }
+    SGPrimaryButton(label, onClick, Modifier.fillMaxWidth(), enabled, 52.dp)
 }
 
 @Composable
 private fun LocationOutlineButton(label: String, onClick: () -> Unit, enabled: Boolean = true) {
-    OutlinedButton(
-        onClick = onClick, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-        shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PremiumGold.copy(alpha = .6f)),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = PremiumGold)
-    ) { Text(label, fontWeight = FontWeight.SemiBold) }
+    SGSecondaryButton(label, onClick, Modifier.fillMaxWidth(), enabled, 52.dp)
 }
-
 
 /** Searches the bundled Singapore postal/address index for both Start and End. */
 private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
