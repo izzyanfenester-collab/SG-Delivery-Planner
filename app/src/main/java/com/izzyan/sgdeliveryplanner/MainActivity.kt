@@ -821,6 +821,36 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
         enabled = !vm.busy, initialSelection = vm.navigationPreferences.default
     )
     var holdStop by remember(p.id, p.current) { mutableStateOf<Int?>(null) }
+    var reviewCompletion by remember(p.id, p.current) { mutableStateOf(false) }
+    if (reviewCompletion && p.current in p.stops.indices) {
+        val candidate = p.stops[p.current]
+        val readiness = completionReadiness(candidate)
+        AlertDialog(
+            onDismissRequest = { reviewCompletion = false },
+            title = { Text("Complete this parcel?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Order: " + (candidate.order?.customerName?.takeIf { it.isNotBlank() } ?: candidate.orderId))
+                    Text(paymentReviewLabel(candidate))
+                    if (!readiness.hasDeliveryProof)
+                        Text("Delivery proof has not been attached.", color = PremiumAmber)
+                    if (readiness.isPayOnDelivery && !readiness.hasPaymentProof)
+                        Text("COD payment proof has not been attached. Confirm collection yourself.", color = PremiumAmber)
+                    Text("Proof remains optional in Build #823. This confirmation does not verify payment.")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { reviewCompletion = false; vm.progress("DELIVERED") },
+                    enabled = !vm.busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = PremiumEmerald)
+                ) { Text("Confirm Delivered") }
+            },
+            dismissButton = {
+                TextButton(onClick = { reviewCompletion = false }) { Text("Back") }
+            }
+        )
+    }
     if (holdStop != null) {
         HoldDialog(
             onDismiss = { holdStop = null },
@@ -855,6 +885,24 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, stop) }
                     }
                     Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    locationParcelProgress(p, p.current)?.takeIf { it.total > 1 }?.let { group ->
+                        Text(
+                            "Same location · ${group.delivered}/${group.total} parcels delivered · ${group.unresolved} remaining",
+                            color = PremiumGold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        group.indices.take(6).forEach { i ->
+                            val parcel = p.stops[i]
+                            val name = parcel.order?.customerName?.takeIf { it.isNotBlank() } ?: "Parcel ${i + 1}"
+                            Text(
+                                "${i + 1}. $name — ${statusLabel(parcel.status)}",
+                                color = if (i == p.current) Color.White else Color(0xFFB7C7E1),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        if (group.total > 6)
+                            Text("+${group.total - 6} more parcels at this location", color = Color(0xFFB7C7E1))
+                    }
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     if (stop.order == null) Text(stop.place.address, color = Color(0xFFB7C7E1), style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -896,8 +944,12 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         modifier = Modifier.weight(1f), enabled = !vm.busy, color = PremiumRoyal
                     )
                     CompactDeliveryAction(
-                        label = "Delivered", iconRes = R.drawable.ic_delivery_delivered,
-                        onClick = { vm.progress("DELIVERED") },
+                        label = "Complete", iconRes = R.drawable.ic_delivery_delivered,
+                        onClick = {
+                            if (completionReadiness(stop).shouldReviewMissingEvidence)
+                                reviewCompletion = true
+                            else vm.progress("DELIVERED")
+                        },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
                         color = PremiumEmerald
@@ -905,7 +957,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "On Hold", iconRes = R.drawable.ic_delivery_hold,
+                        label = "Report Issue", iconRes = R.drawable.ic_delivery_hold,
                         onClick = { holdStop = p.current },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
@@ -934,17 +986,22 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
 
 @Composable
 private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> Unit, enabled: Boolean) {
-    val options = listOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Joy buyer", "Other")
+    val options = listOf(
+        "Customer not home", "No answer", "Wrong address", "Access denied",
+        "Customer requested reschedule", "Payment issue", "Damaged parcel",
+        "Parcel refused", "Access issue", "Other"
+    )
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var note by remember { mutableStateOf("") }
     val requiresManualReason = "Other" in selected
-    val canConfirmHold = enabled && (!requiresManualReason || note.isNotBlank())
+    val canConfirmHold = enabled && selected.isNotEmpty() &&
+        (!requiresManualReason || note.isNotBlank())
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Place delivery on hold") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text("Select all reasons that apply (optional). You can revisit this stop later.")
+                Text("Select at least one issue. This parcel will remain available for follow-up.")
                 options.forEach { option ->
                     val checked = option in selected
                     Row(
@@ -981,7 +1038,7 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
                 },
                 enabled = canConfirmHold, modifier = Modifier.heightIn(min = 56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PremiumAmber, contentColor = Color.White)
-            ) { Text("Confirm hold") }
+            ) { Text("Save Exception") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 56.dp)) { Text("Cancel") }
