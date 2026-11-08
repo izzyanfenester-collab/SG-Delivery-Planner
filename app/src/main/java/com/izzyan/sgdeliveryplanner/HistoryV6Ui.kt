@@ -66,34 +66,62 @@ internal fun HistoryViewV6(
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         MarinaBayBackdrop(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().background(V6Background.copy(alpha = .12f))) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 13.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            Surface(
+                color = SGColors.Background.copy(alpha = 0.96f),
+                shadowElevation = 2.dp
             ) {
-                Box(
-                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
-                        .background(SGColors.SecondaryBackground)
-                        .border(1.dp, V6Outline, RoundedCornerShape(12.dp))
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = SGDimensions.Small, vertical = SGDimensions.Compact),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(SGDimensions.Compact)
                 ) {
-                    Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Close History", tint = V6Gold,
-                        modifier = Modifier.size(SGDimensions.Icon))
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text("SG DELIVERY", color = V6Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("History", color = V6White, fontSize = 22.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp)
-                }
-                Column(
-                    Modifier.background(SGColors.Card, RoundedCornerShape(SGDimensions.RadiusSmall))
-                        .border(1.dp, V6Outline, RoundedCornerShape(SGDimensions.RadiusSmall))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(savedDateLabel(plan.deliveryDate), color = V6White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Saved route", color = V6Secondary, fontSize = 12.sp)
+                    val headerShape = RoundedCornerShape(SGDimensions.RadiusSmall)
+                    Surface(
+                        onClick = onClose,
+                        modifier = Modifier.size(56.dp),
+                        shape = headerShape,
+                        color = SGColors.SecondaryBackground,
+                        border = BorderStroke(1.dp, SGColors.Divider),
+                        shadowElevation = 2.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to History",
+                                tint = SGColors.Gold,
+                                modifier = Modifier.size(SGDimensions.Icon)
+                            )
+                        }
+                    }
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text("SG DELIVERY", color = SGColors.Gold, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold, lineHeight = 16.sp)
+                        Text("History", color = SGColors.White, fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold, lineHeight = 28.sp)
+                    }
+                    Surface(
+                        modifier = Modifier.heightIn(min = 56.dp),
+                        shape = headerShape,
+                        color = SGColors.SecondaryBackground,
+                        border = BorderStroke(1.dp, SGColors.Divider),
+                        shadowElevation = 2.dp
+                    ) {
+                        Column(
+                            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(savedDateLabel(plan.deliveryDate), color = SGColors.White,
+                                fontSize = 14.sp, lineHeight = 19.sp,
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Saved route", color = SGColors.Silver,
+                                fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
                 }
             }
             LazyColumn(
@@ -114,13 +142,23 @@ internal fun HistoryViewV6(
                             V6StatBox(summary.delivered.toString(), "Delivered", SGColors.Success, Modifier.weight(1f))
                             V6StatBox(summary.onHold.toString(), "On Hold", SGColors.Gold, Modifier.weight(1f))
                         }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { detailsOpen = !detailsOpen }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                                Text(if (detailsOpen) "Hide route details" else "Route details", fontSize = 13.sp, color = V6Secondary)
-                            }
-                            TextButton(onClick = onSummaryReport, contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
-                                Text("View / Share Summary Report", fontSize = 13.sp, color = V6Gold)
-                            }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(SGDimensions.Compact),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SGSecondaryButton(
+                                label = if (detailsOpen) "Hide route details" else "Route details",
+                                onClick = { detailsOpen = !detailsOpen },
+                                modifier = Modifier.weight(1f),
+                                minHeight = SGDimensions.Touch
+                            )
+                            SGSecondaryButton(
+                                label = "View / Share Summary Report",
+                                onClick = onSummaryReport,
+                                modifier = Modifier.weight(1.5f),
+                                minHeight = SGDimensions.Touch
+                            )
                         }
                         if (detailsOpen) {
                             Column(

@@ -348,7 +348,17 @@ private fun PaymentInput(
     )
 }
 
-/** Payment History and Monthly Summary share right-aligned monetary columns. */
+/** Header values use intentional line breaks rather than relying on unstable device wrapping. */
+internal fun paymentTableHeaderValue(label: String): String = when (label) {
+    "Total payment (RM)" -> "Total\npayment (RM)"
+    "Grand total payment (RM)" -> "Grand total\npayment (RM)"
+    else -> label
+}
+
+internal fun paymentTableAlignment(columnIndex: Int): TextAlign =
+    if (columnIndex == 0) TextAlign.Start else TextAlign.Center
+
+/** Payment History and Monthly Summary use centered amounts in matching columns. */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
@@ -377,13 +387,15 @@ private fun PaymentTableRow(
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Text(
-                value,
+                if (isHeader) paymentTableHeaderValue(value) else value,
                 modifier = Modifier.weight(if (index == 0) 1.04f else 1.12f),
                 color = textColor,
                 fontSize = if (isHeader) 12.sp else 14.sp,
                 lineHeight = if (isHeader) 16.sp else 19.sp,
                 fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
-                textAlign = if (index == 0) TextAlign.Start else TextAlign.End
+                softWrap = true,
+                maxLines = if (isHeader) 2 else Int.MAX_VALUE,
+                textAlign = paymentTableAlignment(index)
             )
         }
     }
