@@ -102,7 +102,17 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     var input by mutableStateOf(prefs.getString("input", "")!!)
     var screen: String
         get() = currentScreen
-        set(value) { navigation.navigate(value); currentScreen = navigation.current }
+        set(value) {
+            navigation.navigate(value)
+            currentScreen = navigation.current
+            // A non-sensitive navigation pointer only; all parcel/payment data
+            // continues to live in Room and the independent PaymentLedger.
+            val activeId = route?.id
+            if (activeId != null && (currentScreen == "Delivery" || currentScreen == "Summary")) {
+                prefs.edit().putString("resumeRouteId", activeId)
+                    .putString("resumeScreen", currentScreen).commit()
+            }
+        }
     val canGoBack: Boolean get() { currentScreen; return navigation.canGoBack }
     var selectedStartLocation by mutableStateOf(locationSettings.selected())
         private set
@@ -205,6 +215,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 repo.dao.deleteRoutes(ids.toList())
                 if (route?.id in ids) { route = null; reportPreview = null }
                 if (prefs.getString("active", null) in ids) prefs.edit().remove("active").apply()
+                if (prefs.getString("resumeRouteId", null) in ids)
+                    prefs.edit().remove("resumeRouteId").remove("resumeScreen").apply()
                 notice = "Selected history deleted."
                 message = ""
             } catch (e: CancellationException) { throw e }
@@ -224,9 +236,14 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                         val restored = route!!
                         screen = when {
                             restored.reviewedFinishedAt != null -> "Summary"
+                            prefs.getString("resumeRouteId", null) == restored.id &&
+                                prefs.getString("resumeScreen", null) == "Delivery" &&
+                                restored.current in restored.stops.indices -> "Delivery"
                             restored.stops.any { it.reviewedAt != null } -> "Delivery"
                             else -> "Home"
                         }
+                        if (screen == "Delivery")
+                            notice = "Your saved delivery session was recovered. Confirm the current parcel before proceeding."
                     }
                 }
             } catch (e: CancellationException) { throw e }
@@ -434,6 +451,10 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 val updated = reviewStop(planned, action, actionTime, holdReason, holdNote)
                 // Persist before advancing the visible stop so a failed save does not lose a delivery action.
                 repo.save(updated)
+                // Persist recovery pointer after the authoritative route transaction.
+                prefs.edit().putString("active", updated.id)
+                    .putString("resumeRouteId", updated.id)
+                    .putString("resumeScreen", if (updated.reviewedFinishedAt == null) "Delivery" else "Summary").commit()
                 route = updated
                 if (updated.reviewedFinishedAt != null) screen = "Summary"
                 if (action == "DELIVERED" || action == "ON_HOLD") deliveryReportOrderId = planned.stops[planned.current].orderId
