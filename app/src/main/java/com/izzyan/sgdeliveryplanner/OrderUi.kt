@@ -492,6 +492,63 @@ internal fun pasteWhatsAppOrders(context: android.content.Context, currentText: 
     )
 }
 
+/** Native customer ETA assistant: sends only a draft for the runner to review in WhatsApp. */
+@Composable fun SmartEtaMessageButton(vm: PlannerViewModel, stop: Stop) {
+    val order = stop.order ?: return
+    if (normalizeCustomerPhone(order.phoneNumber) == null) return
+    val context = LocalContext.current
+    var open by remember(stop.orderId) { mutableStateOf(false) }
+    var template by remember(stop.orderId) { mutableStateOf(RunnerEtaMessage.UPCOMING) }
+    var draft by remember(stop.orderId, template, open) {
+        mutableStateOf(smartEtaMessage(stop, template).orEmpty())
+    }
+    OutlinedButton(onClick = { open = true }, enabled = !vm.busy,
+        modifier = Modifier.heightIn(min = 48.dp)) { Text("WhatsApp ETA") }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("WhatsApp ETA · ${stop.place.postal}") },
+            text = {
+                Column(Modifier.heightIn(max = 465.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Choose a template, review the message and send it yourself in WhatsApp.",
+                        style = MaterialTheme.typography.bodySmall)
+                    RunnerEtaMessage.entries.forEach { option ->
+                        Row(Modifier.fillMaxWidth().heightIn(min = 42.dp)
+                            .selectable(template == option, role = androidx.compose.ui.semantics.Role.RadioButton) {
+                                template = option
+                            }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = template == option, onClick = { template = option })
+                            Text(option.title)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it.take(2000) },
+                        label = { Text("Editable message preview") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 5, maxLines = 9
+                    )
+                    Text("Opening WhatsApp does not confirm that a message was sent.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val phone = order.phoneNumber ?: return@TextButton
+                    val preferred = vm.whatsappPreferences.default ?: WhatsAppChoice.PERSONAL
+                    val alternative = WhatsAppChoice.entries.first { it != preferred }
+                    if (openCustomerWhatsApp(context, phone, preferred, draft) ||
+                        openCustomerWhatsApp(context, phone, alternative, draft)) {
+                        open = false
+                    }
+                }, enabled = draft.isNotBlank()) { Text("Open WhatsApp") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }
+        )
+    }
+}
+
 @Composable fun OrderProofSection(vm: PlannerViewModel, plan: Plan, stop: Stop, kind: ProofKind) {
     val order=stop.order
     val id=if(kind==ProofKind.PAYMENT) order?.paymentProofFileId else order?.proofFileId
