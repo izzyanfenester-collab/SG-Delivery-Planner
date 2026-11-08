@@ -10,7 +10,7 @@ import java.util.UUID
 
 internal val runnerExpenseCategories = listOf("Petrol", "Toll", "Parking", "Maintenance", "Other")
 
-internal data class RunnerExpense(
+data class RunnerExpense(
     val id: String,
     val date: String,
     val category: String,
