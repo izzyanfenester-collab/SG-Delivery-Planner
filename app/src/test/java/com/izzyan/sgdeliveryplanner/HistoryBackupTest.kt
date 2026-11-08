@@ -93,7 +93,7 @@ class HistoryBackupTest {
             ZipFile(archive).use { zip ->
                 assertNotNull(zip.getEntry("payments.json"))
                 assertTrue(zip.getInputStream(zip.getEntry("manifest.json"))
-                    .bufferedReader().readText().contains("\"version\":2"))
+                    .bufferedReader().readText().contains("\"version\":3"))
             }
             prefs.edit().clear().commit()
             assertTrue(ledger.read().isEmpty())
