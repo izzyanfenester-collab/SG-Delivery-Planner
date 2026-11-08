@@ -48,6 +48,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     var nightMode by remember { mutableStateOf(nightInSingapore()) }
+    var onlineTiles by remember { mutableStateOf(hasUsableInternet(context)) }
     var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
@@ -68,8 +69,9 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(60_000)
+            delay(8_000)
             nightMode = nightInSingapore()
+            onlineTiles = hasUsableInternet(context)
         }
     }
 
@@ -109,14 +111,24 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    LaunchedEffect(map, nightMode, styleRetry, locationPermitted) {
+    LaunchedEffect(map, nightMode, styleRetry, locationPermitted, onlineTiles) {
         val native = map ?: return@LaunchedEffect
         styleReady = false
         if (!locationPermitted) {
             session.mapMessage = "Allow precise location to use built-in GPS."
             return@LaunchedEffect
         }
-        native.setStyle(Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)) { style ->
+        val localStyle = if (!onlineTiles) singaporeOfflineMapStyle(context, nightMode) else null
+        val offlineEmptyStyle = """{"version":8,"sources":{},"layers":[{"id":"sg-empty-offline","type":"background","paint":{"background-color":"#081B33"}}]}"""
+        val styleBuilder = if (onlineTiles) {
+            Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)
+        } else {
+            Style.Builder().fromJson(localStyle ?: offlineEmptyStyle)
+        }
+        if (!onlineTiles && localStyle == null) {
+            session.mapMessage = "Offline road map tiles are not installed. Routing may still work with a valid road graph."
+        }
+        native.setStyle(styleBuilder) { style ->
             try {
                 val locationComponent = native.locationComponent
                 locationComponent.activateLocationComponent(
@@ -148,7 +160,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 locationComponent.setMaxAnimationFps(60)
                 lastZoom = Double.NaN
                 styleReady = true
-                session.mapMessage = null
+                if (onlineTiles || localStyle != null) session.mapMessage = null
             } catch (_: Exception) {
                 session.mapMessage = "GPS display could not start. Try reopening navigation."
             }
