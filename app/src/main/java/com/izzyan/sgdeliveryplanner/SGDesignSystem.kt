@@ -28,10 +28,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** A single palette for all Compose screens, including History and built-in GPS chrome. */
+/** Every eligible card is 70% transparent (only its fill, never its children). */
+const val SG_CARD_BACKGROUND_ALPHA = 0.30f
+
 object SGColors {
     val Background = Color(0xFF081B33)
     val SecondaryBackground = Color(0xFF102A4C)
-    val Card = Color(0xFF152F50)
+    // Glass cards show the original MBS artwork through a 30% opaque Navy fill.
+    val Card = Background.copy(alpha = SG_CARD_BACKGROUND_ALPHA)
+    // Dialogs, text-entry controls and other critical surfaces retain stronger contrast.
+    val SolidCard = Color(0xFF152F50)
     val Gold = Color(0xFFD4AF37)
     val SelectedGold = Color(0xFFF1D57A)
     val White = Color(0xFFFFFFFF)
@@ -147,7 +153,7 @@ fun SGPaymentCard(
     Column(
         modifier = modifier.fillMaxWidth()
             .border(BorderStroke(1.dp, SGColors.Divider), shape)
-            .background(SGColors.Card.copy(alpha = 0.94f), shape)
+            .background(SGColors.Card, shape)
             .padding(if (compact) SGDimensions.Small else SGDimensions.Normal),
         verticalArrangement = Arrangement.spacedBy(if (compact) SGDimensions.Compact else SGDimensions.Small),
         content = content
@@ -223,7 +229,7 @@ fun SGDialog(
         onDismissRequest = onDismiss, title = { Text(title) },
         text = text, confirmButton = confirmButton, dismissButton = dismissButton,
         shape = RoundedCornerShape(SGDimensions.RadiusDialog),
-        containerColor = SGColors.Card,
+        containerColor = SGColors.SolidCard,
         titleContentColor = SGColors.White, textContentColor = SGColors.Silver
     )
 }
