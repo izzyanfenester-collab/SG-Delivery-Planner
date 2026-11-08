@@ -919,6 +919,9 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
                 }
             }
+            if (stop.order?.phoneNumber != null) {
+                SmartEtaMessageButton(vm, stop)
+            }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
