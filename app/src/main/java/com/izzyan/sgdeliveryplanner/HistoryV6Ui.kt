@@ -110,9 +110,9 @@ internal fun HistoryViewV6(
                                 .padding(7.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            V6StatBox("▣", plan.stops.size.toString(), "Total", V6Gold, Modifier.weight(1f))
-                            V6StatBox("✓", summary.delivered.toString(), "Delivered", SGColors.Success, Modifier.weight(1f))
-                            V6StatBox("◷", summary.onHold.toString(), "On Hold", SGColors.Gold, Modifier.weight(1f))
+                            V6StatBox(plan.stops.size.toString(), "Total", V6Gold, Modifier.weight(1f))
+                            V6StatBox(summary.delivered.toString(), "Delivered", SGColors.Success, Modifier.weight(1f))
+                            V6StatBox(summary.onHold.toString(), "On Hold", SGColors.Gold, Modifier.weight(1f))
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { detailsOpen = !detailsOpen }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
@@ -150,14 +150,14 @@ internal fun HistoryViewV6(
 }
 
 @Composable
-private fun V6StatBox(symbol: String, count: String, label: String, tint: Color, modifier: Modifier = Modifier) {
+private fun V6StatBox(count: String, label: String, tint: Color, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.background(SGColors.Card, RoundedCornerShape(SGDimensions.RadiusSmall))
             .padding(horizontal = 7.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(symbol, color = tint, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Box(Modifier.width(3.dp).height(24.dp).background(tint, RoundedCornerShape(3.dp)))
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(count, fontSize = 22.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp, color = V6White)
             Text(label, fontSize = 12.sp, maxLines = 1, color = V6Secondary)
