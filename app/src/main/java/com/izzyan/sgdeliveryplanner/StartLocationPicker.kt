@@ -60,7 +60,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
 
     PremiumCard(
         Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
-        containerColor = PremiumNavy
+        containerColor = SGColors.Card
     ) {
         Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -90,7 +90,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
 
     PremiumCard(
         Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
-        containerColor = PremiumNavy
+        containerColor = SGColors.Card
     ) {
         val chosenEnd = vm.selectedEndLocation
         Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
@@ -455,7 +455,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
         LocationMap(selected, initial ?: woodlandsStartLocation, ::choosePoint)
         Text("© OpenStreetMap contributors", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
+        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = SGColors.Card) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Selected location", color = PremiumGold, style = MaterialTheme.typography.titleMedium)
                 val point = selected
