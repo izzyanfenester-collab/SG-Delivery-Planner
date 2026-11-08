@@ -81,6 +81,48 @@ jobs:
               assert set(['nodes.tsv','arcs.tsv','restrictions.tsv','metadata.json']).issubset(z.namelist())
           print('Validated',data)
           PY
+      - name: Install current PMTiles converter
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Download and crop licensed Geofabrik Shortbread offline vector tiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 10 \
+            --output asia-shortbread.mbtiles \
+            'https://download.geofabrik.de/asia/malaysia-singapore-brunei-shortbread-1.0.mbtiles'
+          python scripts/crop_singapore_mbtiles.py \
+            --source asia-shortbread.mbtiles \
+            --output singapore-shortbread.mbtiles \
+            --max-zoom 15
+          go install github.com/protomaps/go-pmtiles@latest
+          "$(go env GOPATH)/bin/go-pmtiles" convert singapore-shortbread.mbtiles singapore.pmtiles
+          python - <<'PY'
+          import hashlib,json,zipfile,os
+          archive='singapore-road-graph.zip'
+          tile='singapore.pmtiles'
+          with open(tile,'rb') as src:
+              assert src.read(7)==b'PMTiles'
+          with zipfile.ZipFile(archive,'a') as z:
+              z.write(tile,arcname='singapore.pmtiles',compress_type=zipfile.ZIP_STORED)
+          with zipfile.ZipFile(archive,'r') as z:
+              assert z.testzip() is None
+              assert 'singapore.pmtiles' in z.namelist()
+          checksum=hashlib.sha256()
+          with open(archive,'rb') as src:
+              for chunk in iter(lambda:src.read(1024*1024),b''):
+                  checksum.update(chunk)
+          manifest=json.load(open('manifest.json'))
+          manifest['sha256']=checksum.hexdigest()
+          manifest['size_bytes']=os.stat(archive).st_size
+          manifest['vector_tiles']='singapore.pmtiles'
+          manifest['vector_size_bytes']=os.stat(tile).st_size
+          assert manifest['size_bytes']<=180_000_000
+          with open('manifest.json','w') as out:
+              json.dump(manifest,out,indent=2)
+          print('Verified offline combined package',manifest['size_bytes'],'bytes')
+          PY
       - name: Upload generated graph for testing and phone import
         uses: actions/upload-artifact@v4
         with:
