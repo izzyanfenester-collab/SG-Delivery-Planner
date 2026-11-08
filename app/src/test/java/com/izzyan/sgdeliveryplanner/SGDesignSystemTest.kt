@@ -9,7 +9,10 @@ class SGDesignSystemTest {
     @Test fun paletteUsesApprovedBrandColors() {
         assertEquals(Color(0xFF081B33), SGColors.Background)
         assertEquals(Color(0xFF102A4C), SGColors.SecondaryBackground)
-        assertEquals(Color(0xFF152F50), SGColors.Card)
+        assertEquals(0.30f, SG_CARD_BACKGROUND_ALPHA, 0.0001f)
+        assertEquals(SG_CARD_BACKGROUND_ALPHA, SGColors.Card.alpha, 0.001f)
+        assertEquals(Color(0xFF081B33).copy(alpha = SG_CARD_BACKGROUND_ALPHA), SGColors.Card)
+        assertEquals(Color(0xFF152F50), SGColors.SolidCard)
         assertEquals(Color(0xFFD4AF37), SGColors.Gold)
         assertEquals(Color(0xFFF1D57A), SGColors.SelectedGold)
         assertEquals(Color.White, SGColors.White)
@@ -29,6 +32,7 @@ class SGDesignSystemTest {
     @Test fun reportBitmapColorsArePixelEquivalent() {
         assertEquals(0xFF081B33.toInt(), SGReportColors.Background)
         assertEquals(0xFF152F50.toInt(), SGReportColors.Card)
+        assertEquals(0x4D081B33, SGReportColors.ReportPanel)
         assertEquals(0xFFD4AF37.toInt(), SGReportColors.Gold)
         assertEquals(0xFFFFFFFF.toInt(), SGReportColors.White)
         assertEquals(0xFFD6DEE8.toInt(), SGReportColors.Silver)
