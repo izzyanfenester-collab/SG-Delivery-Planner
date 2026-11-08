@@ -151,7 +151,8 @@ Remark: Fuel receipt retained""",
             backdrop.getPixel(0, 0), png.getPixel(0, 0))
         val backgroundPixel = backdrop.getPixel(35, png.height / 2)
         val panelPixel = png.getPixel(35, png.height / 2)
-        val navy = SGReportColors.Card
+        // The global 30%-opaque panel uses #081B33, not the legacy solid #152F50.
+        val navy = SGReportColors.Background
         val alpha = 77 // 30% opaque panel, 70% transparent.
         val navyChannels = intArrayOf(android.graphics.Color.red(navy),
             android.graphics.Color.green(navy), android.graphics.Color.blue(navy))
