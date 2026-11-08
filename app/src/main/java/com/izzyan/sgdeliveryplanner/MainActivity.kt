@@ -34,6 +34,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -687,7 +695,7 @@ fun holdDetails(stop: Stop): String? {
 @Composable
 private fun CompactDeliveryAction(
     label: String,
-    iconRes: Int,
+    iconRes: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -702,7 +710,9 @@ private fun CompactDeliveryAction(
             onClick = onClick, enabled = enabled,
             modifier = modifier.height(52.dp),
             shape = shape, contentPadding = contentPadding,
-            border = BorderStroke(1.dp, SGColors.Divider)
+            border = BorderStroke(1.dp, SGColors.Gold),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = SGColors.SecondaryBackground, contentColor = SGColors.White)
         ) {
             CompactDeliveryActionContent(label, iconRes, compactText, completed)
         }
@@ -711,7 +721,8 @@ private fun CompactDeliveryAction(
             onClick = onClick, enabled = enabled,
             modifier = modifier.height(52.dp),
             shape = shape, contentPadding = contentPadding,
-            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = color,
+                contentColor = if (color == SGColors.Warning) SGColors.Background else SGColors.White),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
         ) {
             CompactDeliveryActionContent(label, iconRes, compactText, completed)
@@ -722,11 +733,11 @@ private fun CompactDeliveryAction(
 @Composable
 private fun CompactDeliveryActionContent(
     label: String,
-    iconRes: Int,
+    iconRes: ImageVector,
     compactText: Boolean,
     completed: Boolean
 ) {
-    val iconSize = if (compactText) 31.dp else 35.dp
+    val iconSize = SGDimensions.Icon
     val currentColor = LocalContentColor.current
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -735,7 +746,7 @@ private fun CompactDeliveryActionContent(
     ) {
         Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
             Icon(
-                painter = androidx.compose.ui.res.painterResource(iconRes),
+                imageVector = iconRes,
                 contentDescription = if (completed) "$label attached" else null,
                 modifier = Modifier.fillMaxSize()
             )
@@ -828,13 +839,13 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "Proof of Delivery", iconRes = R.drawable.ic_delivery_camera,
+                        label = "Proof of Delivery", iconRes = Icons.Outlined.CameraAlt,
                         onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.DELIVERY, chooseSource = true) },
                         modifier = Modifier.weight(1f), enabled = !vm.busy,
                         compactText = true, completed = stop.order?.proofFileId != null
                     )
                     CompactDeliveryAction(
-                        label = "Proof of Payment", iconRes = R.drawable.ic_delivery_receipt,
+                        label = "Proof of Payment", iconRes = Icons.Outlined.ReceiptLong,
                         onClick = { vm.proofRequest = ProofRequest(p.id, stop.orderId, ProofKind.PAYMENT, chooseSource = true) },
                         modifier = Modifier.weight(1f), enabled = !vm.busy,
                         compactText = true, completed = stop.order?.paymentProofFileId != null
@@ -842,7 +853,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "Navigate", iconRes = R.drawable.ic_delivery_navigation,
+                        label = "Navigate", iconRes = Icons.Outlined.Navigation,
                         onClick = {
                             val choice = vm.navigationPreferences.default
                             showNavigation = choice == null || !openDeliveryNavigation(context, p, choice)
@@ -850,7 +861,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         modifier = Modifier.weight(1f), enabled = !vm.busy, color = PremiumRoyal
                     )
                     CompactDeliveryAction(
-                        label = "Delivered", iconRes = R.drawable.ic_delivery_delivered,
+                        label = "Delivered", iconRes = Icons.Outlined.CheckCircle,
                         onClick = { vm.progress("DELIVERED") },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
@@ -859,14 +870,14 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactDeliveryAction(
-                        label = "On Hold", iconRes = R.drawable.ic_delivery_hold,
+                        label = "On Hold", iconRes = Icons.Outlined.PauseCircle,
                         onClick = { holdStop = p.current },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
                         color = PremiumAmber
                     )
                     CompactDeliveryAction(
-                        label = "Skipped", iconRes = R.drawable.ic_delivery_skipped,
+                        label = "Skipped", iconRes = Icons.Outlined.SkipNext,
                         onClick = { vm.progress("SKIP") },
                         modifier = Modifier.weight(1f),
                         enabled = !vm.busy && normalizedStatus(stop.status) != "DELIVERED",
@@ -877,7 +888,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             if (stop.order?.proofFileId != null) OrderProofSection(vm,p,stop,ProofKind.DELIVERY)
             if (stop.order?.paymentProofFileId != null) OrderProofSection(vm,p,stop,ProofKind.PAYMENT)
             CompactDeliveryAction(
-                label = "Next stop", iconRes = R.drawable.ic_delivery_next,
+                label = "Next stop", iconRes = Icons.Outlined.ArrowForward,
                 onClick = { vm.progress("NEXT") },
                 modifier = Modifier.fillMaxWidth(), enabled = !vm.busy
             )
