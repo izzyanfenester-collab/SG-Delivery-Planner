@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -230,6 +231,7 @@ fun SGDialog(
 fun SGBottomNavigation(
     selected: String, enabled: Boolean = true, onSelect: (String) -> Unit
 ) {
+    val showLabels = LocalDensity.current.fontScale <= 1.55f
     val tabs = listOf(
         Triple("Home", Icons.Outlined.Home, "Home"),
         Triple("Route", Icons.Outlined.Route, "Route"),
@@ -263,9 +265,13 @@ fun SGBottomNavigation(
                     ) {
                         Icon(icon, contentDescription = description,
                             modifier = Modifier.size(SGDimensions.Icon))
-                        Text(name, fontSize = 10.sp, lineHeight = 13.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1, overflow = TextOverflow.Clip)
+                        // At extreme accessibility font scales, rely on labelled icons
+                        // rather than clipping six tab captions into a narrow row.
+                        if (showLabels) {
+                            Text(name, fontSize = 10.sp, lineHeight = 13.sp,
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
