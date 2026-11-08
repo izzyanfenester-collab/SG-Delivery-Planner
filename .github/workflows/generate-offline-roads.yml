@@ -30,21 +30,38 @@ jobs:
             --output malaysia-singapore-brunei.osm.pbf \
             'https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf'
           python - <<'PY'
-          import json, urllib.request
+          import json, time, urllib.request
           endpoint='https://www.geoboundaries.org/api/current/gbOpen/SGP/ADM0/'
-          with urllib.request.urlopen(endpoint, timeout=40) as response:
+          with urllib.request.urlopen(endpoint, timeout=50) as response:
               metadata=json.load(response)
-          url=metadata['gjDownloadURL']
-          if not url.startswith('https://'):
-              raise RuntimeError('Singapore boundary URL was not HTTPS')
-          with urllib.request.urlopen(url,timeout=90) as response:
-              boundary=json.load(response)
-          if boundary.get('type') != 'FeatureCollection' or not boundary.get('features'):
-              raise RuntimeError('Invalid country polygon')
+          urls=[
+              metadata.get('simplifiedGeometryGeoJSON', ''),
+              metadata.get('gjDownloadURL', ''),
+              'https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/refs/heads/main/releaseData/gbOpen/SGP/ADM0/geoBoundaries-SGP-ADM0_simplified.geojson',
+          ]
+          boundary=None
+          for url in urls:
+              if not url.startswith('https://'):
+                  continue
+              for attempt in range(3):
+                  try:
+                      request=urllib.request.Request(url,headers={'User-Agent':'SGDelivery/830 OpenDataBuilder'})
+                      with urllib.request.urlopen(request,timeout=40) as response:
+                          data=json.load(response)
+                      if data.get('type')=='FeatureCollection' and data.get('features'):
+                          boundary=data
+                          print('Singapore boundary loaded from',url)
+                          break
+                  except Exception as e:
+                      print('Boundary fetch failed:',str(e),flush=True)
+                      time.sleep(attempt+1)
+              if boundary:
+                  break
+          if boundary is None:
+              raise RuntimeError('Could not fetch a verified Singapore boundary from open-data providers.')
           with open('singapore-boundary.geojson','w') as output:
               json.dump(boundary,output)
-          PY
-      - name: Build Singapore local-road graph and SHA manifest
+          PY      - name: Build Singapore local-road graph and SHA manifest
         shell: bash
         run: |
           set -euo pipefail
