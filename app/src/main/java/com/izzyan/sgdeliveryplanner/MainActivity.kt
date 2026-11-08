@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
+        runCatching { OfflineMapUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
@@ -465,6 +466,7 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        OfflineMapSettingsCard(vm)
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
@@ -1041,6 +1043,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
                 DetailRow("End location", p.endReportLabel)
                 DetailRow("Start", time(p.start))
                 DetailRow("Total parcels", p.stops.size.toString())
+                if (p.routingSource == "Offline") DetailRow("Route calculation source", "Offline Singapore roads")
                 DetailRow("Distance", km(p.totalKm))
                 DetailRow("Estimated finish", p.stops.lastOrNull()?.leave?.let(::time) ?: "—")
                 DetailRow("End arrival", time(p.returned))
