@@ -10,6 +10,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.LocalShipping
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -213,12 +220,12 @@ fun SGBottomNavigation(
     selected: String, enabled: Boolean = true, onSelect: (String) -> Unit
 ) {
     val tabs = listOf(
-        Triple("Home", R.drawable.ic_nav_home, "Home"),
-        Triple("Route", R.drawable.ic_nav_route, "Route"),
-        Triple("Delivery", R.drawable.ic_nav_delivery, "Delivery"),
-        Triple("Map", R.drawable.ic_nav_map, "Map"),
-        Triple("History", R.drawable.ic_nav_history, "History"),
-        Triple("Payment", R.drawable.ic_nav_payment, "Payment")
+        Triple("Home", Icons.Outlined.Home, "Home"),
+        Triple("Route", Icons.Outlined.Route, "Route"),
+        Triple("Delivery", Icons.Outlined.LocalShipping, "Delivery"),
+        Triple("Map", Icons.Outlined.Map, "Map"),
+        Triple("History", Icons.Outlined.History, "History"),
+        Triple("Payment", Icons.Outlined.Payments, "Payment")
     )
     Surface(color = SGColors.SecondaryBackground, shadowElevation = 4.dp) {
         Row(
@@ -243,7 +250,7 @@ fun SGBottomNavigation(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Icon(painterResource(icon), contentDescription = description,
+                        Icon(icon, contentDescription = description,
                             modifier = Modifier.size(SGDimensions.Icon))
                         Text(name, fontSize = 10.sp, lineHeight = 13.sp,
                             fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
