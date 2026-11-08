@@ -23,7 +23,7 @@ android {
    }
  }
  buildTypes {
-   getByName("debug") { applicationIdSuffix = ".testing" }
+   getByName("debug") { applicationIdSuffix = ".paymenttest" }
    getByName("release") {
      isMinifyEnabled = false
      if (releaseSigningReady) signingConfig = signingConfigs.getByName("sgDeliveryRelease")
