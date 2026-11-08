@@ -348,7 +348,17 @@ private fun PaymentInput(
     )
 }
 
-/** Payment History and Monthly Summary share right-aligned monetary columns. */
+/**
+ * The date/month column stays left aligned while both money columns are centered.
+ * Use explicit two-line headings so narrow Android screens do not truncate them.
+ */
+internal fun paymentCompactTableHeading(label: String): String = when (label) {
+    "Total payment (RM)" -> "Total\npayment (RM)"
+    "Grand total payment (RM)" -> "Grand total\npayment (RM)"
+    else -> label
+}
+
+/** Payment History and Monthly Summary use the same column alignment. */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
@@ -363,12 +373,14 @@ private fun PaymentTableRow(
         else -> SGColors.Background.copy(alpha = 0.42f)
     }
     val textColor = if (emphasized) SGColors.SelectedGold else SGColors.White
+    val rowMinHeight = if (isHeader) 56.dp
+        else (fixedRowHeight ?: PaymentCompactLayout.TableRowMinHeight)
     val gesture = if (onLongClick != null) Modifier.combinedClickable(
         onClick = {}, onLongClick = onLongClick) else Modifier
     Row(
         Modifier.fillMaxWidth().padding(vertical = 1.dp)
             .then(gesture)
-            .heightIn(min = fixedRowHeight ?: PaymentCompactLayout.TableRowMinHeight)
+            .heightIn(min = rowMinHeight)
             .border(BorderStroke(0.6.dp, SGColors.Divider.copy(alpha = 0.65f)),
                 RoundedCornerShape(7.dp))
             .background(fill, RoundedCornerShape(7.dp))
@@ -377,13 +389,16 @@ private fun PaymentTableRow(
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Text(
-                value,
-                modifier = Modifier.weight(if (index == 0) 1.04f else 1.12f),
+                text = if (isHeader) paymentCompactTableHeading(value) else value,
+                modifier = Modifier.weight(if (index == 0) 1.04f else 1.12f)
+                    .padding(horizontal = 2.dp),
                 color = textColor,
                 fontSize = if (isHeader) 12.sp else 14.sp,
                 lineHeight = if (isHeader) 16.sp else 19.sp,
                 fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
-                textAlign = if (index == 0) TextAlign.Start else TextAlign.End
+                textAlign = if (index == 0) TextAlign.Start else TextAlign.Center,
+                softWrap = true,
+                maxLines = if (isHeader) 3 else Int.MAX_VALUE
             )
         }
     }
