@@ -366,7 +366,7 @@ private fun PaymentTableRow(
         listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
             Box(
                 Modifier.weight(if (index == 0) 1.04f else 1.12f)
-                    .then(if (fixedRowHeight != null) Modifier.height(fixedRowHeight - 2.dp)
+                    .then(if (fixedRowHeight != null) Modifier.heightIn(min = fixedRowHeight - 2.dp)
                         else Modifier.heightIn(min = if (isHeader) 56.dp else 48.dp))
                     .padding(horizontal = 4.dp, vertical = 3.dp),
                 contentAlignment = if (index == 0) Alignment.CenterStart else Alignment.CenterEnd
