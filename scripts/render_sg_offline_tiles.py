@@ -68,6 +68,7 @@ def render(graph: Path, output: Path):
         "description": "Road-only Singapore basemap derived from licensed OSM data; not the full OSM cartographic basemap"
     }
     con.executemany("INSERT INTO metadata VALUES (?,?)", meta.items())
+    con.commit()  # End the SQLite implicit metadata transaction before tile batches.
     # Re-open graph scan per zoom to bound heap use: only one level's tiles in memory.
     for zoom in range(MIN_Z, MAX_Z + 1):
         segments = defaultdict(list)
