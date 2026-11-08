@@ -1299,24 +1299,12 @@ fun RouteMap(p: Plan) {
     val context = LocalContext.current
     val online = hasValidatedNetwork(context)
     val localTiles = if (online) null else OfflineMapPackageManager(context).tilesFile()
-    Column(Modifier.fillMaxSize()) {
-        MarinaBayBackdrop(Modifier.fillMaxWidth().height(68.dp)) {
-            Text(
-                when {
-                    online -> "Day Map · Delivery stops · OpenFreeMap / OpenMapTiles / © OpenStreetMap contributors"
-                    localTiles != null -> "Offline Day Map · Singapore roads, parks and water · © OpenStreetMap contributors"
-                    else -> "Offline map not installed — Download in Settings · © OpenStreetMap contributors"
-                },
-                Modifier.align(Alignment.CenterStart).padding(horizontal = 16.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        }
-        if (online) {
-            OnlineRouteMap(p, Modifier.fillMaxWidth().weight(1f))
-        } else {
-            OfflinePlannedRouteMap(p, localTiles, Modifier.fillMaxWidth().weight(1f))
-        }
+    // The map now occupies all available height below the existing app header.
+    // MapLibre provides its own online attribution; the offline branch shows it locally.
+    if (online) {
+        OnlineRouteMap(p, Modifier.fillMaxSize())
+    } else {
+        OfflinePlannedRouteMap(p, localTiles, Modifier.fillMaxSize())
     }
 }
 
@@ -1382,6 +1370,16 @@ private fun OfflinePlannedRouteMap(p: Plan, archive: java.io.File?, modifier: Mo
             view.post { view.zoomToBoundingBox(BoundingBox.fromGeoPoints(pins), false, 80) }
             view.invalidate()
         })
+        if (archive != null) {
+            Text(
+                "© OpenStreetMap contributors · Natural Earth",
+                Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp)
+                    .background(Color.White.copy(alpha = 0.88f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.DarkGray
+            )
+        }
         if (archive == null) {
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
