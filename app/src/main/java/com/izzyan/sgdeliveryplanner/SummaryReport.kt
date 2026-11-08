@@ -107,17 +107,17 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxWidth(.94f).heightIn(max = maxHeight),
-            shape = RoundedCornerShape(26.dp),
-            color = PremiumNavy.copy(alpha = 0.30f),
+            shape = RoundedCornerShape(SGDimensions.RadiusDialog),
+            color = SGColors.Card.copy(alpha = 0.88f),
             contentColor = Color.White,
             border = BorderStroke(1.dp, PremiumGold.copy(alpha = .7f)),
             tonalElevation = 0.dp
         ) {
-            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Delivery Report Summary",
                     color = PremiumGold,
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 Column(
@@ -128,8 +128,8 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                         Text(
                             "$label: $value",
                             color = when (label) {
-                                "Delivered" -> Color(0xFF64D2A2)
-                                "On Hold" -> Color(0xFFFFC570)
+                                "Delivered" -> SGColors.Success
+                                "On Hold" -> SGColors.Warning
                                 else -> Color.White
                             },
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = DeliveryReportTypography.bodySp.sp, lineHeight = 20.sp)
@@ -152,7 +152,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                         enabled=!sharing,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(SGDimensions.RadiusSmall)
                     ) { Text(if(sharing) "Preparing report…" else "Share Report") }
                     OutlinedButton(
                         onClick = {
@@ -165,7 +165,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         border = BorderStroke(1.dp, PremiumGold),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PremiumGold),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(SGDimensions.RadiusSmall)
                     ) { Text("Copy Text") }
                     TextButton(
                         onClick = onClose,
