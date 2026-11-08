@@ -520,6 +520,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         Text("Payment", color = Color(0xFFF8F6FF), fontSize = 28.sp,
             fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
         PaymentOverviewCard(displayPaymentDate(vm.deliveryDate.toString()))
+        RunnerEarningsPanel(vm)
         PaymentGlassPanel(compact = true) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp),
