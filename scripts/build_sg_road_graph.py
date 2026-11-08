@@ -8,7 +8,8 @@ Input is a Singapore-area OSM .pbf, NOT scraped map tiles. Requires pyosmium:
 The compact SGR1 memory-mappable graph includes all supported motor-vehicle
 highways, directed edges, speed estimates, and via-node turn restrictions.
 No per-device server or internet connection is needed to route on this graph.
-This does not create a full rendered raster/vector basemap.
+The package includes a DAYLIGHT cartographic MBTiles basemap generated directly
+from the same licensed OSM PBF plus public-domain Natural Earth coastline.
 """
 
 from __future__ import annotations
@@ -219,13 +220,13 @@ def write_graph(pbf: Path, target: Path) -> dict:
         "bytes": target.stat().st_size,
     }
 
-def package(pbf: Path, output: Path, version: str) -> dict:
+def package(pbf: Path, output: Path, version: str, land_shp: Path) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as temp:
         graph = Path(temp) / "sg-routing.bin"
         details = write_graph(pbf, graph)
         tiles = Path(temp) / "sg-road-map.mbtiles"
-        render_offline_roads(graph, tiles)
+        render_offline_roads(graph, tiles, pbf, land_shp)
         tile_sha = hashlib.sha256(tiles.read_bytes()).hexdigest()
         metadata = {
             "schema": 2,
@@ -235,7 +236,7 @@ def package(pbf: Path, output: Path, version: str) -> dict:
             "scope": "Singapore driving road network plus border approaches",
             "graph": details,
             "road_tiles": {"sha256": tile_sha, "bytes": tiles.stat().st_size, "format": "mbtiles", "min_zoom": 9, "max_zoom": 16},
-            "note": "Generated driving graph and road-only visual basemap; OSM labels/buildings not included. Via-way turn restrictions are not yet supported.",
+            "note": "Directed driving graph and independently generated DAYLIGHT OSM/Natural Earth cartographic basemap (land/water/parks/urban/roads/labels); via-way restrictions not yet supported.",
         }
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=8) as archive:
             archive.write(graph, "sg-routing.bin")
@@ -246,10 +247,11 @@ def package(pbf: Path, output: Path, version: str) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("pbf", type=Path)
+    parser.add_argument("--land-shp", type=Path, required=True, help="Public-domain Natural Earth 10m land shapefile")
     parser.add_argument("--output", type=Path, default=Path("sg-offline-road-network.zip"))
     parser.add_argument("--version", default=datetime.now(timezone.utc).strftime("%Y%m%d"))
     args = parser.parse_args()
-    metadata = package(args.pbf, args.output, args.version)
+    metadata = package(args.pbf, args.output, args.version, args.land_shp)
     print(json.dumps(metadata, indent=2))
     print("package SHA256:", hashlib.sha256(args.output.read_bytes()).hexdigest())
 
