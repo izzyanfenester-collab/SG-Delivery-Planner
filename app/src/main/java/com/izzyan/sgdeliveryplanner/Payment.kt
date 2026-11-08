@@ -483,7 +483,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = SGDimensions.ScreenHorizontal, vertical = SGDimensions.Small),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SGPageHeader("Payment", "Payment history and earnings summary")
@@ -500,7 +500,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("▤", color = PremiumGold, fontSize = 29.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = PremiumGold, modifier = Modifier.size(24.dp))
                 }
                 Text("Payment calculator", color = SGColors.SelectedGold,
                     style = MaterialTheme.typography.titleMedium, fontSize = 22.sp,
@@ -560,7 +560,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         containerColor = PremiumNavy.copy(alpha = 0.45f),
                         contentColor = SGColors.White
                     )
-                ) { Text("↶  Reset", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+                ) { Text("Reset", style = MaterialTheme.typography.labelLarge) }
                 OutlinedButton(
                     onClick = {
                         val value = amounts ?: return@OutlinedButton
@@ -586,7 +586,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                ) { Text("▣  Save", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+                ) { Text("Save", style = MaterialTheme.typography.labelLarge) }
             }
         }
         if (reportTax == null) {
