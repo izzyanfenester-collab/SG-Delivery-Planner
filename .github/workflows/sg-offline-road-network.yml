@@ -93,8 +93,8 @@ jobs:
             latest.json
           if-no-files-found: error
           retention-days: 30
-      - name: Publish verified package only from official main
-        if: github.ref == 'refs/heads/main'
+      - name: Publish verified OSM data for Build #832 testing and official updates
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/build-832-offline-50-road-optimizer'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
