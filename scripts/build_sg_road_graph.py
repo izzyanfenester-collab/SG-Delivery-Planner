@@ -26,6 +26,9 @@ import tempfile
 import zipfile
 
 import osmium
+import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from render_sg_offline_tiles import render as render_offline_roads
 
 HIGHWAYS = {
@@ -154,6 +157,22 @@ def write_graph(pbf: Path, target: Path) -> dict:
         for a, b, length, duration, way in handler.edges
         if a in node_index and b in node_index
     )
+
+    # Snap delivery addresses to the largest strongly connected DRIVING component,
+    # not to isolated estate/service fragments with no valid path back to the city.
+    # Keep every road in the actual graph for complete cartography and diagnostics.
+    sources = np.fromiter((row[0] for row in edges), dtype=np.int32, count=len(edges))
+    destinations = np.fromiter((row[1] for row in edges), dtype=np.int32, count=len(edges))
+    adjacency = csr_matrix(
+        (np.ones(len(edges), dtype=np.uint8), (sources, destinations)),
+        shape=(len(node_ids), len(node_ids))
+    )
+    component_count, labels = connected_components(adjacency, directed=True, connection="strong")
+    sizes = np.bincount(labels)
+    primary_component = int(np.argmax(sizes))
+    primary_mask = labels == primary_component
+    print("Driving components:", component_count, "main component nodes:", int(sizes[primary_component]))
+
     first = [0] * len(node_ids)
     degree = [0] * len(node_ids)
     for start, _, _, _, _ in edges:
@@ -174,12 +193,17 @@ def write_graph(pbf: Path, target: Path) -> dict:
                 accepted.append((n, fr, to, mode))
     accepted = sorted(set(accepted))
     with target.open("wb") as f:
-        f.write(struct.pack("<4s7i", b"SGR1", 1, len(node_ids),
+        f.write(struct.pack("<4s7i", b"SGR1", 2, len(node_ids),
                             len(edges), len(accepted), 0, 0, 0))
         for i, osm_id in enumerate(node_ids):
             latitude, longitude = handler.coords[osm_id]
+            # SGR2: high bit of signed outdegree marks the routable giant SCC.
+            # Degree remains the low 31 bits; edge and restriction layout unchanged.
+            encoded_degree = degree[i] | (0x80000000 if primary_mask[i] else 0)
+            if encoded_degree >= 0x80000000:
+                encoded_degree -= 0x100000000
             f.write(struct.pack("<4i", round(latitude * 1e7), round(longitude * 1e7),
-                                first[i], degree[i]))
+                                first[i], encoded_degree))
         for _, to, length, duration, way in edges:
             f.write(struct.pack("<4i", to, length, duration, way))
         for data in accepted:
@@ -188,6 +212,7 @@ def write_graph(pbf: Path, target: Path) -> dict:
           "restrictions", len(accepted), "unhandled via-way", handler.via_way_skipped)
     return {
         "nodes": len(node_ids), "edges": len(edges),
+        "primary_scc_nodes": int(sizes[primary_component]),
         "turn_restrictions": len(accepted),
         "via_way_restrictions_unhandled": handler.via_way_skipped,
         "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
@@ -203,7 +228,7 @@ def package(pbf: Path, output: Path, version: str) -> dict:
         render_offline_roads(graph, tiles)
         tile_sha = hashlib.sha256(tiles.read_bytes()).hexdigest()
         metadata = {
-            "schema": 1,
+            "schema": 2,
             "version": version,
             "built_at": datetime.now(timezone.utc).isoformat(),
             "source": "© OpenStreetMap contributors (ODbL), Geofabrik extract",
