@@ -8,7 +8,12 @@ import java.math.RoundingMode
 import java.time.Duration
 import java.time.LocalDateTime
 
-private val holdReasons = setOf("Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue", "Joy buyer", "Other")
+/** Legacy labels are deliberately retained for old backup compatibility. */
+internal val holdReasons = setOf(
+    "Customer not home", "No answer", "Reschedule", "Payment issue", "Access issue",
+    "Joy buyer", "Other", "Wrong address", "Access denied", "Customer requested reschedule",
+    "Damaged parcel", "Customer unavailable", "Parcel refused"
+)
 
 /** Accept one legacy reason or multiple selected reasons without adding a DB column. */
 fun normalizedHoldReasons(value: String?): String? =
