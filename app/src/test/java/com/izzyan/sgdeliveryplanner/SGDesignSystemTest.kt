@@ -10,7 +10,8 @@ class SGDesignSystemTest {
         assertEquals(Color(0xFF081B33), SGColors.Background)
         assertEquals(Color(0xFF102A4C), SGColors.SecondaryBackground)
         assertEquals(0.30f, SG_CARD_BACKGROUND_ALPHA, 0.0001f)
-        assertEquals(SG_CARD_BACKGROUND_ALPHA, SGColors.Card.alpha, 0.001f)
+        // Android's 8-bit #4D alpha is 77/255 ~= 0.30196; tolerate quantization.
+        assertEquals(SG_CARD_BACKGROUND_ALPHA, SGColors.Card.alpha, 1f / 255f)
         assertEquals(Color(0xFF081B33).copy(alpha = SG_CARD_BACKGROUND_ALPHA), SGColors.Card)
         assertEquals(Color(0xFF152F50), SGColors.SolidCard)
         assertEquals(Color(0xFFD4AF37), SGColors.Gold)
