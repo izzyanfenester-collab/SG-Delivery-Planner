@@ -59,7 +59,7 @@ private data class PhotoLine(val layouts: List<StaticLayout>, val height: Float)
 
 private fun photoLayout(text: String, width: Int, header: Boolean): StaticLayout {
     val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (header) Color.WHITE else Color.rgb(15, 32, 53)
+        color = if (header) SGReportColors.Gold else SGReportColors.White
         textSize = if (header) 27f else 28f
         typeface = if (header) Typeface.create(Typeface.DEFAULT, Typeface.BOLD) else Typeface.DEFAULT
     }
@@ -100,18 +100,18 @@ internal fun generateSchedulePhoto(context: Context, plan: Plan): File {
     val bitmap = Bitmap.createBitmap(PHOTO_WIDTH, imageHeight, Bitmap.Config.RGB_565)
     try {
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.rgb(240, 245, 252))
+        canvas.drawColor(SGReportColors.Background)
         val background = Paint(Paint.ANTI_ALIAS_FLAG)
         val linesPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(211, 221, 235)
+            color = SGReportColors.Divider
             strokeWidth = 1.5f
         }
         var y = PHOTO_MARGIN
         lines.forEachIndexed { index, row ->
             background.color = when {
-                index == 0 -> Color.rgb(7, 23, 45)
-                index % 2 == 0 -> Color.rgb(238, 243, 251)
-                else -> Color.WHITE
+                index == 0 -> SGReportColors.Secondary
+                index % 2 == 0 -> SGReportColors.Card
+                else -> SGReportColors.Secondary
             }
             canvas.drawRect(RectF(PHOTO_MARGIN, y, PHOTO_WIDTH - PHOTO_MARGIN, y + row.height), background)
             var x = PHOTO_MARGIN
