@@ -1303,8 +1303,8 @@ fun RouteMap(p: Plan) {
         MarinaBayBackdrop(Modifier.fillMaxWidth().height(68.dp)) {
             Text(
                 when {
-                    online -> "Red dots: Delivery stops · OpenFreeMap / OpenMapTiles / © OpenStreetMap contributors"
-                    localTiles != null -> "Offline Singapore road map · © OpenStreetMap contributors"
+                    online -> "Day Map · Delivery stops · OpenFreeMap / OpenMapTiles / © OpenStreetMap contributors"
+                    localTiles != null -> "Offline Day Map · Singapore roads, parks and water · © OpenStreetMap contributors"
                     else -> "Offline map not installed — Download in Settings · © OpenStreetMap contributors"
                 },
                 Modifier.align(Alignment.CenterStart).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -1331,11 +1331,11 @@ private fun OfflinePlannedRouteMap(p: Plan, archive: java.io.File?, modifier: Mo
         MapView(context).apply {
             setMultiTouchControls(true)
             setUseDataConnection(false)
-            setBackgroundColor(android.graphics.Color.rgb(16, 42, 76))
+            setBackgroundColor(android.graphics.Color.rgb(175, 211, 226))
             // Never select MAPNIK: cached raster tiles may be poisoned with 403
             // images and the OSM Foundation server is not an offline map source.
             setTileSource(org.osmdroid.tileprovider.tilesource.XYTileSource(
-                "SG_OFFLINE_ROADS", 9, 16, 256, ".png", arrayOf("")
+                "SG_DAYLIGHT_BASEMAP", 9, 16, 256, ".png", arrayOf("")
             ))
             if (archive != null) {
                 runCatching {
