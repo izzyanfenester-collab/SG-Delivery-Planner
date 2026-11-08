@@ -160,7 +160,7 @@ private fun V6StatBox(count: String, label: String, tint: Color, modifier: Modif
         Box(Modifier.width(3.dp).height(24.dp).background(tint, RoundedCornerShape(3.dp)))
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(count, fontSize = 22.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp, color = V6White)
-            Text(label, fontSize = 12.sp, maxLines = 1, color = V6Secondary)
+            Text(label, fontSize = 12.sp, maxLines = 2, color = V6Secondary)
         }
     }
 }
