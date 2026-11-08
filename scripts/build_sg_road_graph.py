@@ -26,6 +26,7 @@ import tempfile
 import zipfile
 
 import osmium
+from render_sg_offline_tiles import render as render_offline_roads
 
 HIGHWAYS = {
     "motorway": 90, "motorway_link": 45,
@@ -198,6 +199,9 @@ def package(pbf: Path, output: Path, version: str) -> dict:
     with tempfile.TemporaryDirectory() as temp:
         graph = Path(temp) / "sg-routing.bin"
         details = write_graph(pbf, graph)
+        tiles = Path(temp) / "sg-road-map.mbtiles"
+        render_offline_roads(graph, tiles)
+        tile_sha = hashlib.sha256(tiles.read_bytes()).hexdigest()
         metadata = {
             "schema": 1,
             "version": version,
@@ -205,10 +209,12 @@ def package(pbf: Path, output: Path, version: str) -> dict:
             "source": "© OpenStreetMap contributors (ODbL), Geofabrik extract",
             "scope": "Singapore driving road network plus border approaches",
             "graph": details,
-            "note": "Generated road graph; no rendered offline basemap tiles. Via-way turn restrictions are not yet supported.",
+            "road_tiles": {"sha256": tile_sha, "bytes": tiles.stat().st_size, "format": "mbtiles", "min_zoom": 9, "max_zoom": 16},
+            "note": "Generated driving graph and road-only visual basemap; OSM labels/buildings not included. Via-way turn restrictions are not yet supported.",
         }
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=8) as archive:
             archive.write(graph, "sg-routing.bin")
+            archive.write(tiles, "sg-road-map.mbtiles")
             archive.writestr("metadata.json", json.dumps(metadata, separators=(",", ":")))
     return metadata
 
