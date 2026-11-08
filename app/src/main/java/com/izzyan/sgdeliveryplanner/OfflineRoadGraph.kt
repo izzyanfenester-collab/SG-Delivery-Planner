@@ -31,6 +31,7 @@ internal class OfflineRoadGraph private constructor(
         val forbidden = HashSet<Int>()
         val allowed = HashSet<Int>()
     }
+    private val schemaVersion = bytes.getInt(4)
     private val nodeOffset = 32
     private val edgeOffset = nodeOffset + nodeCount * 16
     private val turnOffset = edgeOffset + edgeCount * 16
@@ -68,7 +69,9 @@ internal class OfflineRoadGraph private constructor(
     private fun lat(n: Int) = bytes.getInt(no(n)).toDouble() / 1e7
     private fun lon(n: Int) = bytes.getInt(no(n) + 4).toDouble() / 1e7
     private fun first(n: Int) = bytes.getInt(no(n) + 8)
-    private fun degree(n: Int) = bytes.getInt(no(n) + 12)
+    private fun degree(n: Int) = bytes.getInt(no(n) + 12) and Int.MAX_VALUE
+    private fun snapEligible(n: Int): Boolean =
+        degree(n) > 0 && (schemaVersion < 2 || bytes.getInt(no(n) + 12) < 0)
     private fun to(e: Int) = bytes.getInt(eo(e))
     private fun length(e: Int) = bytes.getInt(eo(e) + 4)
     private fun seconds(e: Int) = bytes.getInt(eo(e) + 8)
@@ -84,7 +87,7 @@ internal class OfflineRoadGraph private constructor(
         var best = Double.POSITIVE_INFINITY
         val xScale = 111195.0 * cos(Math.toRadians(place.lat))
         for (i in 0 until nodeCount) {
-            if (degree(i) == 0) continue
+            if (!snapEligible(i)) continue
             val dy = (lat(i) - place.lat) * 111195.0
             if (abs(dy) > limitMetres || abs(dy) >= best) continue
             val dx = (lon(i) - place.lon) * xScale
@@ -201,7 +204,7 @@ internal class OfflineRoadGraph private constructor(
                 val channel = raf.channel
                 val mapped = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
                     .order(ByteOrder.LITTLE_ENDIAN)
-                require(mapped.getInt(0) == 0x31524753 && mapped.getInt(4) == 1) {
+                require(mapped.getInt(0) == 0x31524753 && mapped.getInt(4) in 1..2) {
                     "Unsupported Singapore road graph version"
                 }
                 val nodes = mapped.getInt(8)
