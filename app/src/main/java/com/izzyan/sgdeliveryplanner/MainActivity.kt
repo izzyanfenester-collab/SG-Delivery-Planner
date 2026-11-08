@@ -276,7 +276,7 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun CountTile(label: String, count: Int, modifier: Modifier = Modifier, color: Color? = null, compact: Boolean = false) {
     Surface(
-        modifier = modifier, color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier, color = SGColors.Card,
         shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)
     ) {
         Column(Modifier.padding(if (compact) 9.dp else 14.dp),
@@ -814,7 +814,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
             }
         } else {
             val stop = p.stops[p.current]
-            PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = PremiumNavy) {
+            PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold, containerColor = SGColors.Card) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Stop ${p.current + 1} of ${p.stops.size}", Modifier.weight(1f), color = PremiumGold, style = MaterialTheme.typography.titleLarge)
@@ -1085,10 +1085,10 @@ fun ScheduleTable(p: Plan) {
         listOf("${index + 1}", stop.place.postal, stop.place.block, stop.place.area, time(stop.arrival), km(stop.leg.km), duration(stop.leg.baseSeconds), duration(stop.leg.bufferSeconds), duration(stop.leg.plannedSeconds), "${time(stop.arrival)} – ${time(stop.leave)}", time(stop.leave), km(stop.cumulativeKm), stop.etaArrival?.let(::time) ?: "—", stop.etaLeave?.let(::time) ?: "—", stop.completedAt?.let(::time) ?: "—")
     }
     val end = listOf("END", endPlace.postal, endPlace.block, endPlace.area, time(p.returned), km(p.returnLeg.km), duration(p.returnLeg.baseSeconds), duration(p.returnLeg.bufferSeconds), duration(p.returnLeg.plannedSeconds), "—", time(p.returned), km(p.totalKm), p.etaReturned?.let(::time) ?: "—", "—", "—")
-    Surface(shape = RoundedCornerShape(SGDimensions.RadiusCard), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    Surface(color = Color.Transparent, shape = RoundedCornerShape(SGDimensions.RadiusCard), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             (listOf(headings, start) + rows + listOf(end)).forEachIndexed { index, row ->
-                val background = if (index == 0) PremiumNavy else if (index % 2 == 0) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+                val background = SGColors.Card // One consistent 30%-opaque Navy fill per schedule row.
                 Row(Modifier.background(background)) {
                     row.forEach {
                         Text(it, Modifier.width(160.dp).padding(14.dp), color = if (index == 0) Color.White else MaterialTheme.colorScheme.onSurface, style = if (index == 0) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium)
@@ -1114,7 +1114,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         PageTitle("Delivery Report Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
-        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = PremiumNavy) {
+        PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = SGColors.Card) {
             Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
                 Text("%.1f%%".format(Locale.US, summary.successRate), color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
