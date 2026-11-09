@@ -1,6 +1,7 @@
 package com.izzyan.sgdeliveryplanner
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -509,6 +510,7 @@ private fun PaymentTableRow(
 private fun PaymentEditDialog(
     target: PaymentRecordRef,
     reports: List<Plan>,
+    taxOverrides: Map<String, String>,
     busy: Boolean,
     onDismiss: () -> Unit,
     onSave: (PaymentRecord) -> Unit
@@ -523,7 +525,10 @@ private fun PaymentEditDialog(
     var autopass by remember(target) { mutableStateOf(target.record.autopassRm ?: "0.00") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val tax = if (date == target.record.date) target.record.taxRm
-        else parsedDate?.let { savedReportTaxRm(it, reports) } ?: "0.00"
+        else effectivePaymentTaxRm(
+            parsedDate?.let { savedReportTaxRm(it, reports) },
+            taxOverrides[date]
+        )
     val updated = revisedPaymentRecord(
         date, quantity, commission, tax, others, petrol, touchAndGo, autopass
     )
@@ -606,11 +611,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
         active + historical
     }
     val context = LocalContext.current
+    val taxOverrideLedger = remember(context) { PaymentTaxOverrideLedger(context) }
+    var taxOverrides by remember { mutableStateOf(taxOverrideLedger.read()) }
+    var showEditTax by remember { mutableStateOf(false) }
+    var taxDraft by rememberSaveable { mutableStateOf("") }
     // Manual payment-date choice is independent from the selected Home delivery date.
     var manualPaymentDate by rememberSaveable { mutableStateOf<String?>(null) }
     val paymentDate = paymentDateForCalculator(vm.deliveryDate, manualPaymentDate)
     val reportTax = savedReportTaxRm(paymentDate, matchingReports)
-    val taxRm = reportTax ?: "0.00"
+    val taxIsManual = taxOverrides.containsKey(paymentDate.toString())
+    val taxRm = effectivePaymentTaxRm(reportTax, taxOverrides[paymentDate.toString()])
+    val editTax = {
+        taxDraft = taxRm
+        showEditTax = true
+    }
     var quantity by rememberSaveable { mutableStateOf("") }
     var commission by rememberSaveable { mutableStateOf("") }
     var others by rememberSaveable { mutableStateOf("") }
@@ -679,12 +693,16 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 Text(amounts?.totalPaymentRm ?: "—", color = SGColors.White, fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
-            PaymentRow("Tax (RM)") {
+            PaymentRow("Tax (RM)", onLongClick = editTax) {
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("RM $taxRm", color = SGColors.White, fontSize = 16.sp,
+                    Text("RM $taxRm  ✎", color = SGColors.White, fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold)
-                    Text(if (reportTax != null) "From Delivery Report Summary" else "No matching saved report",
-                        color = SGColors.Silver, fontSize = 10.sp, lineHeight = 13.sp)
+                    Text(
+                        if (taxIsManual) "Manual override · hold to edit"
+                        else if (reportTax != null) "From Delivery Summary · hold to edit"
+                        else "No saved report · hold to edit",
+                        color = SGColors.Silver, fontSize = 10.sp, lineHeight = 13.sp
+                    )
                 }
             }
             PaymentRow("Others (RM)") {
@@ -716,7 +734,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     if (validCurrencyInput(it)) autopass = it
                 }
             }
-            PaymentRow("Tax (RM)") {
+            PaymentRow("Tax (RM)", onLongClick = editTax) {
                 Text("RM $taxRm", color = SGColors.White, fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
@@ -769,7 +787,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 ) { Text("Save", style = MaterialTheme.typography.labelLarge) }
             }
         }
-        if (reportTax == null) {
+        if (reportTax == null && !taxIsManual) {
             Text(
                 "No saved Delivery Report Summary for this payment date. Both Tax rows use RM 0.00.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -827,6 +845,62 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         Text("Long-press a month to manage saved records.",
             color = SGColors.Silver, fontSize = 11.sp, lineHeight = 15.sp
+        )
+    }
+
+    if (showEditTax) {
+        val normalized = normalizedCurrency(taxDraft)
+        AlertDialog(
+            onDismissRequest = { showEditTax = false },
+            title = { Text("Edit Tax (RM)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Payment date: ${displayPaymentDate(paymentDate.toString())}",
+                        style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (taxIsManual) "Source: Manual Override"
+                        else if (reportTax != null) "Source: Delivery Summary Report"
+                        else "Source: No saved report (RM 0.00)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = taxDraft,
+                        onValueChange = { if (validCurrencyInput(it)) taxDraft = it },
+                        label = { Text("Current Tax Amount (RM)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (normalized == null) {
+                        Text("Enter a valid amount with up to two decimal places.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val amount = normalized ?: return@TextButton
+                        if (taxOverrideLedger.save(paymentDate, amount)) {
+                            taxOverrides = taxOverrideLedger.read()
+                            showEditTax = false
+                        } else Toast.makeText(context, "Tax could not be saved.", Toast.LENGTH_LONG).show()
+                    },
+                    enabled = normalized != null
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    TextButton(onClick = {
+                        if (taxOverrideLedger.resetToReport(paymentDate)) {
+                            taxOverrides = taxOverrideLedger.read()
+                            showEditTax = false
+                        } else Toast.makeText(context, "Could not reset Tax.", Toast.LENGTH_LONG).show()
+                    }) { Text("Reset to Report Tax") }
+                    TextButton(onClick = { showEditTax = false }) { Text("Cancel") }
+                }
+            }
         )
     }
 
@@ -893,6 +967,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         PaymentEditDialog(
             target = target,
             reports = matchingReports,
+            taxOverrides = taxOverrides,
             busy = vm.busy,
             onDismiss = { editingRecord = null },
             onSave = { updated ->
