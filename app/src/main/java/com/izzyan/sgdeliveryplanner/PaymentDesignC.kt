@@ -40,6 +40,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Default amounts apply only to NEW, unsaved Payment drafts; saved payments retain their own values. */
+internal enum class PaymentExpense(val title: String, val defaultRm: String) {
+    PETROL("Petrol", "30.00"),
+    TOUCH_AND_GO("Touch & Go", "10.00"),
+    AUTOPASS("Autopass", "30.00")
+}
+
 /** Design C is payment-only. No changes to the calculator, ledger, backup or navigation model. */
 internal object PaymentDesignC {
     // Ultra compact design targets; controls grow naturally when text/font scaling needs space.
@@ -228,8 +235,9 @@ internal fun DesignCCalculator(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun DesignCExpenseRow(
-    label: String, icon: ImageVector, value: String, onChange: (String) -> Unit
+    label: String, icon: ImageVector, value: String, onLongPress: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth().heightIn(min = 34.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -237,8 +245,25 @@ private fun DesignCExpenseRow(
         Icon(icon, contentDescription = null, tint = SGColors.Gold, modifier = Modifier.size(15.dp))
         Text(label, color = SGColors.White, fontSize = 11.sp, lineHeight = 13.sp,
             modifier = Modifier.weight(1f))
-        Box(Modifier.width(70.dp)) {
-            DesignCInput(value, "0.00", KeyboardType.Decimal, onChange)
+        // Identical size to the previous input, but read-only on short tap.
+        // Long-press respects the Android accessibility long-press duration.
+        val shape = RoundedCornerShape(8.dp)
+        Row(
+            Modifier.width(70.dp).heightIn(min = PaymentDesignC.InputHeight)
+                .border(BorderStroke(.8.dp, SGColors.Divider), shape)
+                .background(SGColors.Background.copy(alpha = .50f), shape)
+                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .semantics { contentDescription = "$label RM $value, long press to edit" }
+                .padding(horizontal = 3.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(value, color = SGColors.White, fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End,
+                maxLines = 1, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(2.dp))
+            Icon(Icons.Outlined.Edit, contentDescription = null,
+                tint = SGColors.Gold, modifier = Modifier.size(11.dp))
         }
     }
 }
@@ -259,9 +284,9 @@ private fun DesignCReadOnlyRow(label: String, value: String, gold: Boolean = fal
 
 @Composable
 private fun DesignCDeductions(
-    petrol: String, onPetrol: (String) -> Unit,
-    touch: String, onTouch: (String) -> Unit,
-    autopass: String, onAutopass: (String) -> Unit,
+    petrol: String, onPetrolLongPress: () -> Unit,
+    touch: String, onTouchLongPress: () -> Unit,
+    autopass: String, onAutopassLongPress: () -> Unit,
     tax: String, deduction: String, modifier: Modifier = Modifier
 ) {
     DesignCPanel(modifier) {
@@ -272,9 +297,9 @@ private fun DesignCDeductions(
             Text("DEDUCTIONS (RM)", color = SGColors.SelectedGold,
                 fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
-        DesignCExpenseRow("Petrol", Icons.Outlined.LocalGasStation, petrol, onPetrol)
-        DesignCExpenseRow("Touch & Go", Icons.Outlined.CreditCard, touch, onTouch)
-        DesignCExpenseRow("Autopass", Icons.Outlined.DirectionsCar, autopass, onAutopass)
+        DesignCExpenseRow("Petrol", Icons.Outlined.LocalGasStation, petrol, onPetrolLongPress)
+        DesignCExpenseRow("Touch & Go", Icons.Outlined.CreditCard, touch, onTouchLongPress)
+        DesignCExpenseRow("Autopass", Icons.Outlined.DirectionsCar, autopass, onAutopassLongPress)
         DesignCReadOnlyRow("Tax", tax)
         HorizontalDivider(color = SGColors.Divider.copy(alpha = .7f))
         DesignCReadOnlyRow("TOTAL DEDUCTIONS", deduction, gold = true)
@@ -316,9 +341,9 @@ private fun DesignCEarnings(
 
 @Composable
 internal fun DesignCFinancialCards(
-    petrol: String, onPetrol: (String) -> Unit,
-    touch: String, onTouch: (String) -> Unit,
-    autopass: String, onAutopass: (String) -> Unit,
+    petrol: String, onPetrolLongPress: () -> Unit,
+    touch: String, onTouchLongPress: () -> Unit,
+    autopass: String, onAutopassLongPress: () -> Unit,
     tax: String, grand: String, deduction: String, net: String
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp
@@ -327,13 +352,13 @@ internal fun DesignCFinancialCards(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            DesignCDeductions(petrol, onPetrol, touch, onTouch, autopass, onAutopass,
+            DesignCDeductions(petrol, onPetrolLongPress, touch, onTouchLongPress, autopass, onAutopassLongPress,
                 tax, deduction, Modifier.weight(1f).fillMaxHeight())
             DesignCEarnings(grand, deduction, net, Modifier.weight(1f).fillMaxHeight(), balancedHeight = true)
         }
     } else {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            DesignCDeductions(petrol, onPetrol, touch, onTouch, autopass, onAutopass,
+            DesignCDeductions(petrol, onPetrolLongPress, touch, onTouchLongPress, autopass, onAutopassLongPress,
                 tax, deduction, Modifier.fillMaxWidth())
             DesignCEarnings(grand, deduction, net, Modifier.fillMaxWidth())
         }
