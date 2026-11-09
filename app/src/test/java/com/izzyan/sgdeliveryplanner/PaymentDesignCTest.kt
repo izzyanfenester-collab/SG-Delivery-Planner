@@ -14,7 +14,8 @@ class PaymentDesignCTest {
         assertTrue(PaymentDesignC.useSideBySideCards(400))
         assertTrue(PaymentDesignC.useSideBySideCards(480))
         assertFalse(PaymentDesignC.useFourAcrossKpis(400))
-        assertTrue(PaymentDesignC.useFourAcrossKpis(480))
+        assertFalse(PaymentDesignC.useFourAcrossKpis(480))
+        assertFalse(PaymentDesignC.useFourAcrossKpis(700))
     }
 
     @Test fun monthNavigationOffersAllTwelveMonthsAndWraps() {
