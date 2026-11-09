@@ -352,7 +352,7 @@ internal object PaymentCompactLayout {
 
 // Older entries remain scrollable within a maximum of five visible rows.
 private const val VISIBLE_PAYMENT_HISTORY_ROWS = PaymentCompactLayout.HistoryVisibleRows
-private val PAYMENT_HISTORY_ROW_HEIGHT = PaymentCompactLayout.HistoryRowMinHeight
+private val PAYMENT_HISTORY_ROW_HEIGHT = PaymentDesignC.HistoryRowHeight
 
 private fun displayPaymentDate(value: String): String = runCatching {
     LocalDate.parse(value).format(rowDate)
@@ -362,8 +362,8 @@ private fun displayPaymentDate(value: String): String = runCatching {
 /** Compact surfaces are local to Payment and do not change any other screen. */
 @Composable
 private fun PaymentSectionTitle(title: String, modifier: Modifier = Modifier) {
-    Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 18.sp,
-        lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+    Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 16.sp,
+        lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -373,8 +373,8 @@ private fun PaymentGlassPanel(compact: Boolean = false, content: @Composable () 
         Modifier.fillMaxWidth()
             .border(BorderStroke(1.dp, SGColors.Divider.copy(alpha = 0.75f)), shape)
             .background(SGColors.Card, shape)
-            .padding(if (compact) PaymentCompactLayout.CardPadding else PaymentCompactLayout.TableCardPadding),
-        verticalArrangement = Arrangement.spacedBy(if (compact) PaymentCompactLayout.IntraCardGap else 4.dp),
+            .padding(if (compact) PaymentCompactLayout.CardPadding else PaymentDesignC.CardPadding),
+        verticalArrangement = Arrangement.spacedBy(if (compact) PaymentCompactLayout.IntraCardGap else 2.dp),
         content = { content() }
     )
 }
@@ -480,13 +480,14 @@ private fun PaymentTableRow(
     val gesture = if (onLongClick != null) Modifier.combinedClickable(
         onClick = {}, onLongClick = onLongClick) else Modifier
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 1.dp)
+        Modifier.fillMaxWidth().padding(vertical = 0.5.dp)
             .then(gesture)
-            .heightIn(min = fixedRowHeight ?: PaymentCompactLayout.TableRowMinHeight)
+            .heightIn(min = fixedRowHeight ?: if (isHeader) PaymentDesignC.HistoryHeaderHeight
+                else PaymentDesignC.HistoryRowHeight)
             .border(BorderStroke(0.6.dp, SGColors.Divider.copy(alpha = 0.65f)),
                 RoundedCornerShape(7.dp))
             .background(Color.Transparent, RoundedCornerShape(7.dp))
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = 3.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal, nettEarning).forEachIndexed { index, value ->
@@ -494,11 +495,11 @@ private fun PaymentTableRow(
                 if (isHeader) paymentTableHeaderValue(value) else value,
                 modifier = Modifier.weight(if (index == 0) 1.07f else if (index == 1) 1.07f else 1f),
                 color = if (!isHeader && index == 3) SGColors.SelectedGold else textColor,
-                fontSize = if (isHeader) 10.sp else 12.sp,
+                fontSize = if (isHeader) 10.5.sp else 12.5.sp,
                 lineHeight = if (isHeader) 13.sp else 16.sp,
                 fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
                 softWrap = true,
-                maxLines = if (isHeader) 3 else Int.MAX_VALUE,
+                maxLines = if (isHeader) 2 else Int.MAX_VALUE,
                 textAlign = paymentTableAlignment(index)
             )
         }
@@ -645,6 +646,9 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var dashboardMonth by rememberSaveable { mutableStateOf(vm.deliveryDate.monthValue) }
     var previewReport by remember { mutableStateOf<Plan?>(null) }
     val paymentHistoryScrollState = rememberScrollState()
+    val historyRowHeight = PaymentDesignC.historyRowHeight(
+        androidx.compose.ui.platform.LocalConfiguration.current.fontScale
+    )
 
     val taxSource = when {
         taxIsManual -> "Manual Override"
@@ -717,15 +721,15 @@ fun PaymentScreen(vm: PlannerViewModel) {
         )
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PaymentSectionTitle("Payment History", Modifier.weight(1f))
+            PaymentSectionTitle("Payment History (RM)", Modifier.weight(1f))
             Text("Long-press to edit/delete", color = SGColors.Silver,
                 fontSize = 11.sp, lineHeight = 15.sp)
         }
         PaymentGlassPanel {
-            PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)",
-                "Nett Earning (RM)", isHeader = true)
+            PaymentTableRow("Date", "Total\nPayment", "Grand\nTotal",
+                "Nett\nEarning", isHeader = true)
             Column(
-                Modifier.heightIn(max = PAYMENT_HISTORY_ROW_HEIGHT * VISIBLE_PAYMENT_HISTORY_ROWS)
+                Modifier.heightIn(max = historyRowHeight * VISIBLE_PAYMENT_HISTORY_ROWS)
                     .verticalScroll(paymentHistoryScrollState)
             ) {
                 vm.paymentRecords.indices.reversed().forEach { index ->
@@ -734,7 +738,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                         displayPaymentDate(record.date), record.totalPaymentRm,
                         record.grandTotalPaymentRm, financialsForRecord(record).nettEarningRm,
                         onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
-                        fixedRowHeight = PAYMENT_HISTORY_ROW_HEIGHT
+                        fixedRowHeight = historyRowHeight
                     )
                 }
             }
@@ -752,8 +756,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
             onNext = { dashboardMonth = PaymentDesignC.nextMonth(dashboardMonth) },
             onManageMonth = { selectedMonth = dashboardMonth }
         )
-        Text("Hold the selected month to manage saved payments. Use arrows to view January–December.",
-            color = SGColors.Silver, fontSize = 11.sp, lineHeight = 14.sp)
+        Text("Hold month to manage · arrows: Jan–Dec",
+            color = SGColors.Silver, fontSize = 10.5.sp, lineHeight = 13.sp)
     }
 
     previewReport?.let { report ->
