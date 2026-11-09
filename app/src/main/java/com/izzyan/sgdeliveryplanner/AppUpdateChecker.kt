@@ -110,8 +110,9 @@ internal data class AppUpdateState(
     }
 }
 
-internal class AppReleaseChecker(private val context: Context) {
-    private val client = OkHttpClient.Builder()
+internal class AppReleaseChecker(
+    private val context: Context,
+    private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
