@@ -86,7 +86,9 @@ internal class HomeTaxLiveFxRepository(
                 val cached = cached()
                 // Do not replace newer cached quotes with an older publication.
                 if (cached != null && quote.sourceUpdatedEpochSeconds < cached.sourceUpdatedEpochSeconds) {
-                    return cached
+                    // The remote response is older than our cache: report a failed
+                    // refresh so UI explicitly labels the existing quote as cached.
+                    return null
                 }
                 prefs.edit()
                     .putString("base_rate", quote.beforeMarkup.toPlainString())
