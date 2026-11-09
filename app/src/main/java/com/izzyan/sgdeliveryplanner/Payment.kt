@@ -640,7 +640,11 @@ fun PaymentScreen(vm: PlannerViewModel) {
         paymentDate.toString(), quantity, commission, taxRm, others, petrol, touchAndGo, autopass
     )
     val amounts = calculatePayment(quantity, commission, taxRm, others)
-    val financials = recordToSave?.let { financialsForRecord(it) }
+    // Show Total Deductions immediately, even before quantity/commission is entered.
+    // Nett Earning stays blank until a real Grand Total can be calculated.
+    val deductionPreview = calculatePaymentFinancials(
+        amounts?.grandTotalPaymentRm ?: "0.00", taxRm, petrol, touchAndGo, autopass
+    )
     val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
 
     var selectedRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
@@ -704,8 +708,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
             },
             tax = taxRm,
             grand = amounts?.grandTotalPaymentRm ?: "—",
-            deduction = financials?.totalDeductionRm ?: "—",
-            net = financials?.nettEarningRm ?: "—"
+            deduction = deductionPreview?.totalDeductionRm ?: "—",
+            net = if (amounts == null) "—" else deductionPreview?.nettEarningRm ?: "—"
         )
 
         DesignCActions(
