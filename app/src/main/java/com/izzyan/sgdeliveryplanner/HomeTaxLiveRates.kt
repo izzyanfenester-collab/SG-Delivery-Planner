@@ -16,13 +16,14 @@ import java.util.concurrent.TimeUnit
  */
 private const val LIVE_FX_ENDPOINT = "https://open.er-api.com/v6/latest/SGD"
 private const val LIVE_FX_CACHE = "home_tax_live_fx_cache_v1"
-internal val HOME_TAX_MARKUP_RM = BigDecimal("0.40")
+// Exchange-rate spread, not a standalone RM0.40 fee. Add 0.4 to SGD/MYR rate.
+internal val HOME_TAX_RATE_MARKUP = BigDecimal("0.4")
 
 internal data class LiveHomeFxQuote(
     val beforeMarkup: BigDecimal,
     val sourceUpdatedEpochSeconds: Long
 ) {
-    val afterMarkup: BigDecimal get() = beforeMarkup.add(HOME_TAX_MARKUP_RM)
+    val afterMarkup: BigDecimal get() = beforeMarkup.add(HOME_TAX_RATE_MARKUP)
 }
 
 /** Fail closed on malformed or invalid quotes, zero FX and wrong currency pairs.
