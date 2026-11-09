@@ -1,6 +1,7 @@
 package com.izzyan.sgdeliveryplanner
 
 import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -69,7 +70,14 @@ data class PaymentRecord(
     val totalPaymentRm: String,
     val taxRm: String,
     val othersRm: String,
-    val grandTotalPaymentRm: String
+    val grandTotalPaymentRm: String,
+    // Nullable additions preserve JSON records saved by Official #832.
+    val petrolRm: String? = null,
+    val touchAndGoRm: String? = null,
+    val autopassRm: String? = null,
+    val totalDeductionRm: String? = null,
+    val nettEarningRm: String? = null,
+    val schemaVersion: Int = 1
 )
 
 data class PaymentCalculation(
@@ -79,20 +87,58 @@ data class PaymentCalculation(
 
 data class PaymentRecordRef(val index: Int, val record: PaymentRecord)
 
-/** Create a balanced replacement record from editable fields, without losing past payments. */
+/** Calculate deductions once: Tax is added to earnings, then deducted exactly once. */
+data class PaymentFinancials(val totalDeductionRm: String, val nettEarningRm: String)
+
+fun calculatePaymentFinancials(
+    grandTotalRm: String, taxRm: String, petrolRm: String,
+    touchAndGoRm: String, autopassRm: String
+): PaymentFinancials? {
+    val values = listOf(grandTotalRm, taxRm, petrolRm, touchAndGoRm, autopassRm)
+        .map { normalizedCurrency(it)?.toBigDecimalOrNull() ?: return null }
+    val deduction = values.drop(1).fold(BigDecimal.ZERO, BigDecimal::add)
+        .setScale(2, RoundingMode.HALF_UP)
+    return PaymentFinancials(
+        deduction.toPlainString(),
+        values[0].subtract(deduction).setScale(2, RoundingMode.HALF_UP).toPlainString()
+    )
+}
+
+/** Legacy #832 records already include the earned Tax in grand total.
+ * Do not add the earned Tax again. Derive the one deduction without changing saved totals.
+ */
+fun financialsForRecord(record: PaymentRecord): PaymentFinancials =
+    requireNotNull(calculatePaymentFinancials(
+        record.grandTotalPaymentRm, record.taxRm,
+        record.petrolRm ?: "0.00", record.touchAndGoRm ?: "0.00",
+        record.autopassRm ?: "0.00"
+    ))
+
+/** Revisions are constructed atomically, with two-decimal amounts for all new fields. */
 fun revisedPaymentRecord(
-    dateText: String, quantityText: String, commissionText: String, taxText: String, othersText: String
+    dateText: String, quantityText: String, commissionText: String,
+    taxText: String, othersText: String,
+    petrolText: String = "0.00", touchAndGoText: String = "0.00",
+    autopassText: String = "0.00"
 ): PaymentRecord? {
     val date = runCatching { LocalDate.parse(dateText.trim()).toString() }.getOrNull() ?: return null
     val quantity = quantityText.toIntOrNull() ?: return null
     val amounts = calculatePayment(quantityText, commissionText, taxText, othersText) ?: return null
+    val tax = normalizedCurrency(taxText) ?: return null
+    val petrol = normalizedCurrency(petrolText) ?: return null
+    val touchAndGo = normalizedCurrency(touchAndGoText) ?: return null
+    val autopass = normalizedCurrency(autopassText) ?: return null
+    val net = calculatePaymentFinancials(amounts.grandTotalPaymentRm, tax, petrol, touchAndGo, autopass)
+        ?: return null
     return PaymentRecord(
         date = date, quantity = quantity,
         commissionPerParcelRm = normalizedCurrency(commissionText) ?: return null,
         totalPaymentRm = amounts.totalPaymentRm,
-        taxRm = normalizedCurrency(taxText) ?: return null,
-        othersRm = normalizedCurrency(othersText) ?: return null,
-        grandTotalPaymentRm = amounts.grandTotalPaymentRm
+        taxRm = tax, othersRm = normalizedCurrency(othersText) ?: return null,
+        grandTotalPaymentRm = amounts.grandTotalPaymentRm,
+        petrolRm = petrol, touchAndGoRm = touchAndGo, autopassRm = autopass,
+        totalDeductionRm = net.totalDeductionRm,
+        nettEarningRm = net.nettEarningRm, schemaVersion = 2
     )
 }
 
@@ -138,6 +184,47 @@ fun monthlyPaymentTotals(records: List<PaymentRecord>, year: Int, month: Int): P
     return PaymentCalculation(total { it.totalPaymentRm }, total { it.grandTotalPaymentRm })
 }
 
+/** New four-column summaries; the two-field legacy helpers remain for existing records/tests. */
+data class PaymentNetTotals(
+    val grandTotalPaymentRm: String,
+    val totalDeductionRm: String,
+    val nettEarningRm: String
+)
+
+fun monthlyPaymentNetTotals(records: List<PaymentRecord>, year: Int, month: Int): PaymentNetTotals {
+    val recordsInMonth = records.filter {
+        runCatching { LocalDate.parse(it.date) }.getOrNull()?.let { date ->
+            date.year == year && date.monthValue == month
+        } == true
+    }
+    fun sum(values: (PaymentRecord) -> String): String =
+        recordsInMonth.fold(BigDecimal.ZERO) { result, record ->
+            result.add(BigDecimal(values(record)))
+        }.setScale(2, RoundingMode.HALF_UP).toPlainString()
+    return PaymentNetTotals(
+        sum { it.grandTotalPaymentRm },
+        sum { financialsForRecord(it).totalDeductionRm },
+        sum { financialsForRecord(it).nettEarningRm }
+    )
+}
+
+fun nonZeroMonthlyPaymentNetRows(records: List<PaymentRecord>, year: Int): List<Pair<Int, PaymentNetTotals>> =
+    (1..12).map { it to monthlyPaymentNetTotals(records, year, it) }
+        .filter { (_, totals) ->
+            listOf(totals.grandTotalPaymentRm, totals.totalDeductionRm, totals.nettEarningRm)
+                .any { BigDecimal(it).signum() != 0 }
+        }
+
+fun yearlyPaymentNetTotals(records: List<PaymentRecord>, year: Int): PaymentNetTotals {
+    val months = (1..12).map { monthlyPaymentNetTotals(records, year, it) }
+    fun sum(value: (PaymentNetTotals) -> String): String =
+        months.fold(BigDecimal.ZERO) { amount, month -> amount.add(BigDecimal(value(month))) }
+            .setScale(2, RoundingMode.HALF_UP).toPlainString()
+    return PaymentNetTotals(
+        sum { it.grandTotalPaymentRm }, sum { it.totalDeductionRm }, sum { it.nettEarningRm }
+    )
+}
+
 /** Only display months with actual payouts in either amount column. */
 fun nonZeroMonthlyPaymentRows(records: List<PaymentRecord>, year: Int): List<Pair<Int, PaymentCalculation>> =
     (1..12).map { month -> month to monthlyPaymentTotals(records, year, month) }
@@ -146,7 +233,7 @@ fun nonZeroMonthlyPaymentRows(records: List<PaymentRecord>, year: Int): List<Pai
                 BigDecimal(totals.grandTotalPaymentRm).signum() != 0
         }
 
-/** Full January–December annual totals, including any months not shown in the compact table. */
+/** Full January–December legacy annual totals. */
 fun yearlyPaymentTotals(records: List<PaymentRecord>, year: Int): PaymentCalculation {
     val totals = (1..12).map { month -> monthlyPaymentTotals(records, year, month) }
     fun sum(select: (PaymentCalculation) -> String): String =
@@ -216,16 +303,26 @@ class PaymentLedger(context: Context) {
     }
 }
 
-/** Validate imported records so a corrupt ZIP cannot alter saved payment history. */
+/** Reject corrupted backup and ensure new records' stored totals match all source amounts. */
 fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
     LocalDate.parse(record.date)
-    val recalculated = calculatePayment(
+    val calculated = calculatePayment(
         record.quantity.toString(), record.commissionPerParcelRm, record.taxRm, record.othersRm
     ) ?: return@runCatching false
     val total = normalizedCurrency(record.totalPaymentRm)
     val grand = normalizedCurrency(record.grandTotalPaymentRm)
-    total != null && grand != null && total == recalculated.totalPaymentRm &&
-        grand == recalculated.grandTotalPaymentRm
+    if (total != calculated.totalPaymentRm || grand != calculated.grandTotalPaymentRm) {
+        return@runCatching false
+    }
+    if (record.schemaVersion <= 1) return@runCatching true
+    if (record.schemaVersion != 2) return@runCatching false
+    val petrol = record.petrolRm ?: return@runCatching false
+    val touch = record.touchAndGoRm ?: return@runCatching false
+    val autopass = record.autopassRm ?: return@runCatching false
+    val financials = calculatePaymentFinancials(grand, record.taxRm, petrol, touch, autopass)
+        ?: return@runCatching false
+    normalizedCurrency(record.totalDeductionRm ?: "") == financials.totalDeductionRm &&
+        normalizedCurrency(record.nettEarningRm ?: "") == financials.nettEarningRm
 }.getOrDefault(false)
 
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
@@ -298,10 +395,15 @@ private fun PaymentOverviewCard(date: String) {
 
 /** Minimum row height adapts to long translated labels and Android font scaling. */
 @Composable
-private fun PaymentRow(label: String, strong: Boolean = false, content: @Composable () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun PaymentRow(
+    label: String, strong: Boolean = false, onLongClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
     val shape = RoundedCornerShape(SGDimensions.RadiusSmall)
     Row(
         Modifier.fillMaxWidth()
+            .then(if (onLongClick != null) Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick) else Modifier)
             .heightIn(min = if (strong) PaymentCompactLayout.GrandTotalMinHeight
                 else PaymentCompactLayout.FieldMinHeight)
             .border(BorderStroke(if (strong) 1.dp else 0.6.dp,
@@ -352,23 +454,23 @@ private fun PaymentInput(
 internal fun paymentTableHeaderValue(label: String): String = when (label) {
     "Total payment (RM)" -> "Total\npayment (RM)"
     "Grand total payment (RM)" -> "Grand total\npayment (RM)"
+    "Deduction (RM)" -> "Deduction\n(RM)"
+    "Nett Earning (RM)" -> "Nett Earning\n(RM)"
     else -> label
 }
 
 internal fun paymentTableAlignment(columnIndex: Int): TextAlign =
     if (columnIndex == 0) TextAlign.Start else TextAlign.Center
 
-/** Payment History and Monthly Summary use centered amounts in matching columns. */
+/** Shared compact four-column Payment History and Monthly Summary layout. */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
-    dateOrMonth: String, totalPayment: String, grandTotal: String,
+    dateOrMonth: String, grandTotal: String, deduction: String, nettEarning: String,
     isHeader: Boolean = false, isTotal: Boolean = false,
     onLongClick: (() -> Unit)? = null, fixedRowHeight: Dp? = null
 ) {
     val emphasized = isHeader || isTotal
-    // No extra tinted layer: the outer PaymentGlassPanel already supplies 30% Navy.
-    val fill = Color.Transparent
     val textColor = if (emphasized) SGColors.SelectedGold else SGColors.White
     val gesture = if (onLongClick != null) Modifier.combinedClickable(
         onClick = {}, onLongClick = onLongClick) else Modifier
@@ -378,26 +480,25 @@ private fun PaymentTableRow(
             .heightIn(min = fixedRowHeight ?: PaymentCompactLayout.TableRowMinHeight)
             .border(BorderStroke(0.6.dp, SGColors.Divider.copy(alpha = 0.65f)),
                 RoundedCornerShape(7.dp))
-            .background(fill, RoundedCornerShape(7.dp))
-            .padding(horizontal = 5.dp, vertical = 4.dp),
+            .background(Color.Transparent, RoundedCornerShape(7.dp))
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        listOf(dateOrMonth, totalPayment, grandTotal).forEachIndexed { index, value ->
+        listOf(dateOrMonth, grandTotal, deduction, nettEarning).forEachIndexed { index, value ->
             Text(
                 if (isHeader) paymentTableHeaderValue(value) else value,
-                modifier = Modifier.weight(if (index == 0) 1.04f else 1.12f),
+                modifier = Modifier.weight(if (index == 0) 1.1f else if (index == 1) 1.15f else 0.95f),
                 color = textColor,
-                fontSize = if (isHeader) 12.sp else 14.sp,
-                lineHeight = if (isHeader) 16.sp else 19.sp,
+                fontSize = if (isHeader) 10.sp else 12.sp,
+                lineHeight = if (isHeader) 13.sp else 16.sp,
                 fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
                 softWrap = true,
-                maxLines = if (isHeader) 2 else Int.MAX_VALUE,
+                maxLines = if (isHeader) 3 else Int.MAX_VALUE,
                 textAlign = paymentTableAlignment(index)
             )
         }
     }
 }
-
 
 /** Edit one entry rather than an aggregate; calculated totals stay consistent with the fields. */
 @Composable
