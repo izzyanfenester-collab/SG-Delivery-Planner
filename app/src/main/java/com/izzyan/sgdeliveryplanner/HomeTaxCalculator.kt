@@ -197,10 +197,42 @@ private fun HomeTaxResultRow(label: String, display: String, prominent: Boolean 
     }
 }
 
+/** Each popup opening refreshes the latest published SGD/MYR rate in background.
+ * Cached values are visible immediately if available; only the rate is sent over
+ * the network, NEVER invoice amounts or payment information.
+ */
 @Composable
-private fun HomeTaxCalculatorDialog(rates: HomeTaxRates?, onDismiss: () -> Unit) {
+private fun HomeTaxCalculatorDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val repo = remember(context) { HomeTaxLiveFxRepository(context) }
+    val scope = rememberCoroutineScope()
     var invoice by rememberSaveable { mutableStateOf("") }
-    val result = calculateHomeTax(invoice, rates)
+    var quote by remember(repo) { mutableStateOf(repo.cached()) }
+    var usingCache by remember(repo) { mutableStateOf(quote != null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var refreshError by remember { mutableStateOf(false) }
+
+    fun refreshRate() {
+        if (refreshing) return
+        refreshing = true
+        scope.launch {
+            val fresh = withContext(Dispatchers.IO) { repo.fetchLatest() }
+            if (fresh != null) {
+                quote = fresh
+                usingCache = false
+                refreshError = false
+            } else {
+                quote = repo.cached() ?: quote
+                usingCache = quote != null
+                refreshError = true
+            }
+            refreshing = false
+        }
+    }
+
+    LaunchedEffect(Unit) { refreshRate() }
+    val result = calculateHomeTax(invoice, quote?.let { HomeTaxRates(it.beforeMarkup) })
     val invalidInvoice = invoice.isNotBlank() &&
         (!validCurrencyInput(invoice) || invoice.toBigDecimalOrNull() == null)
 
@@ -220,11 +252,15 @@ private fun HomeTaxCalculatorDialog(rates: HomeTaxRates?, onDismiss: () -> Unit)
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(9.dp)
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 OutlinedTextField(
                     value = invoice,
-                    onValueChange = { if (validCurrencyInput(it)) invoice = it },
+                    onValueChange = {
+                        if (it.length <= 16 && !it.startsWith("-") && validCurrencyInput(it)) {
+                            invoice = it
+                        }
+                    },
                     label = { Text("Invoice Price (RM)") },
                     prefix = { Text("RM ") },
                     placeholder = { Text("Enter amount") },
@@ -240,25 +276,66 @@ private fun HomeTaxCalculatorDialog(rates: HomeTaxRates?, onDismiss: () -> Unit)
                         unfocusedTextColor = SGColors.White
                     )
                 )
-
-                if (rates == null) {
-                    Text("No valid exchange rate from a saved Delivery Report Summary. Save a report with a valid rate before calculating.",
-                        color = SGColors.Warning, fontSize = 12.sp, lineHeight = 17.sp)
-                } else {
-                    HomeTaxResultRow("Amount in SGD",
-                        result?.let { "S$ " + it.amountSgd } ?: "—")
-                    HomeTaxResultRow("Tax Amount (9%) SGD",
-                        result?.let { "S$ " + it.gstSgd } ?: "—")
-                    HomeTaxResultRow("Tax Amount in RM",
-                        result?.let { "RM " + it.taxMyr } ?: "—", prominent = true)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (refreshing) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(13.dp), strokeWidth = 1.7.dp,
+                            color = SGColors.Gold
+                        )
+                    } else if (quote != null && !usingCache) {
+                        Icon(Icons.Outlined.CheckCircle, contentDescription = null,
+                            tint = SGColors.Gold, modifier = Modifier.size(14.dp))
+                    }
+                    val caption = when {
+                        quote == null && refreshing -> "Retrieving latest published FX..."
+                        quote == null -> "No live or cached FX available. Check internet and Refresh."
+                        else -> homeTaxRateStatus(requireNotNull(quote), usingCache)
+                    }
+                    Text(caption,
+                        color = if (quote == null || usingCache) SGColors.Warning else SGColors.Silver,
+                        fontSize = 10.sp, lineHeight = 13.sp,
+                        modifier = Modifier.weight(1f))
+                }
+                if (refreshError && quote != null) {
+                    Text("Unable to refresh. Results use the cached rate shown above.",
+                        color = SGColors.Warning, fontSize = 10.sp, lineHeight = 13.sp)
+                }
+                HomeTaxResultRow("Amount in SGD",
+                    result?.let { "S$ " + it.amountSgd } ?: "—")
+                HomeTaxResultRow("Tax Amount (9%) SGD",
+                    result?.let { "S$ " + it.gstSgd } ?: "—")
+                HomeTaxResultRow("Tax Amount in RM",
+                    result?.let { "RM " + it.taxMyr } ?: "—", prominent = true)
+                TextButton(
+                    onClick = { uriHandler.openUri("https://www.exchangerate-api.com") },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                ) {
+                    Text("Rates by ExchangeRate-API", color = SGColors.Silver, fontSize = 10.sp)
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = SGColors.SelectedGold) }
-        },
-        dismissButton = {
-            TextButton(onClick = { invoice = "" }) { Text("Clear", color = SGColors.White) }
+            Row(Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { invoice = "" }, modifier = Modifier.weight(1f)) {
+                    Text("Clear", color = SGColors.White, fontSize = 12.sp)
+                }
+                TextButton(onClick = { refreshRate() },
+                    enabled = !refreshing, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null,
+                        tint = SGColors.Gold, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Refresh", color = SGColors.SelectedGold, fontSize = 12.sp)
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                    Text("Close", color = SGColors.SelectedGold, fontSize = 12.sp)
+                }
+            }
         }
     )
 }
