@@ -159,7 +159,11 @@ fun calculatePayment(
     return PaymentCalculation(subtotal.toPlainString(), grandTotal.toPlainString())
 }
 
-/** Use the latest SAVED report for the date selected on Home. Un-saved tax is excluded. */
+/** Home date is default; manual override is local to the Payment Calculator. */
+fun paymentDateForCalculator(homeDate: LocalDate, manualDate: String?): LocalDate =
+    manualDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: homeDate
+
+/** Use latest SAVED report for the selected Payment date. Unsaved tax is excluded. */
 fun savedReportTaxRm(deliveryDate: LocalDate, plans: List<Plan>): String? {
     val report = plans.asSequence()
         .filter { it.deliveryDate == deliveryDate && it.summarySavedAt != null }
@@ -310,7 +314,7 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
         record.quantity.toString(), record.commissionPerParcelRm, record.taxRm, record.othersRm
     ) ?: return@runCatching false
     val total = normalizedCurrency(record.totalPaymentRm)
-    val grand = normalizedCurrency(record.grandTotalPaymentRm)
+    val grand = normalizedCurrency(record.grandTotalPaymentRm) ?: return@runCatching false
     if (total != calculated.totalPaymentRm || grand != calculated.grandTotalPaymentRm) {
         return@runCatching false
     }
@@ -322,7 +326,7 @@ fun validPaymentRecord(record: PaymentRecord): Boolean = runCatching {
     val financials = calculatePaymentFinancials(grand, record.taxRm, petrol, touch, autopass)
         ?: return@runCatching false
     normalizedCurrency(record.totalDeductionRm ?: "") == financials.totalDeductionRm &&
-        normalizedCurrency(record.nettEarningRm ?: "") == financials.nettEarningRm
+        record.nettEarningRm == financials.nettEarningRm
 }.getOrDefault(false)
 
 private val rowDate = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
@@ -604,8 +608,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
     val context = LocalContext.current
     // Manual payment-date choice is independent from the selected Home delivery date.
     var manualPaymentDate by rememberSaveable { mutableStateOf<String?>(null) }
-    val paymentDate = manualPaymentDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        ?: vm.deliveryDate
+    val paymentDate = paymentDateForCalculator(vm.deliveryDate, manualPaymentDate)
     val reportTax = savedReportTaxRm(paymentDate, matchingReports)
     val taxRm = reportTax ?: "0.00"
     var quantity by rememberSaveable { mutableStateOf("") }
