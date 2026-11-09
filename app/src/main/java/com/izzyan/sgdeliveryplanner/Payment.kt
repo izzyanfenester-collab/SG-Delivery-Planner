@@ -629,9 +629,13 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var quantity by rememberSaveable { mutableStateOf("") }
     var commission by rememberSaveable { mutableStateOf("") }
     var others by rememberSaveable { mutableStateOf("") }
-    var petrol by rememberSaveable { mutableStateOf("") }
-    var touchAndGo by rememberSaveable { mutableStateOf("") }
-    var autopass by rememberSaveable { mutableStateOf("") }
+    // Defaults initialize only a new, unsaved calculator draft. Saveable state
+    // keeps any manual deduction override while the user changes payment date or page.
+    var petrol by rememberSaveable { mutableStateOf(PaymentExpense.PETROL.defaultRm) }
+    var touchAndGo by rememberSaveable { mutableStateOf(PaymentExpense.TOUCH_AND_GO.defaultRm) }
+    var autopass by rememberSaveable { mutableStateOf(PaymentExpense.AUTOPASS.defaultRm) }
+    var editingExpense by remember { mutableStateOf<PaymentExpense?>(null) }
+    var expenseDraft by rememberSaveable { mutableStateOf("") }
     val recordToSave = revisedPaymentRecord(
         paymentDate.toString(), quantity, commission, taxRm, others, petrol, touchAndGo, autopass
     )
@@ -684,11 +688,20 @@ fun PaymentScreen(vm: PlannerViewModel) {
 
         DesignCFinancialCards(
             petrol = petrol,
-            onPetrol = { if (validCurrencyInput(it)) petrol = it },
+            onPetrolLongPress = {
+                expenseDraft = petrol
+                editingExpense = PaymentExpense.PETROL
+            },
             touch = touchAndGo,
-            onTouch = { if (validCurrencyInput(it)) touchAndGo = it },
+            onTouchLongPress = {
+                expenseDraft = touchAndGo
+                editingExpense = PaymentExpense.TOUCH_AND_GO
+            },
             autopass = autopass,
-            onAutopass = { if (validCurrencyInput(it)) autopass = it },
+            onAutopassLongPress = {
+                expenseDraft = autopass
+                editingExpense = PaymentExpense.AUTOPASS
+            },
             tax = taxRm,
             grand = amounts?.grandTotalPaymentRm ?: "—",
             deduction = financials?.totalDeductionRm ?: "—",
@@ -698,7 +711,9 @@ fun PaymentScreen(vm: PlannerViewModel) {
         DesignCActions(
             onReset = {
                 quantity = ""; commission = ""; others = ""
-                petrol = ""; touchAndGo = ""; autopass = ""
+                petrol = PaymentExpense.PETROL.defaultRm
+                touchAndGo = PaymentExpense.TOUCH_AND_GO.defaultRm
+                autopass = PaymentExpense.AUTOPASS.defaultRm
                 // The per-date Tax override is deliberately preserved.
                 manualPaymentDate = null
             },
@@ -706,7 +721,9 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 val record = recordToSave
                 if (record != null && vm.savePayment(record)) {
                     quantity = ""; commission = ""; others = ""
-                    petrol = ""; touchAndGo = ""; autopass = ""
+                    petrol = PaymentExpense.PETROL.defaultRm
+                touchAndGo = PaymentExpense.TOUCH_AND_GO.defaultRm
+                autopass = PaymentExpense.AUTOPASS.defaultRm
                     manualPaymentDate = null
                 }
             },
@@ -762,6 +779,58 @@ fun PaymentScreen(vm: PlannerViewModel) {
 
     previewReport?.let { report ->
         DeliverySummaryReportPreview(report, onClose = { previewReport = null })
+    }
+
+    editingExpense?.let { expense ->
+        val validated = if (expenseDraft.isBlank()) null else normalizedCurrency(expenseDraft)
+        fun applyExpense(amount: String) {
+            when (expense) {
+                PaymentExpense.PETROL -> petrol = amount
+                PaymentExpense.TOUCH_AND_GO -> touchAndGo = amount
+                PaymentExpense.AUTOPASS -> autopass = amount
+            }
+            editingExpense = null
+        }
+        AlertDialog(
+            onDismissRequest = { editingExpense = null },
+            title = { Text("Edit ${expense.title} (RM)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Current amount: RM " + when (expense) {
+                        PaymentExpense.PETROL -> petrol
+                        PaymentExpense.TOUCH_AND_GO -> touchAndGo
+                        PaymentExpense.AUTOPASS -> autopass
+                    }, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = expenseDraft,
+                        onValueChange = { if (validCurrencyInput(it)) expenseDraft = it },
+                        label = { Text("${expense.title} (RM)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (validated == null) {
+                        Text("Enter RM 0.00 or more, up to two decimal places.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { validated?.let(::applyExpense) },
+                    enabled = validated != null
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { applyExpense(expense.defaultRm) }) {
+                        Text("Reset to Default")
+                    }
+                    TextButton(onClick = { editingExpense = null }) { Text("Cancel") }
+                }
+            }
+        )
     }
 
     if (showEditTax) {
