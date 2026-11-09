@@ -313,10 +313,13 @@ internal fun DesignCFinancialCards(
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp
     if (PaymentDesignC.useSideBySideCards(screenWidth)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             DesignCDeductions(petrol, onPetrol, touch, onTouch, autopass, onAutopass,
-                tax, deduction, Modifier.weight(1f).heightIn(min = 240.dp))
-            DesignCEarnings(grand, deduction, net, Modifier.weight(1f).heightIn(min = 240.dp))
+                tax, deduction, Modifier.weight(1f).fillMaxHeight())
+            DesignCEarnings(grand, deduction, net, Modifier.weight(1f).fillMaxHeight())
         }
     } else {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -397,7 +400,7 @@ internal fun DesignCMonthlySummary(
     val screenWidth = LocalConfiguration.current.screenWidthDp
     DesignCPanel(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPrevious, modifier = Modifier.size(44.dp)) {
+            IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous month",
                     tint = SGColors.Gold)
             }
@@ -413,7 +416,7 @@ internal fun DesignCMonthlySummary(
                 Text("$monthName $year · Hold to manage",
                     color = SGColors.White, fontSize = 11.sp)
             }
-            IconButton(onClick = onNext, modifier = Modifier.size(44.dp)) {
+            IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Outlined.ChevronRight, contentDescription = "Next month",
                     tint = SGColors.Gold)
             }
