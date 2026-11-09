@@ -471,7 +471,7 @@ internal fun paymentTableAlignment(columnIndex: Int): TextAlign =
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun PaymentTableRow(
-    dateOrMonth: String, grandTotal: String, deduction: String, nettEarning: String,
+    dateOrMonth: String, totalPayment: String, grandTotal: String, nettEarning: String,
     isHeader: Boolean = false, isTotal: Boolean = false,
     onLongClick: (() -> Unit)? = null, fixedRowHeight: Dp? = null
 ) {
@@ -489,11 +489,11 @@ private fun PaymentTableRow(
             .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        listOf(dateOrMonth, grandTotal, deduction, nettEarning).forEachIndexed { index, value ->
+        listOf(dateOrMonth, totalPayment, grandTotal, nettEarning).forEachIndexed { index, value ->
             Text(
                 if (isHeader) paymentTableHeaderValue(value) else value,
-                modifier = Modifier.weight(if (index == 0) 1.1f else if (index == 1) 1.15f else 0.95f),
-                color = textColor,
+                modifier = Modifier.weight(if (index == 0) 1.07f else if (index == 1) 1.07f else 1f),
+                color = if (!isHeader && index == 3) SGColors.SelectedGold else textColor,
                 fontSize = if (isHeader) 10.sp else 12.sp,
                 lineHeight = if (isHeader) 13.sp else 16.sp,
                 fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
@@ -642,166 +642,88 @@ fun PaymentScreen(vm: PlannerViewModel) {
     var editingRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
     var deletionPending by remember { mutableStateOf<PaymentRecordRef?>(null) }
     var selectedMonth by remember { mutableStateOf<Int?>(null) }
+    var dashboardMonth by rememberSaveable { mutableStateOf(vm.deliveryDate.monthValue) }
+    var previewReport by remember { mutableStateOf<Plan?>(null) }
     val paymentHistoryScrollState = rememberScrollState()
 
+    val taxSource = when {
+        taxIsManual -> "Manual Override"
+        reportTax != null -> "From Delivery Report Summary"
+        else -> "No saved report"
+    }
+    val chosenMonthly = monthlyPaymentNetTotals(vm.paymentRecords, currentYear, dashboardMonth)
+    val chosenTotal = monthlyPaymentTotals(vm.paymentRecords, currentYear, dashboardMonth)
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = PaymentCompactLayout.ScreenHorizontal,
-                vertical = PaymentCompactLayout.ScreenVertical),
-        verticalArrangement = Arrangement.spacedBy(PaymentCompactLayout.SectionGap)
+            .padding(horizontal = PaymentDesignC.ScreenHorizontal, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(PaymentDesignC.CardGap)
     ) {
-        PaymentOverviewCard(displayPaymentDate(paymentDate.toString()))
-        PaymentGlassPanel(compact = true) {
-            Row(
-                modifier = Modifier.fillMaxWidth()
-                    .heightIn(min = PaymentCompactLayout.CalculatorTitleMinHeight),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier.border(BorderStroke(1.dp, PremiumGold), RoundedCornerShape(SGDimensions.RadiusSmall))
-                        .background(PremiumGold.copy(alpha = 0.18f), RoundedCornerShape(SGDimensions.RadiusSmall))
-                        .padding(horizontal = 5.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = PremiumGold, modifier = Modifier.size(19.dp))
-                }
-                Text("Payment calculator", color = SGColors.SelectedGold,
-                    style = MaterialTheme.typography.titleMedium, fontSize = 18.sp,
-                    fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold)
-            }
-            PaymentRow("Date", onLongClick = {
-                deliveryDatePicker(context, paymentDate) { selected ->
-                    manualPaymentDate = selected.toString()
-                }.show()
-            }) {
-                Text(displayPaymentDate(paymentDate.toString()) + "  ⏱",
-                    color = SGColors.Silver, fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
-            }
-            PaymentRow("Qty parcel") {
-                PaymentInput(quantity, "Enter quantity", KeyboardType.Number) {
-                    if (it.length <= 6 && it.all(Char::isDigit)) quantity = it
-                }
-            }
-            PaymentRow("Commission per parcel (RM)") {
-                PaymentInput(commission, "Enter RM", KeyboardType.Decimal) {
-                    if (validCurrencyInput(it)) commission = it
-                }
-            }
-            PaymentRow("Total payment (RM)") {
-                Text(amounts?.totalPaymentRm ?: "—", color = SGColors.White, fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
-            }
-            PaymentRow("Tax (RM)", onLongClick = editTax) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("RM $taxRm  ✎", color = SGColors.White, fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (taxIsManual) "Manual override · hold to edit"
-                        else if (reportTax != null) "From Delivery Summary · hold to edit"
-                        else "No saved report · hold to edit",
-                        color = SGColors.Silver, fontSize = 10.sp, lineHeight = 13.sp
-                    )
-                }
-            }
-            PaymentRow("Others (RM)") {
-                PaymentInput(others, "Enter RM (optional)", KeyboardType.Decimal) {
-                    if (validCurrencyInput(it)) others = it
-                }
-            }
-            PaymentRow("Grand total payment", strong = true) {
-                Text(
-                    if (amounts == null) "—" else "RM " + amounts.grandTotalPaymentRm,
-                    color = SGColors.SelectedGold, fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp, textAlign = TextAlign.End
-                )
-            }
-            
-            PaymentSectionTitle("DEDUCTIONS (RM)")
-            PaymentRow("Petrol (RM)") {
-                PaymentInput(petrol, "Enter RM (optional)", KeyboardType.Decimal) {
-                    if (validCurrencyInput(it)) petrol = it
-                }
-            }
-            PaymentRow("Touch & Go (RM)") {
-                PaymentInput(touchAndGo, "Enter RM (optional)", KeyboardType.Decimal) {
-                    if (validCurrencyInput(it)) touchAndGo = it
-                }
-            }
-            PaymentRow("Autopass (RM)") {
-                PaymentInput(autopass, "Enter RM (optional)", KeyboardType.Decimal) {
-                    if (validCurrencyInput(it)) autopass = it
-                }
-            }
-            PaymentRow("Tax (RM)", onLongClick = editTax) {
-                Text("RM $taxRm", color = SGColors.White, fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
-            }
-            PaymentRow("Total deduction (RM)", strong = true) {
-                Text(financials?.totalDeductionRm?.let { "RM " + it } ?: "—",
-                    color = SGColors.SelectedGold, fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp, textAlign = TextAlign.End)
-            }
-            PaymentRow("NETT EARNING (RM)", strong = true) {
-                Text(financials?.nettEarningRm?.let { "RM " + it } ?: "—",
-                    color = SGColors.SelectedGold, fontWeight = FontWeight.ExtraBold,
-                    fontSize = 19.sp, textAlign = TextAlign.End)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        quantity = ""; commission = ""; others = ""
-                        petrol = ""; touchAndGo = ""; autopass = ""
-                        manualPaymentDate = null
-                    },
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(SGDimensions.RadiusSmall),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    border = BorderStroke(1.dp, SGColors.Gold),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = PremiumNavy.copy(alpha = 0.45f),
-                        contentColor = SGColors.White
-                    )
-                ) { Text("Reset", style = MaterialTheme.typography.labelLarge) }
-                OutlinedButton(
-                    onClick = {
-                        val record = recordToSave ?: return@OutlinedButton
-                        if (vm.savePayment(record)) {
-                            quantity = ""; commission = ""; others = ""
-                            petrol = ""; touchAndGo = ""; autopass = ""
-                            manualPaymentDate = null
-                        }
-                    },
-                    enabled = recordToSave != null && !vm.busy,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(SGDimensions.RadiusSmall),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    border = BorderStroke(1.dp, PremiumGold),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = PremiumGold,
-                        contentColor = PremiumNavy,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) { Text("Save", style = MaterialTheme.typography.labelLarge) }
-            }
+        DesignCOverview(displayPaymentDate(paymentDate.toString())) {
+            deliveryDatePicker(context, paymentDate) { selected ->
+                manualPaymentDate = selected.toString()
+            }.show()
         }
-        if (reportTax == null && !taxIsManual) {
-            Text(
-                "No saved Delivery Report Summary for this payment date. Both Tax rows use RM 0.00.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp, lineHeight = 16.sp
-            )
-        }
+
+        DesignCCalculator(
+            quantity = quantity,
+            onQuantity = { if (it.length <= 6 && it.all(Char::isDigit)) quantity = it },
+            commission = commission,
+            onCommission = { if (validCurrencyInput(it)) commission = it },
+            total = amounts?.totalPaymentRm ?: "—",
+            tax = "RM $taxRm",
+            taxSource = taxSource,
+            onTaxLongPress = editTax,
+            others = others,
+            onOthers = { if (validCurrencyInput(it)) others = it },
+            grandTotal = amounts?.grandTotalPaymentRm?.let { "RM $it" } ?: "—"
+        )
+
+        DesignCFinancialCards(
+            petrol = petrol,
+            onPetrol = { if (validCurrencyInput(it)) petrol = it },
+            touch = touchAndGo,
+            onTouch = { if (validCurrencyInput(it)) touchAndGo = it },
+            autopass = autopass,
+            onAutopass = { if (validCurrencyInput(it)) autopass = it },
+            tax = taxRm,
+            grand = amounts?.grandTotalPaymentRm ?: "—",
+            deduction = financials?.totalDeductionRm ?: "—",
+            net = financials?.nettEarningRm ?: "—"
+        )
+
+        DesignCActions(
+            onReset = {
+                quantity = ""; commission = ""; others = ""
+                petrol = ""; touchAndGo = ""; autopass = ""
+                // The per-date Tax override is deliberately preserved.
+                manualPaymentDate = null
+            },
+            onSave = {
+                val record = recordToSave
+                if (record != null && vm.savePayment(record)) {
+                    quantity = ""; commission = ""; others = ""
+                    petrol = ""; touchAndGo = ""; autopass = ""
+                    manualPaymentDate = null
+                }
+            },
+            onViewReport = {
+                val matched = matchingReports.asSequence()
+                    .filter { it.deliveryDate == paymentDate && it.summarySavedAt != null }
+                    .maxByOrNull { it.summarySavedAt.orEmpty() }
+                if (matched != null) previewReport = matched
+                else Toast.makeText(context, "No saved Delivery Report Summary for this payment date.", Toast.LENGTH_LONG).show()
+            },
+            saveEnabled = recordToSave != null && !vm.busy
+        )
+
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PaymentSectionTitle("Payment history", Modifier.weight(1f))
+            PaymentSectionTitle("Payment History", Modifier.weight(1f))
             Text("Long-press to edit/delete", color = SGColors.Silver,
                 fontSize = 11.sp, lineHeight = 15.sp)
         }
         PaymentGlassPanel {
-            // Header stays visible while the records scroll in a five-row-high viewport.
-            PaymentTableRow("Date", "Grand total payment (RM)", "Deduction (RM)", "Nett Earning (RM)", isHeader = true)
+            PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)",
+                "Nett Earning (RM)", isHeader = true)
             Column(
                 Modifier.heightIn(max = PAYMENT_HISTORY_ROW_HEIGHT * VISIBLE_PAYMENT_HISTORY_ROWS)
                     .verticalScroll(paymentHistoryScrollState)
@@ -809,43 +731,33 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 vm.paymentRecords.indices.reversed().forEach { index ->
                     val record = vm.paymentRecords[index]
                     PaymentTableRow(
-                        displayPaymentDate(record.date), record.grandTotalPaymentRm,
-                        financialsForRecord(record).totalDeductionRm, financialsForRecord(record).nettEarningRm,
+                        displayPaymentDate(record.date), record.totalPaymentRm,
+                        record.grandTotalPaymentRm, financialsForRecord(record).nettEarningRm,
                         onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
                         fixedRowHeight = PAYMENT_HISTORY_ROW_HEIGHT
                     )
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PaymentSectionTitle("Monthly Summary", Modifier.weight(1f))
-            Text(currentYear.toString(), color = SGColors.Silver,
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-        val monthsWithPayment = nonZeroMonthlyPaymentNetRows(vm.paymentRecords, currentYear)
-        val yearTotal = yearlyPaymentNetTotals(vm.paymentRecords, currentYear)
-        PaymentGlassPanel {
-            PaymentTableRow("Month", "Grand total payment (RM)", "Deduction (RM)", "Nett Earning (RM)", isHeader = true)
-            monthsWithPayment.forEach { (month, totals) ->
-                PaymentTableRow(
-                    java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
-                    totals.grandTotalPaymentRm, totals.totalDeductionRm, totals.nettEarningRm,
-                    onLongClick = { selectedMonth = month }
-                )
-            }
-            if (monthsWithPayment.isEmpty()) {
-                Text(
-                    "No payment records for $currentYear.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(vertical = 6.dp)
-                )
-            }
-            PaymentTableRow("Total", yearTotal.grandTotalPaymentRm, yearTotal.totalDeductionRm, yearTotal.nettEarningRm, isTotal = true)
-        }
-        Text("Long-press a month to manage saved records.",
-            color = SGColors.Silver, fontSize = 11.sp, lineHeight = 15.sp
+
+        DesignCMonthlySummary(
+            monthName = java.time.Month.of(dashboardMonth)
+                .getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH),
+            year = currentYear,
+            total = chosenTotal.totalPaymentRm,
+            grand = chosenMonthly.grandTotalPaymentRm,
+            deduction = chosenMonthly.totalDeductionRm,
+            nett = chosenMonthly.nettEarningRm,
+            onPrevious = { dashboardMonth = PaymentDesignC.previousMonth(dashboardMonth) },
+            onNext = { dashboardMonth = PaymentDesignC.nextMonth(dashboardMonth) },
+            onManageMonth = { selectedMonth = dashboardMonth }
         )
+        Text("Hold the selected month to manage saved payments. Use arrows to view January–December.",
+            color = SGColors.Silver, fontSize = 11.sp, lineHeight = 14.sp)
+    }
+
+    previewReport?.let { report ->
+        DeliverySummaryReportPreview(report, onClose = { previewReport = null })
     }
 
     if (showEditTax) {
