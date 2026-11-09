@@ -3,6 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,6 +21,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
     private val gson=Gson()
     private val store=OrderProofStore(context)
     private val paymentLedger=PaymentLedger(context)
+    private val taxOverrideLedger=PaymentTaxOverrideLedger(context)
     private val imageName=Regex("[A-Za-z0-9_-]+\\.jpg")
     private fun photoIds(plan:Plan)=plan.stops.flatMap { listOfNotNull(it.order?.proofFileId,it.order?.paymentProofFileId) }
         .filter { imageName.matches(it) }.distinct()
@@ -33,8 +35,12 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
         val payments=paymentLedger.read()
         val paymentJson=gson.toJson(payments).toByteArray()
         require(paymentJson.size<=5*1024*1024) { "Payment history file is too large." }
-        val manifest=gson.toJson(mapOf("format" to "sg-delivery-history","version" to 2,
+        val taxOverrides=taxOverrideLedger.read()
+        val taxOverridesJson=gson.toJson(taxOverrides).toByteArray()
+        require(taxOverridesJson.size<=1024*1024) { "Tax override data is too large." }
+        val manifest=gson.toJson(mapOf("format" to "sg-delivery-history","version" to 3,
             "routeCount" to routes.size,"paymentCount" to payments.size,
+            "taxOverrideCount" to taxOverrides.size,
             "exportedAt" to LocalDateTime.now().toString()))
         val stream=context.contentResolver.openOutputStream(uri,"w") ?: error("Cannot write backup.")
         stream.use { target -> ZipOutputStream(target.buffered()).use { zip ->
@@ -44,6 +50,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             textEntry("manifest.json",manifest.toByteArray())
             textEntry("routes.json",json)
             textEntry("payments.json",paymentJson)
+            textEntry("payment_tax_overrides.json",taxOverridesJson)
             available.forEach { (id,file) ->
                 require(file.length()<=20L*1024*1024) { "Proof file too large." }
                 zip.putNextEntry(ZipEntry("proofs/"+id))
@@ -70,6 +77,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             var manifest:ByteArray?=null
             var routesJson:ByteArray?=null
             var paymentsJson:ByteArray?=null
+            var taxOverridesJson:ByteArray?=null
             var total=0L
             val stream=context.contentResolver.openInputStream(uri) ?: error("Cannot read backup.")
             stream.use { source -> ZipInputStream(source.buffered()).use { zip ->
@@ -81,12 +89,14 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                         name=="manifest.json" -> 32768L
                         name=="routes.json" -> 30L*1024*1024
                         name=="payments.json" -> 5L*1024*1024
+                        name=="payment_tax_overrides.json" -> 1024L*1024
                         name.startsWith("proofs/")&&imageName.matches(name.removePrefix("proofs/")) -> 20L*1024*1024
                         else -> error("Unexpected backup file.")
                     }
                     var size=0L
                     val buffer=ByteArray(8192)
-                    val text=if(name=="manifest.json"||name=="routes.json"||name=="payments.json")ByteArrayOutputStream() else null
+                    val text=if(name=="manifest.json"||name=="routes.json"||name=="payments.json"||
+                        name=="payment_tax_overrides.json")ByteArrayOutputStream() else null
                     val id=name.removePrefix("proofs/")
                     if(text==null) require(images.size<5000) { "Too many images." }
                     val file=if(text==null)File(tmp,id) else null
@@ -103,15 +113,16 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                     if(name=="manifest.json")manifest=text!!.toByteArray()
                     else if(name=="routes.json")routesJson=text!!.toByteArray()
                     else if(name=="payments.json")paymentsJson=text!!.toByteArray()
+                    else if(name=="payment_tax_overrides.json")taxOverridesJson=text!!.toByteArray()
                     else images[id]=file!!
                     zip.closeEntry()
                 }
             } }
             val header=JsonParser.parseString(requireNotNull(manifest) { "Not an SG Delivery backup." }.toString(Charsets.UTF_8)).asJsonObject
             val version=header.get("version")?.asInt
-            require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..2) { "Unsupported backup format." }
-            // v1 archives have routes and proofs only; v2 requires a payments.json entry.
-            val payments=if(version==2) {
+            require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..3) { "Unsupported backup format." }
+            // v1 is routes/proofs; v2 adds payment records; v3 adds per-day Tax overrides.
+            val payments=if(version>=2) {
                 val bytes=requireNotNull(paymentsJson) { "Payment history missing from backup." }
                 val parsed=gson.fromJson(bytes.toString(Charsets.UTF_8),Array<PaymentRecord>::class.java)?.toList()
                     ?: error("Invalid payment history in backup.")
@@ -121,6 +132,19 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             } else {
                 require(paymentsJson==null) { "Unexpected payment history in legacy backup." }
                 emptyList()
+            }
+            val overrides:Map<String,String> = if(version==3) {
+                val bytes=requireNotNull(taxOverridesJson) { "Tax overrides missing from backup." }
+                val type=object : TypeToken<Map<String,String>>() {}.type
+                val parsed=gson.fromJson<Map<String,String>>(bytes.toString(Charsets.UTF_8),type)
+                    ?: error("Invalid Tax overrides in backup.")
+                require(validTaxOverrides(parsed) && parsed.size==header.get("taxOverrideCount")?.asInt) {
+                    "Invalid Tax overrides in backup."
+                }
+                parsed
+            } else {
+                require(taxOverridesJson==null) { "Unexpected Tax overrides in legacy backup." }
+                emptyMap()
             }
             val rows=gson.fromJson(requireNotNull(routesJson) { "History data missing." }.toString(Charsets.UTF_8),
                 Array<SavedRoute>::class.java).toList()
@@ -151,6 +175,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 val restored=dao.insertRestoredRoutes(rows).count { it!=-1L }
                 // Restore on top of existing data; repeated ZIP imports do not duplicate payments.
                 val restoredPayments=paymentLedger.mergeRestored(payments)
+                taxOverrideLedger.mergeRestored(overrides)
                 HistoryRestoreResult(restored,rows.size-restored,newFiles.size,restoredPayments)
             } catch(e:Exception) {
                 newFiles.forEach { it.delete() }
