@@ -55,8 +55,8 @@ internal object PaymentDesignC {
     fun historyRowHeight(fontScale: Float) = if (fontScale >= 1.20f) 44.dp else HistoryRowHeight
     /** Below 400 dp the 2 financial cards stack to prevent truncated fields. */
     fun useSideBySideCards(screenWidthDp: Int): Boolean = screenWidthDp >= 400
-    /** Monthly KPI tiles become two rows on narrower phones. */
-    fun useFourAcrossKpis(screenWidthDp: Int): Boolean = screenWidthDp >= 480
+    /** Ultra Compact always displays the monthly KPI tiles in 2 × 2. */
+    fun useFourAcrossKpis(screenWidthDp: Int): Boolean = false
     fun previousMonth(month: Int): Int = if (month <= 1) 12 else month - 1
     fun nextMonth(month: Int): Int = if (month >= 12) 1 else month + 1
 }
