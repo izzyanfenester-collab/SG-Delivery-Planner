@@ -85,6 +85,8 @@ class HistoryBackupTest {
         val secondPayment = PaymentRecord("2026-10-27", 1, "10.00", "10.00", "0.00", "0.00", "10.00")
         assertTrue(ledger.append(firstPayment))
         assertTrue(ledger.append(secondPayment))
+        val taxLedger = PaymentTaxOverrideLedger(app)
+        assertTrue(taxLedger.save(java.time.LocalDate.of(2026, 10, 26), "23.50"))
         val archive = File(app.cacheDir, "payment-backup-" + UUID.randomUUID() + ".zip")
         try {
             val source = db()
@@ -92,17 +94,21 @@ class HistoryBackupTest {
             assertEquals(2, summary.payments)
             ZipFile(archive).use { zip ->
                 assertNotNull(zip.getEntry("payments.json"))
+                assertNotNull(zip.getEntry("payment_tax_overrides.json"))
                 assertTrue(zip.getInputStream(zip.getEntry("manifest.json"))
-                    .bufferedReader().readText().contains("\"version\":2"))
+                    .bufferedReader().readText().contains("\"version\":3"))
             }
             prefs.edit().clear().commit()
             assertTrue(ledger.read().isEmpty())
+            assertTrue(taxLedger.read().isEmpty())
             val destination = db()
             val restored = HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive))
             assertEquals(2, restored.payments)
             assertEquals(listOf(firstPayment, secondPayment), ledger.read())
+            assertEquals("23.50", taxLedger.read()["2026-10-26"])
             assertEquals(0, HistoryBackup(app, destination.dao()).restore(Uri.fromFile(archive)).payments)
             assertEquals(listOf(firstPayment, secondPayment), ledger.read())
+            assertEquals(mapOf("2026-10-26" to "23.50"), taxLedger.read())
         } finally {
             archive.delete()
             prefs.edit().clear().commit()
