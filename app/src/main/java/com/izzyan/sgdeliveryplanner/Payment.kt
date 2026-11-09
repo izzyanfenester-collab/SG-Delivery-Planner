@@ -500,21 +500,29 @@ private fun PaymentTableRow(
     }
 }
 
-/** Edit one entry rather than an aggregate; calculated totals stay consistent with the fields. */
+/** Edit one payment and its distinct deductions; matching date uses its saved Tax. */
 @Composable
 private fun PaymentEditDialog(
     target: PaymentRecordRef,
+    reports: List<Plan>,
     busy: Boolean,
     onDismiss: () -> Unit,
     onSave: (PaymentRecord) -> Unit
 ) {
+    val context = LocalContext.current
     var date by remember(target) { mutableStateOf(target.record.date) }
     var quantity by remember(target) { mutableStateOf(target.record.quantity.toString()) }
     var commission by remember(target) { mutableStateOf(target.record.commissionPerParcelRm) }
-    var tax by remember(target) { mutableStateOf(target.record.taxRm) }
     var others by remember(target) { mutableStateOf(target.record.othersRm) }
-    val updated = revisedPaymentRecord(date, quantity, commission, tax, others)
-
+    var petrol by remember(target) { mutableStateOf(target.record.petrolRm ?: "0.00") }
+    var touchAndGo by remember(target) { mutableStateOf(target.record.touchAndGoRm ?: "0.00") }
+    var autopass by remember(target) { mutableStateOf(target.record.autopassRm ?: "0.00") }
+    val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
+    val tax = if (date == target.record.date) target.record.taxRm
+        else parsedDate?.let { savedReportTaxRm(it, reports) } ?: "0.00"
+    val updated = revisedPaymentRecord(
+        date, quantity, commission, tax, others, petrol, touchAndGo, autopass
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit saved payment") },
@@ -523,14 +531,17 @@ private fun PaymentEditDialog(
                 Modifier.heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Original: ${displayPaymentDate(target.record.date)} · RM ${target.record.grandTotalPaymentRm}",
-                    style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { if (it.length <= 10) date = it },
-                    label = { Text("Date (YYYY-MM-DD)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                Text(
+                    "Original: ${displayPaymentDate(target.record.date)} · RM ${target.record.grandTotalPaymentRm}",
+                    style = MaterialTheme.typography.bodySmall
                 )
+                OutlinedButton(
+                    onClick = {
+                        deliveryDatePicker(context, parsedDate ?: LocalDate.now()) {
+                            date = it.toString()
+                        }.show()
+                    }, modifier = Modifier.fillMaxWidth()
+                ) { Text("Date: ${displayPaymentDate(date)} · Change") }
                 OutlinedTextField(
                     value = quantity,
                     onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) quantity = it },
@@ -545,23 +556,30 @@ private fun PaymentEditDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
+                Text("Tax (RM): ${normalizedCurrency(tax) ?: tax} · Delivery Report Summary",
+                    style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
-                    value = tax,
-                    onValueChange = { if (validCurrencyInput(it)) tax = it },
-                    label = { Text("Tax (RM)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = others,
-                    onValueChange = { if (validCurrencyInput(it)) others = it },
+                    value = others, onValueChange = { if (validCurrencyInput(it)) others = it },
                     label = { Text("Others (RM)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
+                listOf(
+                    Triple("Petrol (RM)", petrol, { value: String -> petrol = value }),
+                    Triple("Touch & Go (RM)", touchAndGo, { value: String -> touchAndGo = value }),
+                    Triple("Autopass (RM)", autopass, { value: String -> autopass = value })
+                ).forEach { (label, value, onChange) ->
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { if (validCurrencyInput(it)) onChange(it) },
+                        label = { Text(label) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Text(
-                    if (updated != null) "New total: RM ${updated.totalPaymentRm} · Grand total: RM ${updated.grandTotalPaymentRm}"
-                    else "Enter a valid date, quantity and RM amounts.",
+                    if (updated == null) "Enter valid quantities and RM amounts."
+                    else "Grand total RM ${updated.grandTotalPaymentRm} · Deduction RM ${updated.totalDeductionRm} · Nett RM ${updated.nettEarningRm}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -583,16 +601,24 @@ fun PaymentScreen(vm: PlannerViewModel) {
         val historical = savedRoutes.mapNotNull { runCatching { vm.repo.decode(it) }.getOrNull() }
         active + historical
     }
-    val reportTax = savedReportTaxRm(vm.deliveryDate, matchingReports)
-
-    var quantity by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
-    var commission by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
-    var others by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf("") }
-    // Null means use the newest saved report value. Manual edits take priority until Reset.
-    // Keeping an override separate avoids overwriting an in-progress edit when reports refresh.
-    var manualTaxRm by rememberSaveable(vm.deliveryDate.toString()) { mutableStateOf<String?>(null) }
-    val taxRm = effectivePaymentTaxRm(reportTax, manualTaxRm)
+    val context = LocalContext.current
+    // Manual payment-date choice is independent from the selected Home delivery date.
+    var manualPaymentDate by rememberSaveable { mutableStateOf<String?>(null) }
+    val paymentDate = manualPaymentDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        ?: vm.deliveryDate
+    val reportTax = savedReportTaxRm(paymentDate, matchingReports)
+    val taxRm = reportTax ?: "0.00"
+    var quantity by rememberSaveable { mutableStateOf("") }
+    var commission by rememberSaveable { mutableStateOf("") }
+    var others by rememberSaveable { mutableStateOf("") }
+    var petrol by rememberSaveable { mutableStateOf("") }
+    var touchAndGo by rememberSaveable { mutableStateOf("") }
+    var autopass by rememberSaveable { mutableStateOf("") }
+    val recordToSave = revisedPaymentRecord(
+        paymentDate.toString(), quantity, commission, taxRm, others, petrol, touchAndGo, autopass
+    )
     val amounts = calculatePayment(quantity, commission, taxRm, others)
+    val financials = recordToSave?.let { financialsForRecord(it) }
     val currentYear = LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).year
 
     var selectedRecord by remember { mutableStateOf<PaymentRecordRef?>(null) }
@@ -607,7 +633,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 vertical = PaymentCompactLayout.ScreenVertical),
         verticalArrangement = Arrangement.spacedBy(PaymentCompactLayout.SectionGap)
     ) {
-        PaymentOverviewCard(displayPaymentDate(vm.deliveryDate.toString()))
+        PaymentOverviewCard(displayPaymentDate(paymentDate.toString()))
         PaymentGlassPanel(compact = true) {
             Row(
                 modifier = Modifier.fillMaxWidth()
@@ -627,9 +653,14 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     style = MaterialTheme.typography.titleMedium, fontSize = 18.sp,
                     fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold)
             }
-            PaymentRow("Date") {
-                Text(displayPaymentDate(vm.deliveryDate.toString()), color = SGColors.Silver,
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
+            PaymentRow("Date", onLongClick = {
+                deliveryDatePicker(context, paymentDate) { selected ->
+                    manualPaymentDate = selected.toString()
+                }.show()
+            }) {
+                Text(displayPaymentDate(paymentDate.toString()) + "  ⏱",
+                    color = SGColors.Silver, fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
             PaymentRow("Qty parcel") {
                 PaymentInput(quantity, "Enter quantity", KeyboardType.Number) {
@@ -646,22 +677,11 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
             }
             PaymentRow("Tax (RM)") {
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    PaymentInput(taxRm, "Enter tax (RM)", KeyboardType.Decimal) {
-                        if (validCurrencyInput(it)) manualTaxRm = it
-                    }
-                    if (reportTax != null && manualTaxRm != null) {
-                        TextButton(onClick = { manualTaxRm = null }) {
-                            Text("Use report tax: RM $reportTax", fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium)
-                        }
-                    } else if (reportTax != null) {
-                        Text(
-                            "From Delivery Report Summary",
-                            fontSize = 12.sp, lineHeight = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("RM $taxRm", color = SGColors.White, fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(if (reportTax != null) "From Delivery Report Summary" else "No matching saved report",
+                        color = SGColors.Silver, fontSize = 10.sp, lineHeight = 13.sp)
                 }
             }
             PaymentRow("Others (RM)") {
@@ -676,9 +696,44 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     fontSize = 18.sp, textAlign = TextAlign.End
                 )
             }
+            
+            PaymentSectionTitle("DEDUCTIONS (RM)")
+            PaymentRow("Petrol (RM)") {
+                PaymentInput(petrol, "Enter RM (optional)", KeyboardType.Decimal) {
+                    if (validCurrencyInput(it)) petrol = it
+                }
+            }
+            PaymentRow("Touch & Go (RM)") {
+                PaymentInput(touchAndGo, "Enter RM (optional)", KeyboardType.Decimal) {
+                    if (validCurrencyInput(it)) touchAndGo = it
+                }
+            }
+            PaymentRow("Autopass (RM)") {
+                PaymentInput(autopass, "Enter RM (optional)", KeyboardType.Decimal) {
+                    if (validCurrencyInput(it)) autopass = it
+                }
+            }
+            PaymentRow("Tax (RM)") {
+                Text("RM $taxRm", color = SGColors.White, fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
+            }
+            PaymentRow("Total deduction (RM)", strong = true) {
+                Text(financials?.totalDeductionRm?.let { "RM " + it } ?: "—",
+                    color = SGColors.SelectedGold, fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp, textAlign = TextAlign.End)
+            }
+            PaymentRow("NETT EARNING (RM)", strong = true) {
+                Text(financials?.nettEarningRm?.let { "RM " + it } ?: "—",
+                    color = SGColors.SelectedGold, fontWeight = FontWeight.ExtraBold,
+                    fontSize = 19.sp, textAlign = TextAlign.End)
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { quantity = ""; commission = ""; others = ""; manualTaxRm = null },
+                    onClick = {
+                        quantity = ""; commission = ""; others = ""
+                        petrol = ""; touchAndGo = ""; autopass = ""
+                        manualPaymentDate = null
+                    },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     shape = RoundedCornerShape(SGDimensions.RadiusSmall),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -690,21 +745,14 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 ) { Text("Reset", style = MaterialTheme.typography.labelLarge) }
                 OutlinedButton(
                     onClick = {
-                        val value = amounts ?: return@OutlinedButton
-                        val record = PaymentRecord(
-                            date = vm.deliveryDate.toString(),
-                            quantity = quantity.toInt(),
-                            commissionPerParcelRm = normalizedCurrency(commission) ?: "0.00",
-                            totalPaymentRm = value.totalPaymentRm,
-                            taxRm = normalizedCurrency(taxRm) ?: "0.00",
-                            othersRm = normalizedCurrency(others) ?: "0.00",
-                            grandTotalPaymentRm = value.grandTotalPaymentRm
-                        )
+                        val record = recordToSave ?: return@OutlinedButton
                         if (vm.savePayment(record)) {
                             quantity = ""; commission = ""; others = ""
+                            petrol = ""; touchAndGo = ""; autopass = ""
+                            manualPaymentDate = null
                         }
                     },
-                    enabled = amounts != null && !vm.busy,
+                    enabled = recordToSave != null && !vm.busy,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     shape = RoundedCornerShape(SGDimensions.RadiusSmall),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -720,7 +768,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         if (reportTax == null) {
             Text(
-                "No saved Delivery Report Summary for this date. Tax defaults to RM 0.00; you can edit it manually.",
+                "No saved Delivery Report Summary for this payment date. Both Tax rows use RM 0.00.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp, lineHeight = 16.sp
             )
@@ -732,7 +780,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         }
         PaymentGlassPanel {
             // Header stays visible while the records scroll in a five-row-high viewport.
-            PaymentTableRow("Date", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
+            PaymentTableRow("Date", "Grand total payment (RM)", "Deduction (RM)", "Nett Earning (RM)", isHeader = true)
             Column(
                 Modifier.heightIn(max = PAYMENT_HISTORY_ROW_HEIGHT * VISIBLE_PAYMENT_HISTORY_ROWS)
                     .verticalScroll(paymentHistoryScrollState)
@@ -740,7 +788,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 vm.paymentRecords.indices.reversed().forEach { index ->
                     val record = vm.paymentRecords[index]
                     PaymentTableRow(
-                        displayPaymentDate(record.date), record.totalPaymentRm, record.grandTotalPaymentRm,
+                        displayPaymentDate(record.date), record.grandTotalPaymentRm,
+                        financialsForRecord(record).totalDeductionRm, financialsForRecord(record).nettEarningRm,
                         onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
                         fixedRowHeight = PAYMENT_HISTORY_ROW_HEIGHT
                     )
@@ -752,14 +801,14 @@ fun PaymentScreen(vm: PlannerViewModel) {
             Text(currentYear.toString(), color = SGColors.Silver,
                 fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
-        val monthsWithPayment = nonZeroMonthlyPaymentRows(vm.paymentRecords, currentYear)
-        val yearTotal = yearlyPaymentTotals(vm.paymentRecords, currentYear)
+        val monthsWithPayment = nonZeroMonthlyPaymentNetRows(vm.paymentRecords, currentYear)
+        val yearTotal = yearlyPaymentNetTotals(vm.paymentRecords, currentYear)
         PaymentGlassPanel {
-            PaymentTableRow("Month", "Total payment (RM)", "Grand total payment (RM)", isHeader = true)
+            PaymentTableRow("Month", "Grand total payment (RM)", "Deduction (RM)", "Nett Earning (RM)", isHeader = true)
             monthsWithPayment.forEach { (month, totals) ->
                 PaymentTableRow(
                     java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
-                    totals.totalPaymentRm, totals.grandTotalPaymentRm,
+                    totals.grandTotalPaymentRm, totals.totalDeductionRm, totals.nettEarningRm,
                     onLongClick = { selectedMonth = month }
                 )
             }
@@ -771,7 +820,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                     modifier = Modifier.padding(vertical = 6.dp)
                 )
             }
-            PaymentTableRow("Total", yearTotal.totalPaymentRm, yearTotal.grandTotalPaymentRm, isTotal = true)
+            PaymentTableRow("Total", yearTotal.grandTotalPaymentRm, yearTotal.totalDeductionRm, yearTotal.nettEarningRm, isTotal = true)
         }
         Text("Long-press a month to manage saved records.",
             color = SGColors.Silver, fontSize = 11.sp, lineHeight = 15.sp
@@ -818,6 +867,8 @@ fun PaymentScreen(vm: PlannerViewModel) {
             text = {
                 Text("Total payment RM ${target.record.totalPaymentRm}\n" +
                     "Grand total RM ${target.record.grandTotalPaymentRm}\n" +
+                    "Deduction RM ${financialsForRecord(target.record).totalDeductionRm}\n" +
+                    "Nett earning RM ${financialsForRecord(target.record).nettEarningRm}\n" +
                     "Edit this payment or request deletion?")
             },
             confirmButton = {
@@ -838,6 +889,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
     editingRecord?.let { target ->
         PaymentEditDialog(
             target = target,
+            reports = matchingReports,
             busy = vm.busy,
             onDismiss = { editingRecord = null },
             onSave = { updated ->
