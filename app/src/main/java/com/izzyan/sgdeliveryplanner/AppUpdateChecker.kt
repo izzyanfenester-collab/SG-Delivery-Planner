@@ -116,6 +116,7 @@ internal class AppReleaseChecker(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
+) {
     private val noRedirectClient = client.newBuilder().followRedirects(false).build()
 
     /** Fallback without api.github.com rate limits: GitHub's latest stable-release
