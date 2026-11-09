@@ -47,6 +47,9 @@ class HomeTaxCalculatorTest {
     @Test fun exampleSampleUsesFullPrecisionAndSingleMarkup() {
         val rates = HomeTaxRates(BigDecimal("3.171"))
         assertEquals(BigDecimal("3.571"), rates.afterMarkup)
+        // The 0.4 markup is added to the live rate, never to invoice/tax amounts.
+        assertEquals(0, rates.afterMarkup.subtract(rates.beforeMarkup)
+            .compareTo(BigDecimal("0.4")))
         val result = requireNotNull(calculateHomeTax("470.00", rates))
         assertEquals("148.22", result.amountSgd)
         assertEquals("13.34", result.gstSgd)
