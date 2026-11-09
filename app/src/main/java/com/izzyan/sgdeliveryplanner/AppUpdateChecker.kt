@@ -78,7 +78,7 @@ internal fun parseOfficialLatestRedirect(location: String): PublishedAppRelease?
 
 internal fun installedAppBuild(context: Context): Int {
     val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    val named = Regex("-b([0-9]+)$").find(info.versionName.orEmpty())
+    val named = Regex("-b([0-9]+)(?:$|-)").find(info.versionName.orEmpty())
         ?.groupValues?.get(1)?.toIntOrNull()
     @Suppress("DEPRECATION")
     val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else info.versionCode
