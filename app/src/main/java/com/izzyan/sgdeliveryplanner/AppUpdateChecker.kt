@@ -27,6 +27,10 @@ import java.util.concurrent.TimeUnit
 
 private const val RELEASES_API =
     "https://api.github.com/repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest"
+private const val LATEST_RELEASE_PAGE =
+    "https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/latest"
+private const val RELEASE_TAG_PATH =
+    "/izzyanfenester-collab/SG-Delivery-Planner/releases/tag/"
 private const val RELEASE_PATH = "/izzyanfenester-collab/SG-Delivery-Planner/releases/download/"
 private const val UPDATE_PREFS = "sg_delivery_app_update"
 private const val UPDATE_CHANNEL = "sg_delivery_app_releases"
@@ -57,9 +61,24 @@ internal fun parseOfficialAppRelease(json: String): PublishedAppRelease? {
     return null
 }
 
+/** Parse only the verified official GitHub latest-release redirect. */
+internal fun parseOfficialLatestRedirect(location: String): PublishedAppRelease? {
+    val uri = runCatching { URI(LATEST_RELEASE_PAGE).resolve(location) }.getOrNull() ?: return null
+    if (uri.scheme != "https" || uri.host != "github.com" || uri.port != -1 ||
+        uri.userInfo != null || uri.rawQuery != null || uri.rawFragment != null) return null
+    val path = uri.rawPath ?: return null
+    if (!path.startsWith(RELEASE_TAG_PATH)) return null
+    val tag = path.removePrefix(RELEASE_TAG_PATH)
+    val match = Regex("^v[0-9]+\\.[0-9]+\\.[0-9]+-b([0-9]+)$")
+        .matchEntire(tag) ?: return null
+    val build = match.groupValues[1].toIntOrNull() ?: return null
+    return PublishedAppRelease(build, tag.removePrefix("v"),
+        "https://github.com" + RELEASE_PATH + tag + "/SG-Delivery-B" + build + "-Official.apk")
+}
+
 internal fun installedAppBuild(context: Context): Int {
     val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    val named = Regex("-b([0-9]+)$").find(info.versionName.orEmpty())
+    val named = Regex("-b([0-9]+)(?:$|-)").find(info.versionName.orEmpty())
         ?.groupValues?.get(1)?.toIntOrNull()
     @Suppress("DEPRECATION")
     val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else info.versionCode
@@ -75,7 +94,8 @@ internal data class AppUpdateState(
     val error: String
 ) {
     val updateAvailable: Boolean
-        get() = latestBuild != null && latestBuild > currentBuild && !downloadUrl.isNullOrBlank()
+        get() = error.isBlank() && latestBuild != null &&
+            latestBuild > currentBuild && !downloadUrl.isNullOrBlank()
 
     companion object {
         fun load(context: Context): AppUpdateState {
@@ -90,32 +110,63 @@ internal data class AppUpdateState(
     }
 }
 
-internal class AppReleaseChecker(private val context: Context) {
-    private val client = OkHttpClient.Builder()
+internal class AppReleaseChecker(
+    private val context: Context,
+    private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
+) {
+    private val noRedirectClient = client.newBuilder().followRedirects(false).build()
 
-    /** Call on a background dispatcher; no runner account, login or API token required. */
+    /** Fallback without api.github.com rate limits: GitHub's latest stable-release
+     * redirect yields the real published tag, never a hardcoded current version.
+     */
+    private fun checkPublicReleasePage(): PublishedAppRelease? {
+        val request = Request.Builder().url(LATEST_RELEASE_PAGE)
+            .header("User-Agent", "SG-Delivery-Android-Update-Checker")
+            .header("Cache-Control", "no-cache")
+            .build()
+        val release = noRedirectClient.newCall(request).execute().use { response ->
+            if (response.code !in listOf(301, 302, 303, 307, 308)) return null
+            parseOfficialLatestRedirect(response.header("Location").orEmpty())
+        } ?: return null
+        // Verify the expected APK asset exists before showing a download button.
+        val assetRequest = Request.Builder().url(release.apkUrl).head()
+            .header("User-Agent", "SG-Delivery-Android-Update-Checker").build()
+        return noRedirectClient.newCall(assetRequest).execute().use { response ->
+            release.takeIf { response.isSuccessful ||
+                response.code in listOf(301, 302, 303, 307, 308) }
+        }
+    }
+
+    /** Run off the main thread; no user login or API token required. */
     fun checkNow(): AppUpdateState {
         val request = Request.Builder().url(RELEASES_API)
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "SG-Delivery-Android-Update-Checker")
-            .build()
+            .header("Cache-Control", "no-cache").build()
         var published: PublishedAppRelease? = null
-        var error = ""
+        var reason = "Could not check for updates. Check your connection and try again."
         try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error = "Could not check GitHub Releases (HTTP ${response.code})."
+                if (!response.isSuccessful) reason = "GitHub API unavailable (HTTP " + response.code + ")."
                 else {
-                    val json = response.body?.string().orEmpty()
-                    published = parseOfficialAppRelease(json)
-                    if (published == null) error = "No official APK release is available yet."
+                    published = runCatching {
+                        parseOfficialAppRelease(response.body?.string().orEmpty())
+                    }.getOrNull()
+                    if (published == null) reason = "No valid official APK was found."
                 }
             }
         } catch (_: Exception) {
-            error = "Could not check for updates. Check your internet connection."
+            reason = "Could not reach GitHub API."
         }
+        if (published == null) {
+            published = try { checkPublicReleasePage() } catch (_: Exception) { null }
+        }
+        val error = if (published == null)
+            "$reason Alternative release check also unavailable. Try again later."
+        else ""
         val prefs = context.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
         prefs.edit().apply {
             putLong("checked_at", System.currentTimeMillis())
@@ -124,6 +175,11 @@ internal class AppReleaseChecker(private val context: Context) {
                 putInt("latest_build", requireNotNull(published).build)
                 putString("latest_version", requireNotNull(published).version)
                 putString("download_url", requireNotNull(published).apkUrl)
+            } else {
+                // Clear stale #833 metadata so HTTP 403 cannot show a false update.
+                remove("latest_build")
+                remove("latest_version")
+                remove("download_url")
             }
         }.apply()
         return AppUpdateState.load(context)
