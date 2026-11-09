@@ -1,0 +1,73 @@
+name: Publish SG Delivery Build 835 App Update 403 Fix TESTING APK
+
+on:
+  push:
+    branches: [feature/build-835-update-check-403-fallback]
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-835-updatefix-testing-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    if: github.ref == 'refs/heads/feature/build-835-update-check-403-fallback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Generate Singapore postal seed
+        run: python3 scripts/build_postal_seed.py
+      - name: Build, unit test and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug lintDebug
+      - name: Verify App Update 403 Fix APK identity and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'versionName = "1.4.23-b835-updatefix-testing"' app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".updatefixtest"' app/build.gradle.kts
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep "package: name='com.izzyan.sgdeliveryplanner.updatefixtest'"
+          sha256sum "$apk"
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SG-Delivery-B835-UpdateFix-Testing-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish directly downloadable testing prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v1.4.23-b835-updatefix-testing"
+          asset="$RUNNER_TEMP/SG-Delivery-B835-UpdateFix-Testing.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$asset"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "SG Delivery Build #835 TESTING – App Updates 403 Fallback" \
+              --notes "Build #835 App Update 403 fallback testing APK. Based on Official #834; no changes to Payment, GPS, routing or backup. Official release checking uses GitHub API first and verified public latest-release redirect second, with stale-cache clearing. Isolated debug package com.izzyan.sgdeliveryplanner.updatefixtest can coexist with Official #834. TESTING only; not an official update."
+          fi
