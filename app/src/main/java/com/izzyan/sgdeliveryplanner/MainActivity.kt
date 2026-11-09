@@ -417,12 +417,7 @@ fun Home(vm: PlannerViewModel) {
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            TaxDeclareButton(Modifier.weight(1f), compact = true)
-            HomeSmallAction("Clear postal code", vm::clearPostalCodes,
-                modifier = Modifier.weight(1f), enabled = !vm.busy)
-        }
+        HomeTaxActionRow(vm)
 
         Text("Routes follow roads and support up to 50 unique delivery stops.\nTimes are planning estimates and do not include live traffic.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
