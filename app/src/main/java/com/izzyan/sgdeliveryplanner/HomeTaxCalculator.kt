@@ -69,8 +69,8 @@ import kotlinx.coroutines.withContext
 private val SINGAPORE_GST = BigDecimal("0.09")
 
 internal data class HomeTaxRates(val beforeMarkup: BigDecimal) {
-    // Apply fixed markup in exactly one place. It is never applied to an after-markup rate.
-    val afterMarkup: BigDecimal get() = beforeMarkup.add(HOME_TAX_MARKUP_RM)
+    // Add a 0.4 FX-rate markup to the live SGD/MYR rate exactly once; not a RM0.40 fee.
+    val afterMarkup: BigDecimal get() = beforeMarkup.add(HOME_TAX_RATE_MARKUP)
 }
 internal data class HomeTaxResult(val amountSgd: String, val gstSgd: String, val taxMyr: String)
 
