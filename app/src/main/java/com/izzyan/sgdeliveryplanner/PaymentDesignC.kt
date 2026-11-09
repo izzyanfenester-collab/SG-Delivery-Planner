@@ -137,12 +137,12 @@ private fun DesignCInput(
 @Composable
 private fun DesignCInputTile(
     label: String, value: String, onChange: (String) -> Unit,
-    keyboard: KeyboardType, modifier: Modifier = Modifier
+    keyboard: KeyboardType, modifier: Modifier = Modifier, placeholder: String = "Enter RM"
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, color = SGColors.Silver, fontSize = 12.sp, lineHeight = 14.sp,
             minLines = 1, maxLines = 2)
-        DesignCInput(value, "Enter RM", keyboard, onChange)
+        DesignCInput(value, placeholder, keyboard, onChange)
     }
 }
 
@@ -195,7 +195,8 @@ internal fun DesignCCalculator(
                 fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            DesignCInputTile("Qty Parcel", quantity, onQuantity, KeyboardType.Number, Modifier.weight(1f))
+            DesignCInputTile("Qty Parcel", quantity, onQuantity, KeyboardType.Number,
+                Modifier.weight(1f), placeholder = "Enter Qty")
             DesignCInputTile("Commission / Parcel (RM)", commission, onCommission,
                 KeyboardType.Decimal, Modifier.weight(1f))
         }
