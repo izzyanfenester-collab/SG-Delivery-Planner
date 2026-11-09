@@ -42,11 +42,17 @@ import androidx.compose.ui.unit.sp
 
 /** Design C is payment-only. No changes to the calculator, ledger, backup or navigation model. */
 internal object PaymentDesignC {
-    val ScreenHorizontal = 10.dp
-    val CardGap = 6.dp
-    val InsideGap = 6.dp
-    val CardPadding = 9.dp
-    val ControlHeight = 48.dp
+    // Ultra compact design targets; controls grow naturally when text/font scaling needs space.
+    val ScreenHorizontal = 8.dp
+    val CardGap = 4.dp
+    val InsideGap = 3.dp
+    val CardPadding = 6.dp
+    val InputHeight = 34.dp
+    val ControlHeight = 46.dp
+    val HistoryRowHeight = 34.dp
+    val HistoryHeaderHeight = 33.dp
+    val MonthlyMetricHeight = 44.dp
+    fun historyRowHeight(fontScale: Float) = if (fontScale >= 1.20f) 44.dp else HistoryRowHeight
     /** Below 400 dp the 2 financial cards stack to prevent truncated fields. */
     fun useSideBySideCards(screenWidthDp: Int): Boolean = screenWidthDp >= 400
     /** Monthly KPI tiles become two rows on narrower phones. */
@@ -79,7 +85,7 @@ internal fun DesignCOverview(date: String, onLongPressDate: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Row(
         Modifier.fillMaxWidth().border(BorderStroke(1.dp, SGColors.Divider), shape)
-            .background(SGColors.Card, shape).padding(horizontal = 10.dp, vertical = 4.dp),
+            .background(SGColors.Card, shape).padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -115,10 +121,10 @@ private fun DesignCInput(
         cursorBrush = SolidColor(SGColors.Gold), modifier = modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Box(
-                Modifier.fillMaxWidth().heightIn(min = PaymentDesignC.ControlHeight)
+                Modifier.fillMaxWidth().heightIn(min = PaymentDesignC.InputHeight)
                     .border(BorderStroke(.8.dp, SGColors.Divider), shape)
                     .background(SGColors.Background.copy(alpha = .50f), shape)
-                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (value.isBlank()) Text(hint, color = SGColors.Silver, fontSize = 11.sp)
@@ -133,9 +139,9 @@ private fun DesignCInputTile(
     label: String, value: String, onChange: (String) -> Unit,
     keyboard: KeyboardType, modifier: Modifier = Modifier
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, color = SGColors.Silver, fontSize = 12.sp, lineHeight = 15.sp,
-            minLines = 2, maxLines = 2)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = SGColors.Silver, fontSize = 12.sp, lineHeight = 14.sp,
+            minLines = 1, maxLines = 2)
         DesignCInput(value, "Enter RM", keyboard, onChange)
     }
 }
@@ -148,16 +154,16 @@ private fun DesignCValueTile(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Column(
-        modifier.heightIn(min = 72.dp)
+        modifier.heightIn(min = 52.dp)
             .then(if (onLongPress != null) Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress) else Modifier)
             .border(BorderStroke(.7.dp, SGColors.Divider), shape)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        Text(label, color = SGColors.Silver, fontSize = 12.sp, lineHeight = 15.sp)
+        Text(label, color = SGColors.Silver, fontSize = 11.sp, lineHeight = 13.sp)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically) {
-            Text(value, color = SGColors.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            Text(value, color = SGColors.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End)
             if (onLongPress != null) {
                 Spacer(Modifier.width(4.dp))
@@ -188,12 +194,12 @@ internal fun DesignCCalculator(
             Text("Payment Calculator", color = SGColors.SelectedGold,
                 fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             DesignCInputTile("Qty Parcel", quantity, onQuantity, KeyboardType.Number, Modifier.weight(1f))
             DesignCInputTile("Commission / Parcel (RM)", commission, onCommission,
                 KeyboardType.Decimal, Modifier.weight(1f))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             DesignCValueTile("Total Payment (RM)", total, Modifier.weight(1f))
             DesignCValueTile("Tax (RM)", tax, Modifier.weight(1f),
                 source = taxSource, onLongPress = onTaxLongPress)
@@ -209,13 +215,13 @@ internal fun DesignCCalculator(
         val shape = RoundedCornerShape(9.dp)
         Row(
             Modifier.fillMaxWidth().border(BorderStroke(1.dp, SGColors.Gold), shape)
-                .padding(horizontal = 10.dp, vertical = 7.dp).heightIn(min = 43.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp).heightIn(min = 35.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("GRAND TOTAL PAYMENT", color = SGColors.SelectedGold,
                 fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.weight(1f))
             Text(grandTotal, color = SGColors.SelectedGold,
-                fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, textAlign = TextAlign.End)
+                fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, textAlign = TextAlign.End)
         }
     }
 }
@@ -224,13 +230,13 @@ internal fun DesignCCalculator(
 private fun DesignCExpenseRow(
     label: String, icon: ImageVector, value: String, onChange: (String) -> Unit
 ) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 45.dp),
+    Row(Modifier.fillMaxWidth().heightIn(min = 34.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         Icon(icon, contentDescription = null, tint = SGColors.Gold, modifier = Modifier.size(15.dp))
         Text(label, color = SGColors.White, fontSize = 11.sp, lineHeight = 13.sp,
             modifier = Modifier.weight(1f))
-        Box(Modifier.width(76.dp)) {
+        Box(Modifier.width(70.dp)) {
             DesignCInput(value, "0.00", KeyboardType.Decimal, onChange)
         }
     }
@@ -238,9 +244,9 @@ private fun DesignCExpenseRow(
 
 @Composable
 private fun DesignCReadOnlyRow(label: String, value: String, gold: Boolean = false) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 34.dp),
+    Row(Modifier.fillMaxWidth().heightIn(min = 26.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = if (gold) SGColors.SelectedGold else SGColors.White,
             fontSize = 11.sp, lineHeight = 14.sp, fontWeight = if (gold) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.weight(1f))
@@ -276,7 +282,8 @@ private fun DesignCDeductions(
 
 @Composable
 private fun DesignCEarnings(
-    grand: String, deduction: String, net: String, modifier: Modifier = Modifier
+    grand: String, deduction: String, net: String, modifier: Modifier = Modifier,
+    balancedHeight: Boolean = false
 ) {
     DesignCPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -288,17 +295,19 @@ private fun DesignCEarnings(
         }
         DesignCReadOnlyRow("Grand Total", grand)
         DesignCReadOnlyRow("Deductions", deduction)
-        Spacer(Modifier.height(2.dp))
+        // Fill shared height above the Nett highlight, never below it.
+        if (balancedHeight) Spacer(Modifier.weight(1f))
+        else Spacer(Modifier.height(1.dp))
         val shape = RoundedCornerShape(9.dp)
         Column(
             Modifier.fillMaxWidth().border(BorderStroke(1.dp, SGColors.Gold), shape)
-                .padding(horizontal = 7.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text("NETT EARNING (RM)", color = SGColors.SelectedGold,
                 fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp)
             Text(net, color = if (net.startsWith("-")) SGColors.Error else SGColors.SelectedGold,
-                fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
                 textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -315,14 +324,14 @@ internal fun DesignCFinancialCards(
     if (PaymentDesignC.useSideBySideCards(screenWidth)) {
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             DesignCDeductions(petrol, onPetrol, touch, onTouch, autopass, onAutopass,
                 tax, deduction, Modifier.weight(1f).fillMaxHeight())
-            DesignCEarnings(grand, deduction, net, Modifier.weight(1f).fillMaxHeight())
+            DesignCEarnings(grand, deduction, net, Modifier.weight(1f).fillMaxHeight(), balancedHeight = true)
         }
     } else {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             DesignCDeductions(petrol, onPetrol, touch, onTouch, autopass, onAutopass,
                 tax, deduction, Modifier.fillMaxWidth())
             DesignCEarnings(grand, deduction, net, Modifier.fillMaxWidth())
@@ -360,7 +369,7 @@ internal fun DesignCActions(
     onReset: () -> Unit, onSave: () -> Unit,
     onViewReport: () -> Unit, saveEnabled: Boolean
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         DesignCAction("RESET", Icons.Outlined.RestartAlt, onReset, true, false, Modifier.weight(1f))
         DesignCAction("SAVE", Icons.Outlined.Save, onSave, saveEnabled, true, Modifier.weight(1f))
         DesignCAction("VIEW REPORT", Icons.Outlined.Description,
@@ -375,16 +384,16 @@ private fun DesignCMonthMetric(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Column(
-        modifier.heightIn(min = 72.dp)
+        modifier.heightIn(min = PaymentDesignC.MonthlyMetricHeight)
             .border(BorderStroke(if (highlighted) 1.dp else .7.dp,
                 if (highlighted) SGColors.Gold else SGColors.Divider), shape)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 5.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         Text(label, color = if (highlighted) SGColors.SelectedGold else SGColors.Silver,
-            fontSize = 10.sp, lineHeight = 12.sp, maxLines = 3)
+            fontSize = 10.5.sp, lineHeight = 12.sp, maxLines = 2)
         Text(amount, color = if (highlighted) SGColors.SelectedGold else SGColors.White,
-            fontWeight = FontWeight.Bold, fontSize = if (highlighted) 15.sp else 13.sp,
+            fontWeight = FontWeight.Bold, fontSize = if (highlighted) 14.sp else 13.sp,
             textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
     }
 }
@@ -400,12 +409,12 @@ internal fun DesignCMonthlySummary(
     val screenWidth = LocalConfiguration.current.screenWidthDp
     DesignCPanel(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = onPrevious, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous month",
                     tint = SGColors.Gold)
             }
             Column(
-                Modifier.weight(1f).heightIn(min = 44.dp)
+                Modifier.weight(1f).heightIn(min = 38.dp)
                     .combinedClickable(onClick = {}, onLongClick = onManageMonth)
                     .semantics { contentDescription = "Monthly summary $monthName $year. Long press to manage payments" },
                 verticalArrangement = Arrangement.Center,
@@ -416,28 +425,20 @@ internal fun DesignCMonthlySummary(
                 Text("$monthName $year · Hold to manage",
                     color = SGColors.White, fontSize = 11.sp)
             }
-            IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = onNext, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.ChevronRight, contentDescription = "Next month",
                     tint = SGColors.Gold)
             }
         }
-        if (PaymentDesignC.useFourAcrossKpis(screenWidth)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        // Always keep the requested 2 × 2 dashboard layout, even on tablets.
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 DesignCMonthMetric("Total Payment (RM)", total, false, Modifier.weight(1f))
                 DesignCMonthMetric("Grand Total (RM)", grand, false, Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 DesignCMonthMetric("Deductions (RM)", deduction, false, Modifier.weight(1f))
                 DesignCMonthMetric("Nett Earning (RM)", nett, true, Modifier.weight(1f))
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    DesignCMonthMetric("Total Payment (RM)", total, false, Modifier.weight(1f))
-                    DesignCMonthMetric("Grand Total (RM)", grand, false, Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    DesignCMonthMetric("Deductions (RM)", deduction, false, Modifier.weight(1f))
-                    DesignCMonthMetric("Nett Earning (RM)", nett, true, Modifier.weight(1f))
-                }
             }
         }
     }
