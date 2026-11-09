@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.izzyan.sgdeliveryplanner"
  compileSdk = 36
- defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 32; versionName = "1.4.21-b833" }
+ defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 34; versionName = "1.4.22-b834-ultracompact-testing" }
  // Release signing is intentionally supplied only by environment variables.
  // Never commit the keystore or passwords to the repository.
  val releaseKeystore = System.getenv("SG_DELIVERY_KEYSTORE_PATH")
@@ -23,7 +23,7 @@ android {
    }
  }
  buildTypes {
-   getByName("debug") { applicationIdSuffix = ".testing" }
+   getByName("debug") { applicationIdSuffix = ".ultracompacttest" }
    getByName("release") {
      isMinifyEnabled = false
      if (releaseSigningReady) signingConfig = signingConfigs.getByName("sgDeliveryRelease")
