@@ -10,6 +10,9 @@ import kotlin.math.min
  * bearing or manually rotate the drawable: doing so would double rotate it.
  */
 internal object NavigationArrowOrientation {
+    fun angleLikeDistance(a: Float, b: Float): Float =
+        abs(shortestDelta(a, b))
+
     fun shortestDelta(from: Float, to: Float): Float {
         val a = NavigationRoadMatcher.normalizeBearing(from)
         val b = NavigationRoadMatcher.normalizeBearing(to)
