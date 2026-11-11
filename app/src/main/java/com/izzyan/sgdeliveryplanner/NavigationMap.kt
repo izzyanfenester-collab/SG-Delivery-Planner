@@ -134,9 +134,11 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                     return@setStyle
                 }
                 locationComponent.applyStyle(LocationComponentOptions.builder(context)
-                    // 3D uses an actual pre-rendered vehicle bitmap, not a tilted 2D arrow.
+                    // Transparent blue bevelled arrow for 3D mode, existing blue
+                    // chevron for 2D. The drawable points north; MapLibre GPS
+                    // rendering supplies geographic bearing exactly once.
                     .gpsDrawable(if (session.threeDimensional)
-                        R.drawable.ic_gps_car_3d_marker else R.drawable.ic_gps_vehicle_3d)
+                        R.drawable.ic_gps_blue_arrow_3d else R.drawable.ic_gps_vehicle_3d)
                     .foregroundDrawable(R.drawable.ic_gps_transparent)
                     .backgroundDrawable(R.drawable.ic_gps_transparent)
                     .bearingDrawable(R.drawable.ic_gps_transparent)
@@ -171,7 +173,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         val scale = if (session.threeDimensional) 1.0f else 1.8f
         component.applyStyle(component.locationComponentOptions.toBuilder()
             .gpsDrawable(if (session.threeDimensional)
-                R.drawable.ic_gps_car_3d_marker else R.drawable.ic_gps_vehicle_3d)
+                R.drawable.ic_gps_blue_arrow_3d else R.drawable.ic_gps_vehicle_3d)
             .minZoomIconScale(scale).maxZoomIconScale(scale).build())
         component.renderMode = RenderMode.GPS
     }
@@ -255,11 +257,13 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         val visual = visualTracker.update(
             GpsPoint(fix.latitude, fix.longitude), session.shape,
             fix.accuracy, fix.speed.takeIf { fix.hasSpeed() },
-            fix.bearing.takeIf { fix.hasBearing() })
+            fix.bearing.takeIf { fix.hasBearing() },
+            fix.elapsedRealtimeNanos / 1_000_000L)
         val frame = routeProgress.advance(visual.routeMatch,
             fix.speed.takeIf { fix.hasSpeed() }, fix.elapsedRealtimeNanos / 1_000_000L)
-        // Both puck and blue/grey route use the SAME geographic progress boundary.
-        // If GPS is untrustworthy or off-route, retain the last valid route progress.
+        // Both arrow and blue/grey route use the SAME geographic progress boundary.
+        // On a real wrong turn, display measured GPS instead of falsely snapping
+        // the user to the planned route.
         val puckPosition = if (frame?.trustedMatch == true &&
             visual.routeMatch != null) frame.boundary else visual.position
         val displayed = Location(fix).apply {
@@ -267,11 +271,15 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             longitude = puckPosition.lon
             visual.bearingDegrees?.let { bearing = it }
         }
+        // MapLibre RenderMode.GPS rotates the *north-pointing drawable* from
+        // displayed.bearing. TRACKING_GPS rotates the camera from that same
+        // geographic heading. Never subtract camera bearing or rotate the
+        // drawable again: MapLibre performs the screen transform itself.
         native.locationComponent.forceLocationUpdate(displayed)
         // Keep the route split tied to the same trusted puck boundary, but
         // avoid rebuilding a long polyline for sub-meter GPS noise.
         if (frame != null && (lastPaintedProgress.isNaN() ||
-            abs(frame.progressedMeters - lastPaintedProgress) >= 1.6)) {
+            abs(frame.progressedMeters - lastPaintedProgress) >= 0.75)) {
             traveledLine = refreshRouteSection(native, traveledLine, frame.traveled,
                 android.graphics.Color.rgb(128, 128, 128))
             routeLine = refreshRouteSection(native, routeLine, frame.remaining,

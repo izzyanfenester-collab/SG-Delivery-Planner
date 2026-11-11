@@ -109,7 +109,7 @@ internal object NavigationRoadMatcher {
 internal class NavigationVisualTracker {
     private var previousRaw: GpsPoint? = null
     private var previousDisplay: GpsPoint? = null
-    private var previousHeading: Float? = null
+    private val arrowHeading = NavigationArrowHeadingController()
     private var preferredSegment: Int? = null
 
     /** A reroute changes the polyline but should not abruptly erase the
@@ -119,7 +119,7 @@ internal class NavigationVisualTracker {
     fun reset() {
         previousRaw = null
         previousDisplay = null
-        previousHeading = null
+        arrowHeading.reset()
         preferredSegment = null
     }
 
@@ -128,7 +128,8 @@ internal class NavigationVisualTracker {
         shape: List<GpsPoint>,
         accuracyMeters: Float,
         speedMetersPerSecond: Float?,
-        gpsBearingDegrees: Float?
+        gpsBearingDegrees: Float?,
+        elapsedRealtimeMs: Long? = null
     ): NavigationVisualFix {
         val moving = speedMetersPerSecond != null && speedMetersPerSecond.isFinite() &&
             speedMetersPerSecond >= 1.5f
@@ -152,14 +153,17 @@ internal class NavigationVisualTracker {
             else -> raw
         }
 
-        // Route tangent is a fallback when the phone does not report a GPS course.
-        // Actual measured travel takes priority when available, especially while turning.
-        val targetHeading = if (moving) travelHeading ?: match?.bearingDegrees else null
-        val heading = NavigationDisplayTuning.smoothBearing(
-            previousHeading, targetHeading, speedMetersPerSecond)
+        // Arc-aware tangent avoids abrupt bearing changes at map polyline
+        // vertices; actual GPS course remains authoritative for a wrong turn.
+        // Feed one geographic bearing to MapLibre (never camera-relative).
+        val curve = NavigationArrowOrientation.curveTangent(
+            shape, match, speedMetersPerSecond)
+        val targetHeading = NavigationArrowOrientation.target(
+            travelHeading, curve, speedMetersPerSecond)
+        val heading = arrowHeading.smooth(
+            targetHeading, speedMetersPerSecond, elapsedRealtimeMs)
         previousRaw = raw
         previousDisplay = display
-        previousHeading = heading
         if (match != null) preferredSegment = match.segmentIndex
         return NavigationVisualFix(display, heading, match != null || holdStill, match)
     }
