@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# A newer commit must never be overwritten by an older concurrent CI job.
+concurrency:
+  group: sg-delivery-b839-daynight-testing-publish
+  cancel-in-progress: true
+
 jobs:
   build-and-publish:
     if: github.ref == 'refs/heads/feature/build-839-premium-day-night-map-testing'
@@ -62,6 +67,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Do not publish a stale APK even when GitHub runners finish out of order.
+          latest_sha="$(gh api "repos/${GITHUB_REPOSITORY}/branches/feature/build-839-premium-day-night-map-testing" --jq .commit.sha)"
+          if [ "$GITHUB_SHA" != "$latest_sha" ]; then
+            echo "A newer Build #839 Day/Night commit exists. Skipping stale APK publication."
+            exit 0
+          fi
           tag="v1.4.27-b839-daynight-testing"
           asset="$RUNNER_TEMP/SG-Delivery-B839-DayNight-Map-Testing.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$asset"
