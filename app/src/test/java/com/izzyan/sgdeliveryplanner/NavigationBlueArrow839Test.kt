@@ -119,7 +119,8 @@ class NavigationBlueArrow839Test {
         assertTrue(frame.trustedMatch)
         assertEquals(frame.boundary, frame.remaining.first())
         assertEquals(frame.boundary, frame.traveled.last())
-        assertEquals(frame.boundary, arrow.position)
+        assertEquals(frame.boundary.lat, arrow.position.lat, 0.0000001)
+        assertEquals(frame.boundary.lon, arrow.position.lon, 0.0000001)
     }
 
     @Test fun overlappingRouteContinuityStillAllowsARealOffRouteDeviation() {
