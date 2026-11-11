@@ -42,6 +42,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1012,16 +1014,45 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
 fun Results(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
     val summary = deliverySummary(p)
-    var scheduleExpanded by rememberSaveable(p.id) { mutableStateOf(true) }
+    // A newly optimized Plan has a unique ID: its schedule always starts collapsed.
+    // Each saved route retains its own expansion state while the driver navigates.
+    var scheduleExpanded by rememberSaveable(p.id) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(SGDimensions.Normal),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Complete delivery schedule", style = MaterialTheme.typography.titleLarge)
-        Text("Swipe the table horizontally to see driving times, delivery periods and departures.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(
+            onClick = { scheduleExpanded = !scheduleExpanded },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            enabled = !vm.busy,
+            shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+            border = BorderStroke(1.dp, PremiumGold.copy(alpha = .55f)),
+            color = SGColors.Card
+        ) {
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Complete Delivery Schedule · ${p.stops.size} stops",
+                    Modifier.weight(1f), color = SGColors.Gold,
+                    style = MaterialTheme.typography.titleMedium)
+                Icon(
+                    if (scheduleExpanded) Icons.Outlined.KeyboardArrowUp
+                        else Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = if (scheduleExpanded) "Collapse delivery schedule"
+                        else "Expand delivery schedule",
+                    tint = SGColors.Gold
+                )
+            }
+        }
         ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
             onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
-        if (scheduleExpanded) ScheduleTable(p)
+        if (scheduleExpanded) {
+            Text("Swipe the table horizontally to see driving times, delivery periods and departures.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ScheduleTable(p)
+        }
         Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
             Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
@@ -1213,7 +1244,7 @@ fun History(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            PageTitle("Route history", "Tap a date to view customer details and proof photos without changing today's route.")
+            PageTitle("Route history", "Tap an unfinished route to continue delivery. Completed routes remain view-only.")
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { selecting = !selecting; selected = emptyList() }, enabled = !vm.busy) {
                     Text(if (selecting) "Cancel selection" else "Select history")
@@ -1230,7 +1261,12 @@ fun History(vm: PlannerViewModel) {
             val p = runCatching { vm.repo.decode(record) }.getOrNull()
             PremiumCard(Modifier.fillMaxWidth().combinedClickable(
                 enabled = !vm.busy,
-                onClick = { if (selecting) toggle(record.id) else opened = record },
+                onClick = {
+                    if (selecting) toggle(record.id)
+                    else if (p != null && savedDeliveryStatus(p) != SavedDeliveryStatus.COMPLETED)
+                        vm.continueSavedRoute(record.id)
+                    else opened = record
+                },
                 onLongClick = { selecting = true; toggle(record.id) }
             )) {
                 Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1239,17 +1275,37 @@ fun History(vm: PlannerViewModel) {
                         Text("This saved route could not be read. Its stored data has been kept.")
                     } else {
                         val summary = deliverySummary(p)
+                        val deliveryStatus = savedDeliveryStatus(p)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(p.deliveryDate.toString(), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                            if (isRouteCompleted(p)) Surface(color = PremiumNavy, contentColor = PremiumGold,
-                                shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, PremiumGold)) {
-                                Text("COMPLETED", Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Surface(
+                                color = PremiumNavy, contentColor = PremiumGold,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, PremiumGold)
+                            ) {
+                                Text(deliveryStatus.label, Modifier.padding(8.dp),
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                             }
                         }
+                        // Unique route ID distinguishes plans sharing a delivery date or postal code.
+                        Text("Route ID: ${p.id.take(8)}", color = SGColors.Silver,
+                            style = MaterialTheme.typography.labelSmall)
                         DetailRow("Total Parcel", summary.totalParcel.toString())
+                        DetailRow("Delivered / Remaining", "${summary.delivered} / ${summary.totalParcel - summary.delivered}")
                         DetailRow("Success Rate", "%.1f%%".format(Locale.ENGLISH, summary.successRate))
                         DetailRow("Total Distance", km(summary.totalKm))
                         DetailRow("Finish Time", time(summary.finish))
+                        if (deliveryStatus != SavedDeliveryStatus.COMPLETED) {
+                            Text("Tap to Continue Delivery", color = PremiumGold,
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.labelLarge)
+                            TextButton(onClick = { opened = record }, enabled = !vm.busy) {
+                                Text("View Details & Proofs", color = SGColors.White)
+                            }
+                        } else {
+                            Text("Tap to View History", color = SGColors.Silver,
+                                style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
