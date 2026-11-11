@@ -18,6 +18,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.BrightnessAuto
@@ -95,6 +98,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var showCameras by remember { mutableStateOf(false) }
         var showFuelStations by remember { mutableStateOf(false) }
         var showLocalTrafficConsent by remember { mutableStateOf(false) }
+        var showGpsSettings by remember { mutableStateOf(false) }
         val mapAppearanceStore = remember {
             NavigationMapAppearanceStore(this@BuiltInNavigationActivity)
         }
@@ -126,90 +130,30 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = SGColors.Card, shape = RoundedCornerShape(SGDimensions.RadiusCard),
+                    Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
                         Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 11.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text("SG Delivery GPS Pro", color = SGColors.Gold, fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(onClick = { session.toggleDimension() },
-                                        contentPadding = PaddingValues(horizontal = 5.dp)) {
-                                        Text(if (session.threeDimensional) "3D" else "2D",
-                                            color = Color.White, fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp)
-                                    }
-                                    IconButton(onClick = { session.toggleMute() }, modifier = Modifier.size(38.dp)) {
-                                        Icon(if (session.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                            contentDescription = if (session.muted) "Enable voice directions" else "Mute voice directions",
-                                            tint = Color.White)
-                                    }
-                                    IconButton(onClick = { showCameras = true }, modifier = Modifier.size(38.dp)) {
-                                        Icon(Icons.Filled.PhotoCamera, contentDescription = "Traffic cameras", tint = Color.White)
-                                    }
-                                }
-                            }
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("MAP", fontSize = 10.sp, color = SGColors.Silver,
-                                    fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.width(8.dp))
-                                NavigationMapAppearance.entries.forEach { option ->
-                                    val active = option == mapAppearance
-                                    val icon = when (option) {
-                                        NavigationMapAppearance.DAY -> Icons.Filled.WbSunny
-                                        NavigationMapAppearance.NIGHT -> Icons.Filled.DarkMode
-                                        NavigationMapAppearance.AUTO -> Icons.Filled.BrightnessAuto
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            mapAppearanceStore.save(option)
-                                            mapAppearance = option
-                                        },
-                                        modifier = Modifier.height(32.dp)
-                                            .width(if (compactNavHeader) 78.dp else 88.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp),
-                                        shape = RoundedCornerShape(9.dp),
-                                        colors = ButtonDefaults.textButtonColors(
-                                            containerColor = if (active) SGColors.Gold
-                                                else SGColors.SecondaryBackground,
-                                            contentColor = if (active) PremiumNavy else Color.White
-                                        )
-                                    ) {
-                                        Icon(icon, contentDescription = null,
-                                            modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(3.dp))
-                                        Text(
-                                            option.name.lowercase().replaceFirstChar { it.uppercase() },
-                                            fontSize = 11.sp, fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Spacer(Modifier.width(4.dp))
-                                }
-                            }
+                            Text("SG Delivery GPS Pro", color = SGColors.Gold, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold)
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
                                     color = SGColors.Gold,
-                                    fontSize = if (compactNavHeader) 53.sp else 58.sp,
+                                    fontSize = if (compactNavHeader) 60.sp else 68.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.width(if (compactNavHeader) 54.dp else 60.dp))
+                                    modifier = Modifier.width(if (compactNavHeader) 60.dp else 68.dp))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
                                         color = SGColors.White,
-                                        fontSize = if (compactNavHeader) 29.sp else 34.sp,
+                                        fontSize = if (compactNavHeader) 32.sp else 40.sp,
                                         fontWeight = FontWeight.Bold, maxLines = 1)
                                     Text(if (session.arrived) "Destination reached" else
                                         NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
                                         color = SGColors.White,
-                                        fontSize = if (compactNavHeader) 17.sp else 20.sp,
+                                        fontSize = if (compactNavHeader) 20.sp else 23.sp,
                                         maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                        lineHeight = if (compactNavHeader) 21.sp else 24.sp,
+                                        lineHeight = if (compactNavHeader) 24.sp else 27.sp,
                                         fontWeight = FontWeight.SemiBold)
                                     session.street?.takeIf {
                                         it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
@@ -256,8 +200,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
 
-                Column(Modifier.align(Alignment.CenterEnd).padding(end = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                // Controls occupy the middle map area and scroll on shorter phones.
+                Column(
+                    Modifier.align(Alignment.TopEnd).fillMaxHeight()
+                        .padding(top = 156.dp, bottom = 162.dp, end = 10.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
                     GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode == "follow") {
                         session.recenter()
                     }
@@ -270,6 +219,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         if (session.localTrafficVisible) session.toggleLocalTraffic()
                         else showLocalTrafficConsent = true
                     }
+                    GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings = true }
                 }
 
                 Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
@@ -305,7 +255,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
-                    Surface(color = SGColors.Card, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
+                    Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -353,6 +303,58 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 }
             }
         }
+        if (showGpsSettings) {
+            AlertDialog(
+                onDismissRequest = { showGpsSettings = false },
+                containerColor = PremiumNavy,
+                title = {
+                    Text("Navigation Settings", color = SGColors.Gold,
+                        fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                },
+                text = {
+                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(15.dp)) {
+                        NavigationSettingsChoices(
+                            "Map Display", listOf("2D", "3D"),
+                            if (session.threeDimensional) "3D" else "2D"
+                        ) { session.setDimension(it == "3D") }
+                        NavigationSettingsChoices(
+                            "Navigation Sound", listOf("ON", "OFF"),
+                            if (session.muted) "OFF" else "ON"
+                        ) { session.setSoundEnabled(it == "ON") }
+                        NavigationSettingsChoices(
+                            "Display Mode", listOf("Day", "Night", "Auto Day/Night"),
+                            when (mapAppearance) {
+                                NavigationMapAppearance.DAY -> "Day"
+                                NavigationMapAppearance.NIGHT -> "Night"
+                                NavigationMapAppearance.AUTO -> "Auto Day/Night"
+                            }
+                        ) { selected ->
+                            val choice = when (selected) {
+                                "Day" -> NavigationMapAppearance.DAY
+                                "Night" -> NavigationMapAppearance.NIGHT
+                                else -> NavigationMapAppearance.AUTO
+                            }
+                            mapAppearanceStore.save(choice)
+                            mapAppearance = choice
+                        }
+                        TextButton(onClick = {
+                            showGpsSettings = false
+                            showCameras = true
+                        }) {
+                            Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Traffic cameras", color = Color.White)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showGpsSettings = false }) {
+                        Text("Done", color = SGColors.Gold, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
         if (showLocalTrafficConsent) {
@@ -390,6 +392,34 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
     }
+    @Composable
+    private fun NavigationSettingsChoices(
+        title: String, options: List<String>, selected: String, onSelect: (String) -> Unit
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, color = SGColors.Gold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                options.forEach { option ->
+                    val active = option == selected
+                    FilledTonalButton(
+                        onClick = { onSelect(option) },
+                        modifier = Modifier.weight(1f).height(39.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (active) PremiumGold else SGColors.SecondaryBackground,
+                            contentColor = if (active) PremiumNavy else Color.White
+                        )
+                    ) {
+                        Text(option, fontWeight = FontWeight.Bold,
+                            fontSize = if (option.length > 8) 10.sp else 12.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+
     private fun hasPreciseLocation() = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
@@ -414,17 +444,19 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var arrived by mutableStateOf(false); private set
     var loading by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null); private set
-    var muted by mutableStateOf(false); private set
+    private val gpsModePreferences = GpsNavigationModePreferences(context)
+    var muted by mutableStateOf(!gpsModePreferences.isSoundEnabled()); private set
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
-    private val gpsModePreferences = GpsNavigationModePreferences(context)
     var threeDimensional by mutableStateOf(gpsModePreferences.is3dEnabled()); private set
     var localTrafficVisible by mutableStateOf(false); private set
     var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
-    fun toggleDimension() {
-        threeDimensional = !threeDimensional
-        gpsModePreferences.set3dEnabled(threeDimensional)
+    fun toggleDimension() = setDimension(!threeDimensional)
+    fun setDimension(enabled: Boolean) {
+        if (threeDimensional == enabled) return
+        threeDimensional = enabled
+        gpsModePreferences.set3dEnabled(enabled)
         cameraMode = "follow"
         cameraRequest++
     }
@@ -617,7 +649,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         }
     }
-    fun toggleMute() { muted = !muted; if (muted) speech?.stop() else voiceGate.reset() }
+    fun toggleMute() = setSoundEnabled(muted)
+    fun setSoundEnabled(enabled: Boolean) {
+        if (muted == !enabled) return
+        muted = !enabled
+        gpsModePreferences.setSoundEnabled(enabled)
+        if (muted) speech?.stop() else voiceGate.reset()
+    }
     private fun speak(text: String, id: String) { if (active && speechReady && !muted) speech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) }
     override fun close() { active = false; requestJob?.cancel(); sdk.onDestroy(); speech?.stop(); speech?.shutdown(); speech = null }
 }
