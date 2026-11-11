@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.SystemClock
+import java.time.ZonedDateTime
+import java.time.ZoneId
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,8 +47,10 @@ internal fun NavigationMap(
     val view = remember { MapView(context).apply { onCreate(null) } }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
-    var localHour by remember { mutableIntStateOf(NavigationMapThemeLogic.currentLocalHour()) }
-    val nightMode = NavigationMapThemeLogic.isNight(appearance, localHour)
+    var minuteTick by remember { mutableIntStateOf(0) }
+    val localNow = remember(minuteTick) { ZonedDateTime.now(ZoneId.of("Asia/Singapore")) }
+    val nightMode = NavigationMapThemeLogic.isNightAtLocation(
+        appearance, localNow, session.location?.latitude, session.location?.longitude)
     var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
@@ -73,7 +77,7 @@ internal fun NavigationMap(
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            localHour = NavigationMapThemeLogic.currentLocalHour()
+            minuteTick++
         }
     }
 
@@ -92,7 +96,7 @@ internal fun NavigationMap(
             sync()
             if (event == Lifecycle.Event.ON_RESUME) {
                 // Device time/timezone changes while suspended are reflected on resume.
-                localHour = NavigationMapThemeLogic.currentLocalHour()
+                minuteTick++
             }
         }
         lifecycle.addObserver(observer)
@@ -164,8 +168,7 @@ internal fun NavigationMap(
                 locationComponent.setMaxAnimationFps(60)
                 cameraDirector.reset()
                 lastPaintedProgress = Double.NaN
-                NavigationMapPalette.apply(style, NavigationMapThemeLogic.isNight(
-                    appearance, NavigationMapThemeLogic.currentLocalHour()))
+                NavigationMapPalette.apply(style, nightMode)
                 styleReady = true
                 session.mapMessage = null
             } catch (_: Exception) {
