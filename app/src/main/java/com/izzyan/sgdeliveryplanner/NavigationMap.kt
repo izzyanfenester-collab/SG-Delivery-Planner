@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.SystemClock
+import java.time.ZonedDateTime
+import java.time.ZoneId
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,12 +47,15 @@ internal fun NavigationMap(
     val view = remember { MapView(context).apply { onCreate(null) } }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
-    var localHour by remember { mutableIntStateOf(NavigationMapThemeLogic.currentLocalHour()) }
-    val nightMode = NavigationMapThemeLogic.isNight(appearance, localHour)
+    var minuteTick by remember { mutableIntStateOf(0) }
+    val localNow = remember(minuteTick) { ZonedDateTime.now(ZoneId.of("Asia/Singapore")) }
+    val nightMode = NavigationMapThemeLogic.isNightAtLocation(
+        appearance, localNow, session.location?.latitude, session.location?.longitude)
     var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
     var routeLine by remember { mutableStateOf<Polyline?>(null) }
+    var routeOutline by remember { mutableStateOf<Polyline?>(null) }
     var traveledLine by remember { mutableStateOf<Polyline?>(null) }
     val routeProgress = remember { NavigationRouteProgressTracker() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
@@ -72,7 +77,7 @@ internal fun NavigationMap(
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            localHour = NavigationMapThemeLogic.currentLocalHour()
+            minuteTick++
         }
     }
 
@@ -91,7 +96,7 @@ internal fun NavigationMap(
             sync()
             if (event == Lifecycle.Event.ON_RESUME) {
                 // Device time/timezone changes while suspended are reflected on resume.
-                localHour = NavigationMapThemeLogic.currentLocalHour()
+                minuteTick++
             }
         }
         lifecycle.addObserver(observer)
@@ -163,8 +168,7 @@ internal fun NavigationMap(
                 locationComponent.setMaxAnimationFps(60)
                 cameraDirector.reset()
                 lastPaintedProgress = Double.NaN
-                NavigationMapPalette.apply(style, NavigationMapThemeLogic.isNight(
-                    appearance, NavigationMapThemeLogic.currentLocalHour()))
+                NavigationMapPalette.apply(style, nightMode)
                 styleReady = true
                 session.mapMessage = null
             } catch (_: Exception) {
@@ -215,15 +219,19 @@ internal fun NavigationMap(
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         routeLine?.let { runCatching { native.removePolyline(it) } }
+        routeOutline?.let { runCatching { native.removePolyline(it) } }
         traveledLine?.let { runCatching { native.removePolyline(it) } }
         routeLine = null
+        routeOutline = null
         traveledLine = null
         lastPaintedProgress = Double.NaN
         val frame = routeProgress.current()
         traveledLine = refreshRouteSection(native, null, frame?.traveled.orEmpty(),
             android.graphics.Color.rgb(128, 128, 128))
+        routeOutline = refreshRouteSection(native, null, frame?.remaining ?: session.shape,
+            android.graphics.Color.rgb(4, 51, 123), 17f)
         routeLine = refreshRouteSection(native, null, frame?.remaining ?: session.shape,
-            android.graphics.Color.rgb(22, 133, 255))
+            android.graphics.Color.rgb(0, 132, 255), 11f)
     }
 
     // Local, opt-in traffic overlays are updated separately. Keep the solid
@@ -299,8 +307,10 @@ internal fun NavigationMap(
             abs(frame.progressedMeters - lastPaintedProgress) >= 0.75)) {
             traveledLine = refreshRouteSection(native, traveledLine, frame.traveled,
                 android.graphics.Color.rgb(128, 128, 128))
+            routeOutline = refreshRouteSection(native, routeOutline, frame.remaining,
+                android.graphics.Color.rgb(4, 51, 123), 17f)
             routeLine = refreshRouteSection(native, routeLine, frame.remaining,
-                android.graphics.Color.rgb(22, 133, 255))
+                android.graphics.Color.rgb(0, 132, 255), 11f)
             lastPaintedProgress = frame.progressedMeters
         }
         if (session.cameraMode == "follow" &&
@@ -402,7 +412,8 @@ private fun refreshRouteSection(
     map: MapLibreMap,
     existing: Polyline?,
     points: List<GpsPoint>,
-    color: Int
+    color: Int,
+    width: Float = 9f
 ): Polyline? {
     if (points.size < 2) {
         existing?.let { map.removePolyline(it) }
@@ -410,7 +421,7 @@ private fun refreshRouteSection(
     }
     val latLngs = points.map { LatLng(it.lat, it.lon) }
     if (existing == null) return map.addPolyline(
-        PolylineOptions().addAll(latLngs).color(color).width(9f))
+        PolylineOptions().addAll(latLngs).color(color).width(width))
     existing.points = latLngs
     map.updatePolyline(existing)
     return existing

@@ -10,4 +10,9 @@ internal class GpsNavigationModePreferences(context: Context) {
     fun set3dEnabled(enabled: Boolean) {
         store.edit().putBoolean("navigation_mode_3d", enabled).apply()
     }
+    // Explicit user preferences survive app updates; fresh installs default to voice ON.
+    fun isSoundEnabled(): Boolean = store.getBoolean("navigation_sound_enabled", true)
+    fun setSoundEnabled(enabled: Boolean) {
+        store.edit().putBoolean("navigation_sound_enabled", enabled).apply()
+    }
 }

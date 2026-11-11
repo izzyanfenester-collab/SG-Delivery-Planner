@@ -9,6 +9,8 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import java.time.ZonedDateTime
+import java.time.LocalDate
+import kotlin.math.*
 import java.util.Locale
 
 /** Theme preference affects navigation BASMAP paints only. No routing/data changes. */
@@ -22,6 +24,55 @@ internal object NavigationMapThemeLogic {
     }
 
     fun currentLocalHour(): Int = ZonedDateTime.now().hour
+
+    /** Use actual local sunrise/sunset when trusted coordinates are available.
+     * Fall back to the existing 07:00–19:00 local clock rule without location.
+     * A stable five-minute twilight buffer prevents sunrise/sunset flutter.
+     */
+    fun isNightAtLocation(
+        mode: NavigationMapAppearance, now: ZonedDateTime,
+        latitude: Double?, longitude: Double?
+    ): Boolean {
+        if (mode != NavigationMapAppearance.AUTO) return mode == NavigationMapAppearance.NIGHT
+        val lat = latitude?.takeIf { it.isFinite() && it in -65.0..65.0 }
+        val lon = longitude?.takeIf { it.isFinite() && it in -180.0..180.0 }
+        if (lat == null || lon == null) return isNight(mode, now.hour)
+        val sunrise = NavigationSunClock.localMinute(
+            now.toLocalDate(), lat, lon, now.offset.totalSeconds, sunrise = true)
+        val sunset = NavigationSunClock.localMinute(
+            now.toLocalDate(), lat, lon, now.offset.totalSeconds, sunrise = false)
+        if (sunrise == null || sunset == null || sunrise >= sunset)
+            return isNight(mode, now.hour)
+        val minutes = now.hour * 60 + now.minute
+        return minutes < sunrise + 5 || minutes >= sunset + 5
+    }
+}
+
+/** Approximate civil sunrise/sunset (sun centre -0.833 degrees), no network/API.
+ * Calculation is geographical; timezone offset comes from the local clock.
+ */
+internal object NavigationSunClock {
+    fun localMinute(date: LocalDate, latitude: Double, longitude: Double,
+        offsetSeconds: Int, sunrise: Boolean): Int? {
+        fun normalize(deg: Double): Double = (deg % 360.0 + 360.0) % 360.0
+        fun sinDeg(x: Double) = sin(Math.toRadians(x))
+        fun cosDeg(x: Double) = cos(Math.toRadians(x))
+        val lngHour = longitude / 15.0
+        val t = date.dayOfYear + ((if (sunrise) 6.0 else 18.0) - lngHour) / 24.0
+        val m = (0.9856 * t) - 3.289
+        val l = normalize(m + 1.916 * sinDeg(m) + 0.020 * sinDeg(2 * m) + 282.634)
+        val rawRa = Math.toDegrees(atan(0.91764 * tan(Math.toRadians(l))))
+        val ra = normalize(rawRa + (floor(l / 90.0) - floor(rawRa / 90.0)) * 90.0) / 15.0
+        val sinDec = 0.39782 * sinDeg(l)
+        val cosDec = cos(asin(sinDec))
+        val cosH = (cosDeg(90.833) - sinDec * sinDeg(latitude)) /
+            (cosDec * cosDeg(latitude))
+        if (!cosH.isFinite() || cosH !in -1.0..1.0) return null
+        val hourAngle = (if (sunrise) 360.0 - Math.toDegrees(acos(cosH))
+            else Math.toDegrees(acos(cosH))) / 15.0
+        val utcHour = (hourAngle + ra - 0.06571 * t - 6.622 - lngHour + 48.0) % 24.0
+        return ((utcHour * 60.0 + offsetSeconds / 60.0).roundToInt() % 1440 + 1440) % 1440
+    }
 }
 
 internal class NavigationMapAppearanceStore(context: Context) {
@@ -101,9 +152,23 @@ internal object NavigationMapPalette {
      * shield sprites, visibility rules, camera and collision settings.
      * Label halos improve legibility in both daylight and the teal-blue night.
      */
+    /**
+     * MapLibre's annotation layers are NOT basemap roads. Repainting them with
+     * generic road colours made the active navigation polyline appear grey.
+     * Keep route, traffic and location overlays in their own authored colours.
+     */
+    internal fun isNavigationAnnotation(id: String): Boolean {
+        val name = id.lowercase(Locale.ROOT)
+        return name.startsWith("mapbox-android-") ||
+            name.startsWith("maplibre-android-") ||
+            "annotation" in name ||
+            name.startsWith("sg-navigation-")
+    }
+
     fun apply(style: Style, night: Boolean) {
         for (layer in style.layers) {
             val id = layer.id
+            if (isNavigationAnnotation(id)) continue
             when (layer) {
                 is BackgroundLayer -> layer.setProperties(
                     PropertyFactory.backgroundColor(Color.parseColor(layerColor(id, "background", night))))
