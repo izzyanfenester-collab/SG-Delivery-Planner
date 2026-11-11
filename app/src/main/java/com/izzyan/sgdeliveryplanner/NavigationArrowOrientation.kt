@@ -78,8 +78,8 @@ internal object NavigationArrowOrientation {
         routeCurve: Float?,
         speedMps: Float?
     ): Float? {
-        val moving = speedMps != null && speedMps.isFinite() && speedMps >= 1.5f
-        if (!moving) return null
+        val speed = speedMps?.takeIf { it.isFinite() && it >= 1.5f }
+            ?: return null
         val gps = gpsCourse?.takeIf { it.isFinite() }
             ?.let(NavigationRoadMatcher::normalizeBearing)
         val route = routeCurve?.takeIf { it.isFinite() }
@@ -91,8 +91,8 @@ internal object NavigationArrowOrientation {
         // At low speed favor the actual route curve to avoid noisy course jitter.
         // At higher speed real GPS course has progressively more weight.
         val weight = when {
-            speedMps < 4f -> 0.35f
-            speedMps < 12f -> 0.52f
+            speed < 4f -> 0.35f
+            speed < 12f -> 0.52f
             else -> 0.66f
         }
         return toward(route, gps, weight)
@@ -117,8 +117,9 @@ internal class NavigationArrowHeadingController {
         speedMps: Float?,
         elapsedMs: Long? = null
     ): Float? {
-        val moving = speedMps != null && speedMps.isFinite() && speedMps >= 1.5f
-        if (!moving || desiredBearing == null || !desiredBearing.isFinite()) return previous
+        val speed = speedMps?.takeIf { it.isFinite() && it >= 1.5f }
+            ?: return previous
+        if (desiredBearing == null || !desiredBearing.isFinite()) return previous
         val target = NavigationRoadMatcher.normalizeBearing(desiredBearing)
         val old = previous
         if (old == null) {
@@ -136,8 +137,8 @@ internal class NavigationArrowHeadingController {
         // A 90- or 180-degree input cannot turn the puck instantly. At the
         // same time smaller bends respond in a single GPS sample.
         val maxDegreesPerSecond = when {
-            speedMps < 4f -> 62.0
-            speedMps < 15f -> 88.0
+            speed < 4f -> 62.0
+            speed < 15f -> 88.0
             else -> 110.0
         }
         val limited = (delta * fraction).toDouble()
