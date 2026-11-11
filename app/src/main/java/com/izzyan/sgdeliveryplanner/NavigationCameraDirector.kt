@@ -85,9 +85,11 @@ internal class NavigationCameraDirector {
 
         val naturalTurn = listOfNotNull(turnMeters?.takeIf { it.isFinite() && it >= 0.0 },
             corner?.distanceMeters).minOrNull()
-        val targetZoom = (manualZoom ?: NavigationCameraPolicy.targetZoom(
+        val targetZoom = if (manualZoom != null)
+            manualZoom.coerceIn(15.5, 19.5)
+        else NavigationCameraPolicy.targetZoom(
             speedMps, naturalTurn, if (corner != null) "$instruction junction" else instruction,
-            remainingMeters)).coerceIn(16.0, 19.2)
+            remainingMeters).coerceIn(16.0, 19.2)
         val approachCurve = threeDimensional && naturalTurn != null &&
             naturalTurn < 180.0 && (corner?.angleDegrees ?: 45f) >= 28f
         val targetPitch = if (!threeDimensional) 0.0 else if (approachCurve) 49.0 else 54.0
@@ -97,7 +99,9 @@ internal class NavigationCameraDirector {
         val deltaPitch = targetPitch - basePitch
         val command = when {
             abs(deltaZoom) >= 0.19 -> NavigationCameraCommand(
-                zoom = (baseZoom + deltaZoom.coerceIn(-0.42, 0.42)).coerceIn(16.0, 19.2),
+                zoom = (baseZoom + deltaZoom.coerceIn(-0.42, 0.42)).coerceIn(
+                    if (manualZoom == null) 16.0 else 15.5,
+                    if (manualZoom == null) 19.2 else 19.5),
                 durationMs = 650
             )
             abs(deltaPitch) >= 3.0 -> NavigationCameraCommand(
