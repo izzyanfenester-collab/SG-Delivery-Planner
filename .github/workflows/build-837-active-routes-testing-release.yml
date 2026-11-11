@@ -70,3 +70,4 @@ jobs:
             gh release create "$tag" "$asset" --target "$GITHUB_SHA" --prerelease --latest=false \
               --title "SG Delivery Build #837 TESTING – Collapsible Schedule and Multiple Active Routes" \
               --notes "Build #837 TESTING based on Official #836. Route Page schedule collapsed by default. History supports resuming any unfinished saved route by stable Route ID, restores delivery progress, COD/PayNow, customer details, and proof IDs from Room without route reoptimization. Other app functions unchanged. Separate test package com.izzyan.sgdeliveryplanner.b837test. Do not merge into Official without approval."
+          fi
