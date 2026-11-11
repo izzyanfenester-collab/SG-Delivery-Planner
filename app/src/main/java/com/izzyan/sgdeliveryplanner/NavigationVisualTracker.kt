@@ -112,6 +112,10 @@ internal class NavigationVisualTracker {
     private var previousHeading: Float? = null
     private var preferredSegment: Int? = null
 
+    /** A reroute changes the polyline but should not abruptly erase the
+     * last reliable vehicle bearing or visual position. */
+    fun clearRouteMatch() { preferredSegment = null }
+
     fun reset() {
         previousRaw = null
         previousDisplay = null
