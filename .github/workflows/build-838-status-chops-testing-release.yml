@@ -1,0 +1,73 @@
+name: Publish SG Delivery Build 838 Custom History Status Chops TESTING APK
+
+on:
+  push:
+    branches: [feature/build-838-history-status-chops-testing]
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-838-status-chops-testing-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    if: github.ref == 'refs/heads/feature/build-838-history-status-chops-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Generate Singapore postal seed
+        run: python3 scripts/build_postal_seed.py
+      - name: Build, unit test and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug lintDebug
+      - name: Verify Build 838 Status Chops APK identity and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'versionName = "1.4.26-b838-testing"' app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".b838test"' app/build.gradle.kts
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep "package: name='com.izzyan.sgdeliveryplanner.b838test'"
+          sha256sum "$apk"
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SG-Delivery-B838-StatusChops-Testing-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish directly downloadable testing prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v1.4.26-b838-testing"
+          asset="$RUNNER_TEMP/SG-Delivery-B838-StatusChops-Testing.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$asset"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "SG Delivery Build #838 TESTING – Custom History Status Chops" \
+              --notes "Build #838 TESTING based on Build #837 Multiple Active Routes. History cards use three original supplied transparent circular status chop images (COMPLETED green, NOT STARTED red, IN PROGRESS yellow) tilted 35 degrees clockwise. Existing route-ID switching, proof images, delivery progress, backups, Route Page, Payment, GPS and Offline Maps are unchanged. Parallel debug package com.izzyan.sgdeliveryplanner.b838test. TESTING only; do not merge into Official without approval."
+          fi
