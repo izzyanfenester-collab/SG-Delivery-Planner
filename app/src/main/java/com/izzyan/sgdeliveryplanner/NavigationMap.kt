@@ -30,24 +30,23 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import kotlin.math.abs
+ import kotlin.math.abs
 
-private const val NIGHT_MAP_STYLE = "https://tiles.openfreemap.org/styles/dark"
-
-private fun nightInSingapore() = NavigationDisplayTuning.isNightSingapore(
-    ZonedDateTime.now(ZoneId.of("Asia/Singapore")).hour)
-
-/** GPS and camera animations happen in MapLibre's native location layer, not on Compose frames. */
+ /** GPS and camera animations happen in MapLibre's native location layer, not on Compose frames. */
 @Composable
-internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locationPermitted: Boolean) {
+internal fun NavigationMap(
+    session: NavigationSession,
+    modifier: Modifier,
+    locationPermitted: Boolean,
+    appearance: NavigationMapAppearance
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember { MapView(context).apply { onCreate(null) } }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
-    var nightMode by remember { mutableStateOf(nightInSingapore()) }
+    var localHour by remember { mutableIntStateOf(NavigationMapThemeLogic.currentLocalHour()) }
+    val nightMode = NavigationMapThemeLogic.isNight(appearance, localHour)
     var styleRetry by remember { mutableIntStateOf(0) }
     var destinationMarker by remember { mutableStateOf<Marker?>(null) }
     var fuelMarker by remember { mutableStateOf<Marker?>(null) }
@@ -73,7 +72,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            nightMode = nightInSingapore()
+            localHour = NavigationMapThemeLogic.currentLocalHour()
         }
     }
 
@@ -88,7 +87,13 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
             if (!started && shouldStart) { view.onStart(); started = true }
             if (!resumed && shouldResume) { view.onResume(); resumed = true }
         }
-        val observer = LifecycleEventObserver { _, _ -> sync() }
+        val observer = LifecycleEventObserver { _, event ->
+            sync()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Device time/timezone changes while suspended are reflected on resume.
+                localHour = NavigationMapThemeLogic.currentLocalHour()
+            }
+        }
         lifecycle.addObserver(observer)
         sync()
         val failure = MapView.OnDidFailLoadingMapListener {
@@ -113,14 +118,16 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    LaunchedEffect(map, nightMode, styleRetry, locationPermitted) {
+    // Basemap loads once; theme changes alter paint properties in-place without
+    // reloading tiles, losing camera/tracking state, or interrupting the route.
+    LaunchedEffect(map, styleRetry, locationPermitted) {
         val native = map ?: return@LaunchedEffect
         styleReady = false
         if (!locationPermitted) {
             session.mapMessage = "Allow precise location to use built-in GPS."
             return@LaunchedEffect
         }
-        native.setStyle(Style.Builder().fromUri(if (nightMode) NIGHT_MAP_STYLE else NAVIGATION_STYLE)) { style ->
+        native.setStyle(Style.Builder().fromUri(NavigationMapPalette.DAY_BASE_STYLE)) { style ->
             try {
                 val locationComponent = native.locationComponent
                 locationComponent.activateLocationComponent(
@@ -156,12 +163,22 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
                 locationComponent.setMaxAnimationFps(60)
                 cameraDirector.reset()
                 lastPaintedProgress = Double.NaN
+                NavigationMapPalette.apply(style, NavigationMapThemeLogic.isNight(
+                    appearance, NavigationMapThemeLogic.currentLocalHour()))
                 styleReady = true
                 session.mapMessage = null
             } catch (_: Exception) {
                 session.mapMessage = "GPS display could not start. Try reopening navigation."
             }
         }
+    }
+
+    // Switching DAY / NIGHT / AUTO changes existing MapLibre paint properties.
+    // No setStyle(), new sources, camera reset or GPS re-activation is involved.
+    LaunchedEffect(styleReady, nightMode) {
+        val native = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        native.style?.let { NavigationMapPalette.apply(it, nightMode) }
     }
 
     // Switching 2D/3D changes both the physical vehicle icon and the map pitch.
@@ -178,7 +195,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         component.renderMode = RenderMode.GPS
     }
 
-    LaunchedEffect(styleReady, session.route, session.destination, nightMode) {
+    LaunchedEffect(styleReady, session.route, session.destination) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         destinationMarker?.let { runCatching { native.removeMarker(it) } }
@@ -194,7 +211,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
 
     // Route annotations are recreated only when geometry/style actually changes,
     // NOT every time a traffic band or GPS speed sample changes.
-    LaunchedEffect(styleReady, session.route, nightMode) {
+    LaunchedEffect(styleReady, session.route) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         routeLine?.let { runCatching { native.removePolyline(it) } }
@@ -212,7 +229,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     // Local, opt-in traffic overlays are updated separately. Keep the solid
     // route geometry in place during traffic changes, avoiding blue-line flicker.
     LaunchedEffect(styleReady, session.trafficState, session.localTrafficVisible,
-        session.route, nightMode) {
+        session.route) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         trafficPolylines.forEach { runCatching { native.removePolyline(it) } }
@@ -235,7 +252,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
         }
     }
 
-    LaunchedEffect(styleReady, session.fuelPreview, nightMode) {
+    LaunchedEffect(styleReady, session.fuelPreview) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         fuelMarker?.let { runCatching { native.removeMarker(it) } }
@@ -311,7 +328,7 @@ internal fun NavigationMap(session: NavigationSession, modifier: Modifier, locat
     }
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest,
-        session.threeDimensional, session.fuelPreview, nightMode, mapHeightPixels) {
+        session.threeDimensional, session.fuelPreview, mapHeightPixels) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent

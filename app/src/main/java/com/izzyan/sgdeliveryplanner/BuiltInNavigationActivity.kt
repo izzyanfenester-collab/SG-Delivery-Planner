@@ -28,6 +28,9 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -92,6 +95,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var showCameras by remember { mutableStateOf(false) }
         var showFuelStations by remember { mutableStateOf(false) }
         var showLocalTrafficConsent by remember { mutableStateOf(false) }
+        val mapAppearanceStore = remember {
+            NavigationMapAppearanceStore(this@BuiltInNavigationActivity)
+        }
+        var mapAppearance by remember { mutableStateOf(mapAppearanceStore.read()) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permitted = hasPreciseLocation(); requestedPermission = true
         }
@@ -115,7 +122,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
-                NavigationMap(session, Modifier.matchParentSize(), permitted)
+                NavigationMap(session, Modifier.matchParentSize(), permitted, mapAppearance)
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -142,6 +149,47 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     IconButton(onClick = { showCameras = true }, modifier = Modifier.size(38.dp)) {
                                         Icon(Icons.Filled.PhotoCamera, contentDescription = "Traffic cameras", tint = Color.White)
                                     }
+                                }
+                            }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("MAP", fontSize = 10.sp, color = SGColors.Silver,
+                                    fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.width(8.dp))
+                                NavigationMapAppearance.entries.forEach { option ->
+                                    val active = option == mapAppearance
+                                    val icon = when (option) {
+                                        NavigationMapAppearance.DAY -> Icons.Filled.WbSunny
+                                        NavigationMapAppearance.NIGHT -> Icons.Filled.DarkMode
+                                        NavigationMapAppearance.AUTO -> Icons.Filled.BrightnessAuto
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            mapAppearanceStore.save(option)
+                                            mapAppearance = option
+                                        },
+                                        modifier = Modifier.height(32.dp)
+                                            .width(if (compactNavHeader) 78.dp else 88.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp),
+                                        shape = RoundedCornerShape(9.dp),
+                                        colors = ButtonDefaults.textButtonColors(
+                                            containerColor = if (active) SGColors.Gold
+                                                else SGColors.SecondaryBackground,
+                                            contentColor = if (active) PremiumNavy else Color.White
+                                        )
+                                    ) {
+                                        Icon(icon, contentDescription = null,
+                                            modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            option.name.lowercase().replaceFirstChar { it.uppercase() },
+                                            fontSize = 11.sp, fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(Modifier.width(4.dp))
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
