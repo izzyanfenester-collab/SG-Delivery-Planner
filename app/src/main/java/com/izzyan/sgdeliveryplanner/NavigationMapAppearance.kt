@@ -101,9 +101,23 @@ internal object NavigationMapPalette {
      * shield sprites, visibility rules, camera and collision settings.
      * Label halos improve legibility in both daylight and the teal-blue night.
      */
+    /**
+     * MapLibre's annotation layers are NOT basemap roads. Repainting them with
+     * generic road colours made the active navigation polyline appear grey.
+     * Keep route, traffic and location overlays in their own authored colours.
+     */
+    internal fun isNavigationAnnotation(id: String): Boolean {
+        val name = id.lowercase(Locale.ROOT)
+        return name.startsWith("mapbox-android-") ||
+            name.startsWith("maplibre-android-") ||
+            "annotation" in name ||
+            name.startsWith("sg-navigation-")
+    }
+
     fun apply(style: Style, night: Boolean) {
         for (layer in style.layers) {
             val id = layer.id
+            if (isNavigationAnnotation(id)) continue
             when (layer) {
                 is BackgroundLayer -> layer.setProperties(
                     PropertyFactory.backgroundColor(Color.parseColor(layerColor(id, "background", night))))
