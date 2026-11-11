@@ -71,6 +71,20 @@ class NavigationUltimateSmooth839Test {
         assertTrue(manual == null || manual.zoom == null)
     }
 
+    @Test fun manualZoomRetainsOriginalExtremeLimitsUntilRecenter() {
+        val director = NavigationCameraDirector()
+        director.reset(19.2, 54.0)
+        val zoomIn = requireNotNull(director.choose(
+            1000, 19.2, 54.0, 24f, null, "Continue", 9000.0,
+            null, true, 19.5))
+        assertTrue(requireNotNull(zoomIn.zoom) > 19.2)
+        director.reset(15.9, 54.0)
+        val zoomOut = requireNotNull(director.choose(
+            2000, 15.9, 54.0, 0f, null, "Continue", 9000.0,
+            null, true, 15.5))
+        assertTrue(requireNotNull(zoomOut.zoom) < 15.9)
+    }
+
     @Test fun switchingFrom3dTo2dAdjustsPitchOnly() {
         val director = NavigationCameraDirector()
         director.reset(18.8, 54.0)
