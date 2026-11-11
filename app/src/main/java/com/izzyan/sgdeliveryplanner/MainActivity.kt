@@ -1259,16 +1259,20 @@ fun History(vm: PlannerViewModel) {
         }
         items(saved, key = { it.id }) { record ->
             val p = runCatching { vm.repo.decode(record) }.getOrNull()
-            PremiumCard(Modifier.fillMaxWidth().combinedClickable(
-                enabled = !vm.busy,
-                onClick = {
-                    if (selecting) toggle(record.id)
-                    else if (p != null && savedDeliveryStatus(p) != SavedDeliveryStatus.COMPLETED)
-                        vm.continueSavedRoute(record.id)
-                    else opened = record
-                },
-                onLongClick = { selecting = true; toggle(record.id) }
-            )) {
+            PremiumCard(
+                modifier = Modifier.fillMaxWidth().combinedClickable(
+                    enabled = !vm.busy,
+                    onClick = {
+                        if (selecting) toggle(record.id)
+                        else if (p != null && savedDeliveryStatus(p) != SavedDeliveryStatus.COMPLETED)
+                            vm.continueSavedRoute(record.id)
+                        else opened = record
+                    },
+                    onLongClick = { selecting = true; toggle(record.id) }
+                ),
+                borderColor = p?.let { historyStatusAccent(savedDeliveryStatus(it)).copy(alpha = .38f) }
+                    ?: PremiumGold.copy(alpha = .25f)
+            ) {
                 Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (selecting) Checkbox(record.id in selected, { toggle(record.id) }, enabled = !vm.busy)
                     if (p == null) {
@@ -1276,20 +1280,29 @@ fun History(vm: PlannerViewModel) {
                     } else {
                         val summary = deliverySummary(p)
                         val deliveryStatus = savedDeliveryStatus(p)
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.deliveryDate.toString(), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                            Surface(
-                                color = PremiumNavy, contentColor = PremiumGold,
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, PremiumGold)
+                        // Chop stays within a fixed, compact right-side slot.
+                        // No overlay on date, progress values, action buttons or proof controls.
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 76.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Text(deliveryStatus.label, Modifier.padding(8.dp),
-                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(p.deliveryDate.toString(),
+                                    style = MaterialTheme.typography.titleLarge)
+                                Text(deliveryStatus.label,
+                                    color = historyStatusAccent(deliveryStatus),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold)
+                                // Route ID—not delivery date or postal code—identifies the snapshot.
+                                Text("Route ID: ${p.id.take(8)}", color = SGColors.Silver,
+                                    style = MaterialTheme.typography.labelSmall)
                             }
+                            HistoryStatusChop(deliveryStatus)
                         }
-                        // Unique route ID distinguishes plans sharing a delivery date or postal code.
-                        Text("Route ID: ${p.id.take(8)}", color = SGColors.Silver,
-                            style = MaterialTheme.typography.labelSmall)
                         DetailRow("Total Parcel", summary.totalParcel.toString())
                         DetailRow("Delivered / Remaining", "${summary.delivered} / ${summary.totalParcel - summary.delivered}")
                         DetailRow("Success Rate", "%.1f%%".format(Locale.ENGLISH, summary.successRate))
