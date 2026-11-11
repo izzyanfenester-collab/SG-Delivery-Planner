@@ -458,6 +458,41 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         }
     }
 
+    /** Resume the exact persisted route selected in History.
+     *
+     * All delivery/proof mutations already save to Room before changing route
+     * state, and busy blocks switching during those writes. Never save the
+     * previous in-memory snapshot here: doing so could overwrite newer data.
+     */
+    fun continueSavedRoute(routeId: String) {
+        if (busy) return
+        if (proofRequest != null) {
+            message = "Finish or cancel the open proof photo action before switching routes."
+            return
+        }
+        busy = true
+        message = ""
+        notice = ""
+        viewModelScope.launch {
+            try {
+                val selected = loadPersistedRouteForDelivery(repo.dao, routeId)
+                // Commit the active pointer first. If storage rejects the change,
+                // leave the old visible route and its active ID untouched.
+                check(prefs.edit().putString("active", selected.id).commit()) {
+                    "Could not select the saved route. Your current route is unchanged."
+                }
+                route = selected
+                deliveryReportOrderId = null
+                reportPreview = null
+                screen = "Delivery"
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                message = englishError(e,
+                    "Could not continue the saved route. Your active delivery was not changed.")
+            } finally { busy = false }
+        }
+    }
+
     fun open(record: SavedRoute) {
         if (busy) return
         try {
