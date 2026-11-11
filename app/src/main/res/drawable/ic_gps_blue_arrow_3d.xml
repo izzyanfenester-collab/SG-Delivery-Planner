@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent, north-pointing, pre-shaded 3D navigation arrow.
+     RenderMode.GPS supplies geographic bearing. No bitmap rotation or camera-relative transform. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="80dp"
+    android:viewportWidth="120"
+    android:viewportHeight="132">
+
+    <!-- Dark blue extruded lower rim; shape only, no circle, white base, or background. -->
+    <path android:fillColor="#082B61"
+        android:pathData="M60,10 L110,110 Q111,116 105,114 L65,96 Q60,93 55,96 L15,114 Q9,116 10,110 Z" />
+
+    <!-- Under-cut depth along left and right rear edges. -->
+    <path android:fillColor="#0A4189"
+        android:pathData="M60,13 L60,91 L16,108 L14,114 L57,98 Q60,96 63,98 L106,114 L104,108 Z" />
+
+    <!-- Main silhouette: a narrow pointed tip with broad split tail. -->
+    <path
+        android:fillColor="#0E6DD2"
+        android:strokeColor="#07346E"
+        android:strokeWidth="2.0"
+        android:strokeLineJoin="round"
+        android:pathData="M60,7 L106,107 Q108,111 103,110 L65,91 Q60,88 55,91 L17,110 Q12,111 14,107 Z" />
+
+    <!-- Raised left wing facing the light. -->
+    <path android:fillColor="#42B8F6"
+        android:pathData="M60,12 L60,83 Q58,82 55,84 L21,102 Z" />
+
+    <!-- Right wing's darker bevel gives physical depth. -->
+    <path android:fillColor="#0759B3"
+        android:pathData="M60,12 L99,102 L65,84 Q62,82 60,83 Z" />
+
+    <!-- Front spine/gloss, tapered toward the nose. -->
+    <path android:fillColor="#A0E4FF"
+        android:pathData="M60,13 L54,50 L59,40 L61,31 Z" />
+
+    <!-- Centre bevel and rear folded edge. -->
+    <path android:fillColor="#084E9F"
+        android:pathData="M60,40 L62,80 L68,90 L65,84 L60,83 Z" />
+    <path android:fillColor="#1B91ED"
+        android:pathData="M23,102 L55,86 Q60,83 65,86 L97,102 L64,91 Q60,89 56,91 Z" />
+
+    <!-- Small lower-edge highlight; does not cover map beneath the arrow. -->
+    <path android:fillColor="#64CEFF"
+        android:fillAlpha="0.75"
+        android:pathData="M22,103 L55,88 L56,91 L26,104 Z" />
+</vector>

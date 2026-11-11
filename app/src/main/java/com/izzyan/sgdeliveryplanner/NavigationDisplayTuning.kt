@@ -40,11 +40,24 @@ internal object NavigationDisplayTuning {
         return (((previous + delta * 0.55f) % 360f) + 360f) % 360f
     }
 
-    fun maneuverArrow(instruction: String): String = when {
-        instruction.contains("u-turn", ignoreCase = true) -> "↶"
-        instruction.contains("keep left", ignoreCase = true) || instruction.contains("turn left", ignoreCase = true) -> "↰"
-        instruction.contains("keep right", ignoreCase = true) || instruction.contains("turn right", ignoreCase = true) -> "↱"
-        instruction.contains("roundabout", ignoreCase = true) -> "⟳"
-        else -> "↑"
+    /** Only render maneuver symbols sourced from the current SDK instruction.
+     * Lane arrows/exits are not invented when routing metadata is absent.
+     */
+    fun maneuverArrow(instruction: String): String {
+        val cue = instruction.lowercase(java.util.Locale.ROOT)
+        return when {
+            "arriv" in cue || "destination is on" in cue -> "⌖"
+            "u-turn" in cue || "u turn" in cue -> "↶"
+            "roundabout" in cue || "rotary" in cue -> "⟳"
+            "sharp left" in cue -> "↰"
+            "sharp right" in cue -> "↱"
+            "slight left" in cue || "bear left" in cue -> "↖"
+            "slight right" in cue || "bear right" in cue -> "↗"
+            "keep left" in cue || "turn left" in cue || "left onto" in cue -> "↰"
+            "keep right" in cue || "turn right" in cue || "right onto" in cue -> "↱"
+            "continue" in cue || "straight" in cue || "head north" in cue ||
+                "head south" in cue || "head east" in cue || "head west" in cue -> "↑"
+            else -> "↑"
+        }
     }
 }

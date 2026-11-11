@@ -29,7 +29,8 @@ internal object NavigationRoadMatcher {
         shape: List<GpsPoint>,
         accuracyMeters: Float,
         speedMetersPerSecond: Float?,
-        headingDegrees: Float?
+        headingDegrees: Float?,
+        preferredSegment: Int? = null
     ): NavigationRoadMatch? {
         if (!raw.valid() || shape.size < 2 || !accuracyMeters.isFinite() ||
             accuracyMeters <= 0f || accuracyMeters > 30f) return null
@@ -63,7 +64,16 @@ internal object NavigationRoadMatcher {
                 angleDifference(requireNotNull(headingDegrees), bearing) else 0f
             // Opposite carriageway / other side of a U-turn must never be chosen as a match.
             if (headingReliable && headingDifference > 95f) continue
-            val score = distance + if (headingReliable) headingDifference * 0.045 else 0.0
+            // Prefer continuity when a loop or overlapping road offers multiple
+            // equally plausible projections. No hard lock: a genuine deviation
+            // remains visible when a route segment is not within tolerance.
+            val continuity = preferredSegment?.let { prior ->
+                val backwards = (prior - i).coerceAtLeast(0)
+                val forward = (i - prior).coerceAtLeast(0)
+                backwards.coerceAtMost(20) * 1.5 + forward.coerceAtMost(20) * 0.45
+            } ?: 0.0
+            val score = distance +
+                (if (headingReliable) headingDifference * 0.045 else 0.0) + continuity
             if (score < bestScore) {
                 bestScore = score
                 nearest = NavigationRoadMatch(
@@ -99,12 +109,18 @@ internal object NavigationRoadMatcher {
 internal class NavigationVisualTracker {
     private var previousRaw: GpsPoint? = null
     private var previousDisplay: GpsPoint? = null
-    private var previousHeading: Float? = null
+    private val arrowHeading = NavigationArrowHeadingController()
+    private var preferredSegment: Int? = null
+
+    /** A reroute changes the polyline but should not abruptly erase the
+     * last reliable vehicle bearing or visual position. */
+    fun clearRouteMatch() { preferredSegment = null }
 
     fun reset() {
         previousRaw = null
         previousDisplay = null
-        previousHeading = null
+        arrowHeading.reset()
+        preferredSegment = null
     }
 
     fun update(
@@ -112,7 +128,8 @@ internal class NavigationVisualTracker {
         shape: List<GpsPoint>,
         accuracyMeters: Float,
         speedMetersPerSecond: Float?,
-        gpsBearingDegrees: Float?
+        gpsBearingDegrees: Float?,
+        elapsedRealtimeMs: Long? = null
     ): NavigationVisualFix {
         val moving = speedMetersPerSecond != null && speedMetersPerSecond.isFinite() &&
             speedMetersPerSecond >= 1.5f
@@ -121,7 +138,8 @@ internal class NavigationVisualTracker {
         } else null
         val validGpsHeading = gpsBearingDegrees?.takeIf { it.isFinite() && moving }
         val travelHeading = validGpsHeading ?: fromTravel
-        val match = NavigationRoadMatcher.match(raw, shape, accuracyMeters, speedMetersPerSecond, travelHeading)
+        val match = NavigationRoadMatcher.match(raw, shape, accuracyMeters,
+            speedMetersPerSecond, travelHeading, preferredSegment)
 
         // Stationary devices wander by several metres. Hold the previously displayed point if
         // the newer fix remains within its accuracy radius; never freeze a vehicle that is moving.
@@ -135,14 +153,18 @@ internal class NavigationVisualTracker {
             else -> raw
         }
 
-        // Route tangent is a fallback when the phone does not report a GPS course.
-        // Actual measured travel takes priority when available, especially while turning.
-        val targetHeading = if (moving) travelHeading ?: match?.bearingDegrees else null
-        val heading = NavigationDisplayTuning.smoothBearing(
-            previousHeading, targetHeading, speedMetersPerSecond)
+        // Arc-aware tangent avoids abrupt bearing changes at map polyline
+        // vertices; actual GPS course remains authoritative for a wrong turn.
+        // Feed one geographic bearing to MapLibre (never camera-relative).
+        val curve = NavigationArrowOrientation.curveTangent(
+            shape, match, speedMetersPerSecond)
+        val targetHeading = NavigationArrowOrientation.target(
+            travelHeading, curve, speedMetersPerSecond)
+        val heading = arrowHeading.smooth(
+            targetHeading, speedMetersPerSecond, elapsedRealtimeMs)
         previousRaw = raw
         previousDisplay = display
-        previousHeading = heading
+        if (match != null) preferredSegment = match.segmentIndex
         return NavigationVisualFix(display, heading, match != null || holdStill, match)
     }
 }

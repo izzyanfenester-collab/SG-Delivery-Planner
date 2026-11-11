@@ -463,6 +463,7 @@ fun Settings(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         PageTitle("Settings", "Set the defaults for your next route.")
+        NavigationAppearanceSettingsCard()
         OfflineMapSettingsCard(vm)
         PremiumCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
