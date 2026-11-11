@@ -29,7 +29,8 @@ internal object NavigationRoadMatcher {
         shape: List<GpsPoint>,
         accuracyMeters: Float,
         speedMetersPerSecond: Float?,
-        headingDegrees: Float?
+        headingDegrees: Float?,
+        preferredSegment: Int? = null
     ): NavigationRoadMatch? {
         if (!raw.valid() || shape.size < 2 || !accuracyMeters.isFinite() ||
             accuracyMeters <= 0f || accuracyMeters > 30f) return null
@@ -63,7 +64,16 @@ internal object NavigationRoadMatcher {
                 angleDifference(requireNotNull(headingDegrees), bearing) else 0f
             // Opposite carriageway / other side of a U-turn must never be chosen as a match.
             if (headingReliable && headingDifference > 95f) continue
-            val score = distance + if (headingReliable) headingDifference * 0.045 else 0.0
+            // Prefer continuity when a loop or overlapping road offers multiple
+            // equally plausible projections. No hard lock: a genuine deviation
+            // remains visible when a route segment is not within tolerance.
+            val continuity = preferredSegment?.let { prior ->
+                val backwards = (prior - i).coerceAtLeast(0)
+                val forward = (i - prior).coerceAtLeast(0)
+                backwards.coerceAtMost(20) * 1.5 + forward.coerceAtMost(20) * 0.45
+            } ?: 0.0
+            val score = distance +
+                (if (headingReliable) headingDifference * 0.045 else 0.0) + continuity
             if (score < bestScore) {
                 bestScore = score
                 nearest = NavigationRoadMatch(
@@ -100,11 +110,13 @@ internal class NavigationVisualTracker {
     private var previousRaw: GpsPoint? = null
     private var previousDisplay: GpsPoint? = null
     private var previousHeading: Float? = null
+    private var preferredSegment: Int? = null
 
     fun reset() {
         previousRaw = null
         previousDisplay = null
         previousHeading = null
+        preferredSegment = null
     }
 
     fun update(
@@ -121,7 +133,8 @@ internal class NavigationVisualTracker {
         } else null
         val validGpsHeading = gpsBearingDegrees?.takeIf { it.isFinite() && moving }
         val travelHeading = validGpsHeading ?: fromTravel
-        val match = NavigationRoadMatcher.match(raw, shape, accuracyMeters, speedMetersPerSecond, travelHeading)
+        val match = NavigationRoadMatcher.match(raw, shape, accuracyMeters,
+            speedMetersPerSecond, travelHeading, preferredSegment)
 
         // Stationary devices wander by several metres. Hold the previously displayed point if
         // the newer fix remains within its accuracy radius; never freeze a vehicle that is moving.
@@ -143,6 +156,7 @@ internal class NavigationVisualTracker {
         previousRaw = raw
         previousDisplay = display
         previousHeading = heading
+        if (match != null) preferredSegment = match.segmentIndex
         return NavigationVisualFix(display, heading, match != null || holdStill, match)
     }
 }
