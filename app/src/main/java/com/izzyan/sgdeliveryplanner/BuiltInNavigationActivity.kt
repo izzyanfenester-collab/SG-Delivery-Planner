@@ -34,6 +34,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -109,6 +111,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 try { session.run() } finally { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
         }
+        val compactNavHeader = LocalConfiguration.current.screenWidthDp < 385
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
@@ -118,7 +121,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = SGColors.Card, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
-                        Column(Modifier.fillMaxWidth().padding(start = 13.dp, end = 7.dp, top = 5.dp, bottom = 14.dp),
+                        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 11.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically) {
@@ -144,16 +147,31 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
-                                    color = SGColors.Gold, fontSize = 52.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.width(56.dp))
+                                    color = SGColors.Gold,
+                                    fontSize = if (compactNavHeader) 53.sp else 58.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(if (compactNavHeader) 54.dp else 60.dp))
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
-                                        color = SGColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold,
-                                        maxLines = 1)
+                                        color = SGColors.White,
+                                        fontSize = if (compactNavHeader) 29.sp else 34.sp,
+                                        fontWeight = FontWeight.Bold, maxLines = 1)
                                     Text(if (session.arrived) "Destination reached" else
                                         NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
-                                        color = SGColors.White, fontSize = 16.sp, maxLines = 2,
-                                        lineHeight = 21.sp, fontWeight = FontWeight.Medium)
+                                        color = SGColors.White,
+                                        fontSize = if (compactNavHeader) 17.sp else 20.sp,
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        lineHeight = if (compactNavHeader) 21.sp else 24.sp,
+                                        fontWeight = FontWeight.SemiBold)
+                                    session.street?.takeIf {
+                                        it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
+                                            session.instruction, null).equals(it, ignoreCase = true)
+                                    }?.let { currentStreet ->
+                                        Text("Current: $currentStreet",
+                                            color = SGColors.Silver,
+                                            fontSize = if (compactNavHeader) 12.sp else 14.sp,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                                 NavigationDisplayTuning.roundaboutExit(session.instruction)?.let { exit ->
                                     Text(exit, color = SGColors.Gold, fontSize = 14.sp,
@@ -405,6 +423,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val reroute = ReroutePolicy()
     private var arrival = ArrivalDetector()
     private val voiceGate = VoiceCueGate()
+    private val gpsSanityFilter = NavigationGpsSanityFilter()
     private val main = android.os.Handler(Looper.getMainLooper())
     private var active = false
     private var speechReady = false
@@ -428,7 +447,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     suspend fun run(): Unit = coroutineScope {
-        active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); voiceGate.reset()
+        active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); voiceGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
                 message = "Resolving destination…"
@@ -451,6 +470,15 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || !fix.accuracy.isFinite() || fix.accuracy < 0 || fix.accuracy > 50) {
                     message = "GPS accuracy is low. Waiting for a precise location…"
                     reroute.resetDrift(); arrival = ArrivalDetector(); return@collect
+                }
+                // Accept raw GPS coordinates as truth only after rejecting an
+                // impossible one-sample jump. Reacquisition after a gap is allowed.
+                if (!gpsSanityFilter.accept(NavigationGpsSample(
+                        GpsPoint(fix.latitude, fix.longitude),
+                        fix.elapsedRealtimeNanos / 1_000_000L,
+                        fix.accuracy, fix.speed.takeIf { fix.hasSpeed() }))) {
+                    message = "GPS position jump ignored. Checking the next fix…"
+                    return@collect
                 }
                 lastFix = now; location = fix
                 adaptiveEta.observe(if (fix.hasSpeed()) fix.speed.toDouble() else null, fix.accuracy.toDouble(), fix.elapsedRealtimeNanos / 1_000_000,
