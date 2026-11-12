@@ -17,14 +17,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -41,6 +42,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -96,7 +104,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
-        var showFuelStations by remember { mutableStateOf(false) }
         var showLocalTrafficConsent by remember { mutableStateOf(false) }
         var showGpsSettings by remember { mutableStateOf(false) }
         val mapAppearanceStore = remember {
@@ -123,51 +130,66 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
         val compactNavHeader = LocalConfiguration.current.screenWidthDp < 385
+        // Measure the real opaque panels, including wrapping road names and
+        // accessibility font scales. Controls fit between them on small phones.
+        var topPanelHeightPx by remember { mutableIntStateOf(0) }
+        var bottomPanelHeightPx by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        val topInset = if (topPanelHeightPx > 0)
+            with(density) { topPanelHeightPx.toDp() } + 6.dp else 156.dp
+        val bottomInset = if (bottomPanelHeightPx > 0)
+            with(density) { bottomPanelHeightPx.toDp() } + 6.dp else 162.dp
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
                 NavigationMap(session, Modifier.matchParentSize(), permitted, mapAppearance)
 
-                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                    .onSizeChanged { topPanelHeightPx = it.height }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
-                        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 11.dp),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("SG Delivery GPS Pro", color = SGColors.Gold, fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold)
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(if (session.arrived) "✓" else NavigationDisplayTuning.maneuverArrow(session.instruction),
-                                    color = SGColors.Gold,
-                                    fontSize = if (compactNavHeader) 60.sp else 68.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.width(if (compactNavHeader) 60.dp else 68.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            val cue = if (session.arrived) NavigationPanelCue(NavigationSign.ARRIVE) else session.panelCue
+                            Image(
+                                painter = painterResource(cue.sign.drawable),
+                                contentDescription = cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
+                                modifier = Modifier.size(if (compactNavHeader) 58.dp else 64.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
+                                        modifier = Modifier.weight(1f),
                                         color = SGColors.White,
-                                        fontSize = if (compactNavHeader) 32.sp else 40.sp,
-                                        fontWeight = FontWeight.Bold, maxLines = 1)
-                                    Text(if (session.arrived) "Destination reached" else
-                                        NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
-                                        color = SGColors.White,
-                                        fontSize = if (compactNavHeader) 20.sp else 23.sp,
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                        lineHeight = if (compactNavHeader) 24.sp else 27.sp,
-                                        fontWeight = FontWeight.SemiBold)
-                                    session.street?.takeIf {
-                                        it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
-                                            session.instruction, null).equals(it, ignoreCase = true)
-                                    }?.let { currentStreet ->
-                                        Text("Current: $currentStreet",
-                                            color = SGColors.Silver,
-                                            fontSize = if (compactNavHeader) 12.sp else 14.sp,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
+                                        fontSize = if (compactNavHeader) 32.sp else 38.sp,
+                                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    cue.expresswayExit?.let { ExitRoadSign(it) }
                                 }
-                                NavigationDisplayTuning.roundaboutExit(session.instruction)?.let { exit ->
-                                    Text(exit, color = SGColors.Gold, fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(if (session.arrived) "Destination reached" else
+                                    NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
+                                    color = SGColors.White,
+                                    fontSize = if (compactNavHeader) 19.sp else 22.sp,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    lineHeight = if (compactNavHeader) 22.sp else 26.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                                session.street?.takeIf {
+                                    !session.arrived && it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
+                                        session.instruction, null).equals(it, ignoreCase = true)
+                                }?.let { currentStreet ->
+                                    Text("Current: $currentStreet", color = SGColors.Silver,
+                                        fontSize = if (compactNavHeader) 12.sp else 14.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                cue.roundaboutExit?.let { exit ->
+                                    Text("Roundabout exit $exit", color = SGColors.Gold,
+                                        fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                 }
                             }
                         }
@@ -203,7 +225,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 // Controls occupy the middle map area and scroll on shorter phones.
                 Column(
                     Modifier.align(Alignment.TopEnd).fillMaxHeight()
-                        .padding(top = 156.dp, bottom = 162.dp, end = 10.dp)
+                        .padding(top = topInset, bottom = bottomInset, end = 10.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
@@ -222,21 +244,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings = true }
                 }
 
-                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
+                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { showFuelStations = true },
-                        enabled = permitted && session.location != null,
-                        modifier = Modifier.width(74.dp).height(70.dp),
-                        contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = PremiumGold, contentColor = PremiumNavy)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Icon(Icons.Filled.LocalGasStation, contentDescription = "Nearby petrol stations",
-                                modifier = Modifier.size(27.dp))
-                            Text("Petrol", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
                     session.location?.takeIf { it.hasSpeed() }?.let { fix ->
                         Surface(color = SGColors.Card,
                             shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
@@ -250,13 +259,14 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
 
-                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .onSizeChanged { bottomPanelHeightPx = it.height }.padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             val remaining = session.remainingSeconds
@@ -265,10 +275,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 .atZone(ZoneId.of("Asia/Singapore"))
                                 .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
                             Column(Modifier.weight(1f)) {
-                                Text("ARRIVAL", color = SGColors.Silver, fontSize = 11.sp)
+                                Text("ARRIVAL", color = SGColors.Silver, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
-                                Text("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
-                                    color = SGColors.Silver, fontSize = 14.sp)
+                                NavigationRemainingSummary("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}")
                                 if (session.localTrafficVisible) {
                                     val level = session.trafficState.ahead
                                     val label = when (level) {
@@ -286,7 +295,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     fontWeight = FontWeight.Bold, fontSize = 26.sp,
                                     letterSpacing = 0.8.sp, maxLines = 1, softWrap = false,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(min = 114.dp)
+                                    modifier = Modifier.widthIn(min = if (compactNavHeader) 100.dp else 114.dp)
                                         .align(Alignment.CenterHorizontally))
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
@@ -356,7 +365,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
             )
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
-        if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
         if (showLocalTrafficConsent) {
             AlertDialog(
                 onDismissRequest = { showLocalTrafficConsent = false },
@@ -375,6 +383,42 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     TextButton(onClick = { showLocalTrafficConsent = false }) { Text("Cancel") }
                 }
             )
+        }
+    }
+
+    /** Chamfered yellow sign, shown only for a provider-supplied expressway exit. */
+    @Composable
+    private fun ExitRoadSign(number: String) {
+        val shape = remember {
+            GenericShape { size, _ ->
+                val c = minOf(size.height * 0.30f, size.width * 0.12f)
+                moveTo(c, 0f); lineTo(size.width - c, 0f); lineTo(size.width, c)
+                lineTo(size.width, size.height - c); lineTo(size.width - c, size.height)
+                lineTo(c, size.height); lineTo(0f, size.height - c); lineTo(0f, c); close()
+            }
+        }
+        Surface(color = Color(0xFFFFD21F), shape = shape) {
+            Text("EXIT $number", color = Color(0xFF111111),
+                fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                maxLines = 1, softWrap = false)
+        }
+    }
+
+    /** Keep KM and duration on the same line, reducing type only when needed
+     * on narrow displays or accessibility settings; never hide the duration. */
+    @Composable
+    private fun NavigationRemainingSummary(summary: String) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val measure = rememberTextMeasurer()
+            val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
+            val preferred = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            val measured = measure.measure(AnnotatedString(summary), style = preferred,
+                maxLines = 1, softWrap = false).size.width
+            val size = if (measured > 0 && widthPx < measured)
+                (17f * widthPx / measured).coerceIn(13f, 17f).sp else 17.sp
+            Text(summary, color = SGColors.Silver, fontSize = size,
+                fontWeight = FontWeight.Medium, maxLines = 2)
         }
     }
 
@@ -437,6 +481,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var shape: List<GpsPoint> = emptyList(); private set
     var location by mutableStateOf<Location?>(null); private set
     var instruction by mutableStateOf("Waiting for GPS…"); private set
+    var panelCue by mutableStateOf(NavigationPanelCue()); private set
+    private var routeSignMetadata: List<RouteSignMetadata> = emptyList()
     var turnMeters by mutableStateOf<Double?>(null); private set
     var remainingMeters by mutableStateOf<Double?>(null); private set
     var remainingSeconds by mutableStateOf<Double?>(null); private set
@@ -617,6 +663,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 shape = decodeNavigationGeometry(newRoute.geometry)
                 localTraffic.reset(shape, newRoute.distance, newRoute.duration)
                 trafficState = LocalTrafficState.EMPTY
+                routeSignMetadata = client.lastSignMetadata
+                panelCue = NavigationPanelCue()
+                turnMeters = null
                 route = newRoute
                 adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
                 remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
@@ -638,6 +687,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         instruction = next.maneuver.instruction?.takeIf { it.isNotBlank() }
             ?: current.step.bannerInstructions?.firstOrNull()?.primary?.text
             ?: listOfNotNull(next.maneuver.type?.toString()?.replace('_', ' '), next.maneuver.modifier?.toString()?.replace('_', ' ')).joinToString(" ").ifBlank { "Continue on the route" }
+        // The next SDK step, not GPS heading or a road number, drives the panel.
+        val nextIndex = p.stepIndex + if (current.nextStep != null) 1 else 0
+        panelCue = NavigationPanelSigns.cue(
+            next.maneuver.type?.toString(), next.maneuver.modifier?.toString(), instruction,
+            routeSignMetadata.getOrNull(nextIndex),
+            if (current.nextStep != null) routeSignMetadata.getOrNull(p.stepIndex) else null
+        )
         if (SystemClock.elapsedRealtime() - lastFix < 15_000 && !muted && speechReady) {
             val cue = current.step.voiceInstructions?.withIndex()?.lastOrNull {
                 turnMeters!! <= it.value.distanceAlongGeometry + 5 && !it.value.announcement.isNullOrBlank()

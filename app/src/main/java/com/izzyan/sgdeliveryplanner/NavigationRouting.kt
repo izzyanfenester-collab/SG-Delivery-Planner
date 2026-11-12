@@ -71,6 +71,8 @@ internal class ValhallaClient(
     private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS).callTimeout(20, TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
 ) {
+    var lastSignMetadata: List<RouteSignMetadata> = emptyList(); private set
+
     suspend fun route(origin: GpsPoint, destination: GpsPoint): DirectionsRoute {
         val request = Request.Builder().url(endpoint)
             .header("X-Client-Id", "runner-route-planning-personal")
@@ -82,7 +84,10 @@ internal class ValhallaClient(
                 response.use {
                     if (it.code == 429 || it.code in 400..499) throw RoutingRejected()
                     if (!it.isSuccessful) throw IOException("Routing service unavailable")
-                    return parseNavigationRoute(it.body?.string() ?: error("Empty response"), origin, destination)
+                    val json = it.body?.string() ?: error("Empty response")
+                    val parsed = parseNavigationRoute(json, origin, destination)
+                    lastSignMetadata = NavigationPanelSigns.metadata(json)
+                    return parsed
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: RoutingRejected) { throw IOException(ROUTE_UNAVAILABLE) }
