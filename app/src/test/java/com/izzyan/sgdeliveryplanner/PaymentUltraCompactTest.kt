@@ -8,19 +8,20 @@ import org.junit.Test
 /** Layout refinement must not alter the financial formulas or historical records. */
 class PaymentUltraCompactTest {
     @Test fun compactTargetsReduceBoxHeightsWhilePreservingReadableScaledRows() {
-        assertEquals(34f, PaymentDesignC.InputHeight.value, 0.01f)
-        assertTrue(PaymentDesignC.InputHeight.value < 48f * 0.75f)
-        assertEquals(34f, PaymentDesignC.HistoryRowHeight.value, 0.01f)
+        assertEquals(38f, PaymentDesignC.InputHeight.value, 0.01f)
+        assertTrue(PaymentDesignC.InputHeight.value < 48f)
+        assertEquals(44f, PaymentDesignC.HistoryRowHeight.value, 0.01f)
         assertTrue(PaymentDesignC.HistoryRowHeight.value < PaymentCompactLayout.HistoryRowMinHeight.value)
-        assertEquals(33f, PaymentDesignC.HistoryHeaderHeight.value, 0.01f)
-        assertEquals(44f, PaymentDesignC.MonthlyMetricHeight.value, 0.01f)
+        assertEquals(40f, PaymentDesignC.HistoryHeaderHeight.value, 0.01f)
+        assertEquals(52f, PaymentDesignC.MonthlyMetricHeight.value, 0.01f)
         assertEquals(4f, PaymentDesignC.CardGap.value, 0.01f)
         assertEquals(3f, PaymentDesignC.InsideGap.value, 0.01f)
         assertEquals(6f, PaymentDesignC.CardPadding.value, 0.01f)
         assertEquals(46f, PaymentDesignC.ControlHeight.value, 0.01f)
         assertEquals(5, PaymentCompactLayout.HistoryVisibleRows)
-        assertEquals(34f, PaymentDesignC.historyRowHeight(1.0f).value, 0.01f)
-        assertEquals(44f, PaymentDesignC.historyRowHeight(1.25f).value, 0.01f)
+        assertEquals(44f, PaymentDesignC.historyRowHeight(1.0f).value, 0.01f)
+        assertEquals(54f, PaymentDesignC.historyRowHeight(1.25f).value, 0.01f)
+        assertEquals(82f, PaymentDesignC.historyRowHeight(2.0f).value, 0.01f)
     }
 
     @Test fun dashboardAlwaysUsesTwoByTwoMonthlyKpis() {

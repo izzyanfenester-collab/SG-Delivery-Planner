@@ -33,6 +33,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.BoxWithConstraints
+import android.content.res.Configuration
+import android.view.ContextThemeWrapper
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -362,8 +370,8 @@ private fun displayPaymentDate(value: String): String = runCatching {
 /** Compact surfaces are local to Payment and do not change any other screen. */
 @Composable
 private fun PaymentSectionTitle(title: String, modifier: Modifier = Modifier) {
-    Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 16.sp,
-        lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
+    Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 20.sp,
+        lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
@@ -479,11 +487,12 @@ private fun PaymentTableRow(
     val textColor = if (emphasized) SGColors.SelectedGold else SGColors.White
     val gesture = if (onLongClick != null) Modifier.combinedClickable(
         onClick = {}, onLongClick = onLongClick) else Modifier
+    val rowHeight = fixedRowHeight ?: if (isHeader)
+        PaymentDesignC.historyHeaderHeight(LocalConfiguration.current.fontScale)
+        else PaymentDesignC.historyRowHeight(LocalConfiguration.current.fontScale)
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 0.5.dp)
+        Modifier.fillMaxWidth().height(rowHeight).padding(vertical = 0.5.dp)
             .then(gesture)
-            .heightIn(min = fixedRowHeight ?: if (isHeader) PaymentDesignC.HistoryHeaderHeight
-                else PaymentDesignC.HistoryRowHeight)
             .border(BorderStroke(0.6.dp, SGColors.Divider.copy(alpha = 0.65f)),
                 RoundedCornerShape(7.dp))
             .background(Color.Transparent, RoundedCornerShape(7.dp))
@@ -491,17 +500,27 @@ private fun PaymentTableRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         listOf(dateOrMonth, totalPayment, grandTotal, nettEarning).forEachIndexed { index, value ->
-            Text(
-                if (isHeader) paymentTableHeaderValue(value) else value,
-                modifier = Modifier.weight(if (index == 0) 1.07f else if (index == 1) 1.07f else 1f),
-                color = if (!isHeader && index == 3) SGColors.SelectedGold else textColor,
-                fontSize = if (isHeader) 10.5.sp else 12.5.sp,
-                lineHeight = if (isHeader) 13.sp else 16.sp,
-                fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium,
-                softWrap = true,
-                maxLines = if (isHeader) 2 else Int.MAX_VALUE,
-                textAlign = paymentTableAlignment(index)
-            )
+            val text = if (isHeader) paymentTableHeaderValue(value) else value
+            val weight = if (emphasized) FontWeight.Bold else FontWeight.Medium
+            val baseSize = if (isHeader) 13.5.sp else 15.5.sp
+            BoxWithConstraints(
+                Modifier.weight(if (index == 0) 1.07f else if (index == 1) 1.07f else 1f)
+            ) {
+                val measurer = rememberTextMeasurer()
+                val px = with(LocalDensity.current) { maxWidth.toPx() }.coerceAtLeast(1f)
+                // Fit a monetary value to its column rather than dropping digits.
+                // Dates and headings can wrap naturally into two lines.
+                val width = if (!isHeader && index != 0) measurer.measure(
+                    AnnotatedString(text), style = TextStyle(fontSize = baseSize, fontWeight = weight),
+                    maxLines = 1, softWrap = false
+                ).size.width else 0
+                val size = if (width > px) (baseSize.value * px / width).coerceAtLeast(12f).sp else baseSize
+                Text(text, modifier = Modifier.fillMaxWidth(),
+                    color = if (!isHeader && index == 3) SGColors.SelectedGold else textColor,
+                    fontSize = size, lineHeight = if (isHeader) 16.sp else 19.sp,
+                    fontWeight = weight, softWrap = true, maxLines = 2,
+                    textAlign = paymentTableAlignment(index))
+            }
         }
     }
 }
@@ -547,7 +566,7 @@ private fun PaymentEditDialog(
                 )
                 OutlinedButton(
                     onClick = {
-                        deliveryDatePicker(context, parsedDate ?: LocalDate.now()) {
+                        paymentDatePicker(context, parsedDate ?: LocalDate.now()) {
                             date = it.toString()
                         }.show()
                     }, modifier = Modifier.fillMaxWidth()
@@ -603,8 +622,47 @@ private fun PaymentEditDialog(
     )
 }
 
+/** Payment-only type scale; all other pages and the delivery report retain their theme. */
+internal const val PAYMENT_FONT_SCALE = 1.25f
+internal fun paymentTypography(original: Typography): Typography {
+    fun TextStyle.enlarged() = copy(
+        fontSize = (fontSize.value * PAYMENT_FONT_SCALE).sp,
+        lineHeight = (lineHeight.value * PAYMENT_FONT_SCALE).sp
+    )
+    return original.copy(
+        headlineLarge = original.headlineLarge.enlarged(),
+        headlineMedium = original.headlineMedium.enlarged(),
+        headlineSmall = original.headlineSmall.enlarged(),
+        titleLarge = original.titleLarge.enlarged(),
+        titleMedium = original.titleMedium.enlarged(),
+        titleSmall = original.titleSmall.enlarged(),
+        bodyLarge = original.bodyLarge.enlarged(),
+        bodyMedium = original.bodyMedium.enlarged(),
+        bodySmall = original.bodySmall.enlarged(),
+        labelLarge = original.labelLarge.enlarged(),
+        labelMedium = original.labelMedium.enlarged(),
+        labelSmall = original.labelSmall.enlarged()
+    )
+}
+
+private fun paymentDatePicker(context: Context, date: LocalDate, onSelected: (LocalDate) -> Unit) =
+    deliveryDatePicker(ContextThemeWrapper(context, context.theme).apply {
+        applyOverrideConfiguration(Configuration(context.resources.configuration).apply {
+            fontScale *= PAYMENT_FONT_SCALE
+        })
+    }, date, onSelected)
+
 @Composable
 fun PaymentScreen(vm: PlannerViewModel) {
+    val original = MaterialTheme.typography
+    val larger = remember(original) { paymentTypography(original) }
+    MaterialTheme(typography = larger) {
+        PaymentScreenContent(vm, original)
+    }
+}
+
+@Composable
+private fun PaymentScreenContent(vm: PlannerViewModel, reportTypography: Typography) {
     val savedRoutes by vm.history.collectAsState(initial = emptyList())
     val matchingReports = remember(vm.route, savedRoutes) {
         val active = listOfNotNull(vm.route)
@@ -671,7 +729,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(PaymentDesignC.CardGap)
     ) {
         DesignCOverview(displayPaymentDate(paymentDate.toString())) {
-            deliveryDatePicker(context, paymentDate) { selected ->
+            paymentDatePicker(context, paymentDate) { selected ->
                 manualPaymentDate = selected.toString()
             }.show()
         }
@@ -741,10 +799,10 @@ fun PaymentScreen(vm: PlannerViewModel) {
             saveEnabled = recordToSave != null && !vm.busy
         )
 
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            PaymentSectionTitle("Payment History (RM)", Modifier.weight(1f))
+        Column(Modifier.fillMaxWidth()) {
+            PaymentSectionTitle("Payment History (RM)")
             Text("Long-press to edit/delete", color = SGColors.Silver,
-                fontSize = 11.sp, lineHeight = 15.sp)
+                fontSize = 14.sp, lineHeight = 17.sp)
         }
         PaymentGlassPanel {
             PaymentTableRow("Date", "Total\nPayment", "Grand\nTotal",
@@ -778,11 +836,13 @@ fun PaymentScreen(vm: PlannerViewModel) {
             onManageMonth = { selectedMonth = dashboardMonth }
         )
         Text("Hold month to manage · arrows: Jan–Dec",
-            color = SGColors.Silver, fontSize = 10.5.sp, lineHeight = 13.sp)
+            color = SGColors.Silver, fontSize = 13.5.sp, lineHeight = 16.sp)
     }
 
     previewReport?.let { report ->
-        DeliverySummaryReportPreview(report, onClose = { previewReport = null })
+        MaterialTheme(typography = reportTypography) {
+            DeliverySummaryReportPreview(report, onClose = { previewReport = null })
+        }
     }
 
     editingExpense?.let { expense ->
@@ -799,7 +859,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
             onDismissRequest = { editingExpense = null },
             title = { Text("Edit ${expense.title} (RM)") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Current amount: RM " + when (expense) {
                         PaymentExpense.PETROL -> petrol
                         PaymentExpense.TOUCH_AND_GO -> touchAndGo
@@ -843,7 +903,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
             onDismissRequest = { showEditTax = false },
             title = { Text("Edit Tax (RM)") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Payment date: ${displayPaymentDate(paymentDate.toString())}",
                         style = MaterialTheme.typography.bodySmall)
                     Text(
@@ -880,7 +940,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 ) { Text("Save") }
             },
             dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
                         if (taxOverrideLedger.resetToReport(paymentDate)) {
                             taxOverrides = taxOverrideLedger.read()
@@ -943,7 +1003,7 @@ fun PaymentScreen(vm: PlannerViewModel) {
                 }
             },
             dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = { selectedRecord = null; deletionPending = target }, enabled = !vm.busy) {
                         Text("Delete", color = MaterialTheme.colorScheme.error)
                     }
