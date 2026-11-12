@@ -81,10 +81,11 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
     navigationDestination(plan)?.let { builtInNavigationIntent(context, it) }
 
 /** Single destination snapshot; the activity gets its origin from live device GPS. */
-internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
+internal fun builtInNavigationIntent(context: Context, stop: Place, freeNavigation: Boolean = false): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
+        .putExtra("free_navigation", freeNavigation)
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
 class BuiltInNavigationActivity : ComponentActivity() {
@@ -96,13 +97,13 @@ class BuiltInNavigationActivity : ComponentActivity() {
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop)
+                NavigationContent(stop, intent.getBooleanExtra("free_navigation", false))
             }
         }
     }
 
     @Composable
-    private fun NavigationContent(stop: Place) {
+    private fun NavigationContent(stop: Place, freeNavigation: Boolean) {
         val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
@@ -312,11 +313,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                             Column(horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = SGColors.SelectedGold,
-                                    fontWeight = FontWeight.Bold, fontSize = 26.sp,
-                                    letterSpacing = 0.8.sp, maxLines = 1, softWrap = false,
+                                Text(if (freeNavigation) stop.address.ifBlank { "Destination" } else stop.postal, color = SGColors.SelectedGold,
+                                    fontWeight = FontWeight.Bold, fontSize = if (freeNavigation) 15.sp else 26.sp,
+                                    letterSpacing = if (freeNavigation) 0.sp else 0.8.sp, maxLines = if (freeNavigation) 2 else 1, softWrap = freeNavigation,
+                                    overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(min = if (compactNavHeader) 100.dp else 114.dp)
+                                    modifier = Modifier.widthIn(min = if (compactNavHeader) 100.dp else 114.dp, max = if (freeNavigation) 150.dp else 200.dp)
                                         .align(Alignment.CenterHorizontally))
                                 FilledTonalButton(onClick = { finish() },
                                     colors = ButtonDefaults.filledTonalButtonColors(
@@ -325,7 +327,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null,
                                         modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(5.dp))
-                                    Text("Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(if (freeNavigation) "Map" else "Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

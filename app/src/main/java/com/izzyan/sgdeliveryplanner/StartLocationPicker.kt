@@ -83,7 +83,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 Text(selected.address, color = LocationMuted,
                     style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
-            if (selected.postalCode.isNotBlank()) Text("Singapore " + selected.postalCode,
+            if (selected.postalCode.isNotBlank()) Text(locationPostalLabel(selected.postalCode),
                 color = LocationMuted, style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -118,7 +118,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 if (destination != null) {
                     if (destination.address.isNotBlank()) Text(destination.address,
                         color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                    if (destination.postalCode.isNotBlank()) Text("Singapore " + destination.postalCode,
+                    if (destination.postalCode.isNotBlank()) Text(locationPostalLabel(destination.postalCode),
                         color = LocationMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -205,7 +205,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                         } else {
                             Text("Saved Home: ${vm.savedHome!!.displayName}", color = LocationMuted)
                             if (vm.savedHome!!.postalCode.isNotBlank())
-                                Text("Singapore " + vm.savedHome!!.postalCode, color = LocationMuted,
+                                Text(locationPostalLabel(vm.savedHome!!.postalCode), color = LocationMuted,
                                     style = MaterialTheme.typography.bodySmall)
                         }
                         LocationSearchPanel("Start location or postal code") { location ->
@@ -308,11 +308,12 @@ private fun parseLocationMatches(response: JsonObject): List<StartLocation> {
 }
 
 @Composable
-private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -> Unit) {
+internal fun LocationSearchPanel(placeholder: String, initialCountry: String = "SG", onChosen: (StartLocation) -> Unit) {
     val context = LocalContext.current
     val api = remember(context) { OfflinePostalSearchApi(context) }
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf(initialCountry) }
     var results by remember { mutableStateOf<List<StartLocation>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -322,7 +323,7 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
     fun searchLocation() {
         val term = query.trim()
         if (term.length < 3) {
-            message = "Enter a place name, address or 6-digit Singapore postal code."
+            message = "Enter a place name, address or postal code."
             return
         }
         searchJob?.cancel()
@@ -333,13 +334,14 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
             message = ""
             results = emptyList()
             try {
-                val response = api.search(term)
-                results = parseLocationMatches(response)
-                if (results.isEmpty()) message = "No matching Singapore locations. Try a postal code or more specific address."
+                results = if (country == "SG") parseLocationMatches(api.search(term))
+                    else searchMalaysiaLocations(context, term)
+                if (results.isEmpty()) message = "No matching locations. Try a more specific address or choose on the map."
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                message = "Unable to search the local postal database. You can still choose on the map."
+                message = if (country == "SG") "Unable to search the Singapore postal database. You can still choose on the map."
+                    else "Malaysia address search unavailable. Check your internet connection or choose on the map."
             } finally {
                 if (activeSequence == searchSequence) searching = false
             }
@@ -347,6 +349,16 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("SG" to "Singapore", "MY" to "Malaysia").forEach { (code, label) ->
+                FilterChip(selected = country == code, onClick = {
+                    if (country != code) {
+                        searchJob?.cancel(); searchSequence++; country = code
+                        searching = false; results = emptyList(); message = ""
+                    }
+                }, label = { Text(label) })
+            }
+        }
         OutlinedTextField(
             value = query,
             onValueChange = {
@@ -384,7 +396,7 @@ private fun LocationSearchPanel(placeholder: String, onChosen: (StartLocation) -
                 if (result.address.isNotBlank() && result.address != result.displayName)
                     Text(result.address, color = LocationMuted, style = MaterialTheme.typography.bodySmall)
                 if (result.postalCode.isNotBlank())
-                    Text("Singapore " + result.postalCode, color = PremiumGold,
+                    Text(locationPostalLabel(result.postalCode), color = PremiumGold,
                         style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -433,7 +445,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
                 val readable = address.getAddressLine(0).orEmpty().replace('\n', ' ').trim()
                 selected = point.copy(
                     address = readable,
-                    postalCode = address.postalCode.orEmpty().trim().takeIf { it.matches(Regex("[0-9]{6}")) }.orEmpty()
+                    postalCode = address.postalCode.orEmpty().trim().takeIf { it.matches(Regex("[0-9]{5,6}")) }.orEmpty()
                 )
             }
         } finally { lookingUpAddress = false }
@@ -444,7 +456,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(if (choosingEnd) "Choose your end location" else "Choose your start location", style = MaterialTheme.typography.headlineSmall)
-        Text("Find a place by name, street address, or six-digit Singapore postal code.",
+        Text("Find a place by name, street address, or Singapore / Malaysia postal code.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         LocationSearchPanel(if (choosingEnd) "End location or postal code" else "Start location or postal code") {
             selected = it
@@ -463,7 +475,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
                 else {
                     Text(point.displayName, color = Color.White, style = MaterialTheme.typography.titleLarge)
                     if (point.postalCode.isNotBlank())
-                        Text("Singapore " + point.postalCode, color = LocationMuted)
+                        Text(locationPostalLabel(point.postalCode), color = LocationMuted)
                     Text(if (lookingUpAddress) "Finding the address…" else point.address.ifBlank {
                         "Map point selected. You can confirm this location."
                     }, color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
@@ -485,7 +497,8 @@ fun StartLocationPicker(vm: PlannerViewModel) {
 }
 
 @Composable
-private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, onChoose: (GeoPoint) -> Unit) {
+internal fun LocationMap(selected: StartLocation?, initialCenter: StartLocation,
+    onChoose: (GeoPoint) -> Unit, routePoints: List<GpsPoint> = emptyList()) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val latestChoose by rememberUpdatedState(onChoose)
@@ -533,6 +546,11 @@ private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, 
         }
     }
     val lastFocused = remember(map) { mutableStateOf<Pair<Double, Double>?>(null) }
+    val previewLine = remember(map) { org.osmdroid.views.overlay.Polyline().apply {
+        outlinePaint.color = android.graphics.Color.rgb(24, 104, 218)
+        outlinePaint.strokeWidth = 8f
+    } }
+    val lastPreview = remember(map) { mutableStateOf<List<GpsPoint>>(emptyList()) }
     AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().height(340.dp), update = { view ->
         if (selected == null) view.overlays.remove(marker)
         else {
@@ -545,6 +563,16 @@ private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, 
             marker.title = selected.displayName
             marker.snippet = selected.address.ifBlank { locationCoordinates(selected) }
             if (!view.overlays.contains(marker)) view.overlays.add(marker)
+        }
+        if (lastPreview.value != routePoints) {
+            lastPreview.value = routePoints
+            view.overlays.remove(previewLine)
+            if (routePoints.size >= 2) {
+                val points = routePoints.map { GeoPoint(it.lat, it.lon) }
+                previewLine.setPoints(points)
+                view.overlays.add(1.coerceAtMost(view.overlays.size), previewLine)
+                view.post { view.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(points), true, 50) }
+            }
         }
         view.invalidate()
     })

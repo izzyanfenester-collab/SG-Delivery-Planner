@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Navigation
@@ -153,6 +154,10 @@ fun App(vm: PlannerViewModel) {
                                     contentDescription = "Settings", tint = SGColors.White,
                                     modifier = Modifier.size(SGDimensions.Icon))
                             }
+                            SGIconButton(onClick = { vm.screen = "FreeNavigation" }, enabled = !vm.busy) {
+                                Icon(Icons.Outlined.Map, contentDescription = "Free Navigation",
+                                    tint = SGColors.White, modifier = Modifier.size(SGDimensions.Icon))
+                            }
                             ChatGptHeaderButton()
                         }
                     }
@@ -160,7 +165,7 @@ fun App(vm: PlannerViewModel) {
             }
         },
         bottomBar = {
-            if (vm.screen != "LocationPicker") {
+            if (vm.screen !in setOf("LocationPicker", "FreeNavigation")) {
                 SGBottomNavigation(selected = vm.screen, enabled = !vm.busy) { destination ->
                     vm.screen = destination
                 }
@@ -206,6 +211,7 @@ fun App(vm: PlannerViewModel) {
                     "History" -> History(vm)
                     "Payment" -> PaymentScreen(vm)
                     "LocationPicker" -> StartLocationPicker(vm)
+                    "FreeNavigation" -> FreeNavigationScreen()
                     else -> {
                         val p = vm.route
                         if (p == null) {
