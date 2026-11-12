@@ -6,6 +6,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
@@ -28,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -53,6 +60,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -372,6 +382,62 @@ private fun displayPaymentDate(value: String): String = runCatching {
 private fun PaymentSectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(title, modifier = modifier, color = SGColors.Gold, fontSize = 20.sp,
         lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
+}
+
+/** Ephemeral presentation state only; never touches the saved payment ledger. */
+internal class PaymentHistoryExpansionState {
+    var expanded by mutableStateOf(false)
+        private set
+
+    fun toggle() {
+        expanded = !expanded
+    }
+}
+
+/** The entire history header toggles the existing table. The animated body
+ * is removed from layout when collapsed; scroll state is owned by the page. */
+@Composable
+private fun PaymentHistorySection(
+    expansion: PaymentHistoryExpansionState,
+    content: @Composable () -> Unit
+) {
+    val expanded = expansion.expanded
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (expanded) "Minimize payment history" else "Maximize payment history",
+                    onClick = expansion::toggle
+                )
+                .padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PaymentSectionTitle("Payment History (RM)", Modifier.weight(1f))
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = SGColors.SelectedGold,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(animationSpec = tween(220), expandFrom = Alignment.Top),
+            exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Top)
+        ) {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(PaymentDesignC.CardGap)
+            ) {
+                Text("Long-press to edit/delete", color = SGColors.Silver,
+                    fontSize = 14.sp, lineHeight = 17.sp)
+                content()
+            }
+        }
+    }
 }
 
 @Composable
@@ -711,6 +777,8 @@ private fun PaymentScreenContent(vm: PlannerViewModel, reportTypography: Typogra
     var selectedMonth by remember { mutableStateOf<Int?>(null) }
     var dashboardMonth by rememberSaveable { mutableStateOf(vm.deliveryDate.monthValue) }
     var previewReport by remember { mutableStateOf<Plan?>(null) }
+    // Page-local state: reopening Payment creates a fresh minimized section.
+    val paymentHistoryExpansion = remember { PaymentHistoryExpansionState() }
     val paymentHistoryScrollState = rememberScrollState()
     val historyRowHeight = PaymentDesignC.historyRowHeight(
         androidx.compose.ui.platform.LocalConfiguration.current.fontScale
@@ -799,26 +867,25 @@ private fun PaymentScreenContent(vm: PlannerViewModel, reportTypography: Typogra
             saveEnabled = recordToSave != null && !vm.busy
         )
 
-        Column(Modifier.fillMaxWidth()) {
-            PaymentSectionTitle("Payment History (RM)")
-            Text("Long-press to edit/delete", color = SGColors.Silver,
-                fontSize = 14.sp, lineHeight = 17.sp)
-        }
-        PaymentGlassPanel {
-            PaymentTableRow("Date", "Total\nPayment", "Grand\nTotal",
-                "Nett\nEarning", isHeader = true)
-            Column(
-                Modifier.heightIn(max = historyRowHeight * VISIBLE_PAYMENT_HISTORY_ROWS)
-                    .verticalScroll(paymentHistoryScrollState)
-            ) {
-                vm.paymentRecords.indices.reversed().forEach { index ->
-                    val record = vm.paymentRecords[index]
-                    PaymentTableRow(
-                        displayPaymentDate(record.date), record.totalPaymentRm,
-                        record.grandTotalPaymentRm, financialsForRecord(record).nettEarningRm,
-                        onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
-                        fixedRowHeight = historyRowHeight
-                    )
+        PaymentHistorySection(
+            expansion = paymentHistoryExpansion
+        ) {
+            PaymentGlassPanel {
+                PaymentTableRow("Date", "Total\nPayment", "Grand\nTotal",
+                    "Nett\nEarning", isHeader = true)
+                Column(
+                    Modifier.heightIn(max = historyRowHeight * VISIBLE_PAYMENT_HISTORY_ROWS)
+                        .verticalScroll(paymentHistoryScrollState)
+                ) {
+                    vm.paymentRecords.indices.reversed().forEach { index ->
+                        val record = vm.paymentRecords[index]
+                        PaymentTableRow(
+                            displayPaymentDate(record.date), record.totalPaymentRm,
+                            record.grandTotalPaymentRm, financialsForRecord(record).nettEarningRm,
+                            onLongClick = { selectedRecord = PaymentRecordRef(index, record) },
+                            fixedRowHeight = historyRowHeight
+                        )
+                    }
                 }
             }
         }
