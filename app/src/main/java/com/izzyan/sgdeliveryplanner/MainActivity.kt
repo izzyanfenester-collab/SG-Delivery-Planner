@@ -1132,6 +1132,18 @@ fun ScheduleTable(p: Plan) {
 @Composable
 fun Summary(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
+    var showEndNavigation by remember(p.id) { mutableStateOf(false) }
+    var failedEndChoice by remember(p.id) { mutableStateOf<NavigationChoice?>(null) }
+    if (showEndNavigation) NavigationChooser(
+        onDismiss = { showEndNavigation = false },
+        onChoose = { choice, saveDefault ->
+            val launched = vm.navigationPreferences.launchEnd(context, p, choice, saveDefault)
+            showEndNavigation = !launched
+            failedEndChoice = if (launched) null else choice
+        },
+        enabled = !vm.busy,
+        initialSelection = if (failedEndChoice != null) NavigationChoice.BUILT_IN else vm.navigationPreferences.default
+    )
     val summary = deliverySummary(p)
     var cash by rememberSaveable(p.id, p.cashOnHand) { mutableStateOf(p.cashOnHand) }
     var tax by rememberSaveable(p.id, p.tax) { mutableStateOf(p.tax) }
@@ -1194,7 +1206,17 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 p.summarySavedAt?.let { Text("Summary saved ${time(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        if (!p.endAtLastDelivery) SecondaryAction("Navigate to End: ${p.endDisplayName}", { navigate(context, p.endPlace) }, enabled = !vm.busy)
+        SecondaryAction("Navigate to End: ${p.endDisplayName}", {
+            val choice = vm.navigationPreferences.default
+            if (choice == null) {
+                failedEndChoice = null
+                showEndNavigation = true
+            } else {
+                val launched = vm.navigationPreferences.launchEnd(context, p, choice)
+                failedEndChoice = if (launched) null else choice
+                showEndNavigation = !launched
+            }
+        }, enabled = !vm.busy)
         SecondaryAction("View full route and schedule", { vm.screen = "Route" }, enabled = !vm.busy)
         val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
         if (remaining.isNotEmpty()) {

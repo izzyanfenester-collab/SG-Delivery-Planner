@@ -76,11 +76,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = navigationDestination(plan)?.let { stop ->
+internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
+    navigationDestination(plan)?.let { builtInNavigationIntent(context, it) }
+
+/** Single destination snapshot; the activity gets its origin from live device GPS. */
+internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
-}
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
 class BuiltInNavigationActivity : ComponentActivity() {
