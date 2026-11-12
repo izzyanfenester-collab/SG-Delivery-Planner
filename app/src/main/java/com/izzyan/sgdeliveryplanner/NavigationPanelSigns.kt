@@ -23,7 +23,8 @@ internal enum class NavigationSign(val drawable: Int) {
 internal data class NavigationPanelCue(
     val sign: NavigationSign = NavigationSign.STRAIGHT,
     val expresswayExit: String? = null,
-    val roundaboutExit: Int? = null
+    val roundaboutExit: Int? = null,
+    val mirrorHorizontally: Boolean = false
 )
 
 /** Preserve the provider's explicit exit fields even if the SDK model omits them. */
@@ -81,9 +82,20 @@ internal object NavigationPanelSigns {
             right -> r
             else -> NavigationSign.STRAIGHT
         }
+        val uTurnToken = Regex("\\bu\\s*turn\\b")
+        val isUTurn = uTurnToken.containsMatchIn(m) || uTurnToken.containsMatchIn(t) ||
+            uTurnToken.containsMatchIn(words)
+        // The supplied arrow always turns right. Mirror only an explicit left U-turn,
+        // never an ordinary left turn or a street name containing "Left".
+        val explicitLeftUTurn = isUTurn && (
+            (uTurnToken.containsMatchIn(m) && "left" in m) ||
+                (uTurnToken.containsMatchIn(t) && ("left" in t || m == "left" || m == "sharp left")) ||
+                Regex("^(?:(?:make|perform|take)\\s+(?:a\\s+|the\\s+)?)?left\\s+u\\s*turn\\b|\\bu\\s*turn\\s+(?:to\\s+the\\s+|to\\s+|on\\s+the\\s+)left\\b")
+                    .containsMatchIn(words)
+            )
         val sign = when {
             t == "arrive" || t == "arrival" || (t.isBlank() && "destination" in words && "arriv" in words) -> NavigationSign.ARRIVE
-            m in setOf("uturn", "u turn") || t in setOf("uturn", "u turn") || "u turn" in words -> NavigationSign.UTURN
+            isUTurn -> NavigationSign.UTURN
             round && ("exit" in t || t == "roundabout turn") -> NavigationSign.ROUNDABOUT_EXIT
             round -> NavigationSign.ROUNDABOUT
             isOffRamp(t) -> sided(NavigationSign.EXIT_LEFT, NavigationSign.EXIT_RIGHT)
@@ -109,7 +121,7 @@ internal object NavigationPanelSigns {
                 ?: ordinalExit(metadata?.instruction ?: instruction)
                 ?: current?.takeIf { isRoundabout(normalized(it.type)) }?.roundaboutExit
         } else null
-        return NavigationPanelCue(sign, exit, roundExit)
+        return NavigationPanelCue(sign, exit, roundExit, sign == NavigationSign.UTURN && explicitLeftUTurn)
     }
 
     private fun JsonObject.text(key: String): String? =
@@ -158,4 +170,19 @@ internal object NavigationPanelSigns {
                 explicitNumber, roundNumber, bannerExit)
         }
     }.getOrDefault(emptyList())
+}
+
+/** Responsive top-panel sizing only; map marker and bottom panel are not affected. */
+internal object NavigationPanelSizing {
+    const val EXIT_FONT_SP = 18f
+    const val EXIT_MAX_WIDTH_FRACTION = 0.58f
+    fun directionIconDp(widthDp: Int): Int = when {
+        widthDp < 385 -> 72
+        widthDp < 430 -> 80
+        else -> 88
+    }
+    fun fitTextSp(preferred: Float, availablePx: Float, measuredPx: Int): Float =
+        if (measuredPx > 0 && availablePx < measuredPx)
+            (preferred * availablePx.coerceAtLeast(1f) / measuredPx).coerceAtMost(preferred)
+        else preferred
 }
