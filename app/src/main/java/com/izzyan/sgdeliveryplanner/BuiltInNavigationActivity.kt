@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -105,7 +104,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
         var showCameras by remember { mutableStateOf(false) }
-        var showFuelStations by remember { mutableStateOf(false) }
         var showLocalTrafficConsent by remember { mutableStateOf(false) }
         var showGpsSettings by remember { mutableStateOf(false) }
         val mapAppearanceStore = remember {
@@ -248,19 +246,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { showFuelStations = true },
-                        enabled = permitted && session.location != null,
-                        modifier = Modifier.width(74.dp).height(70.dp),
-                        contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = PremiumGold, contentColor = PremiumNavy)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Icon(Icons.Filled.LocalGasStation, contentDescription = "Nearby petrol stations",
-                                modifier = Modifier.size(27.dp))
-                            Text("Petrol", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
                     session.location?.takeIf { it.hasSpeed() }?.let { fix ->
                         Surface(color = SGColors.Card,
                             shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
@@ -380,7 +365,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
             )
         }
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
-        if (showFuelStations) FuelStationDialog(session) { showFuelStations = false }
         if (showLocalTrafficConsent) {
             AlertDialog(
                 onDismissRequest = { showLocalTrafficConsent = false },
