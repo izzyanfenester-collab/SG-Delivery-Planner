@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -131,12 +132,23 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
         val compactNavHeader = LocalConfiguration.current.screenWidthDp < 385
+        // Measure the real opaque panels, including wrapping road names and
+        // accessibility font scales. Controls fit between them on small phones.
+        var topPanelHeightPx by remember { mutableIntStateOf(0) }
+        var bottomPanelHeightPx by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        val topInset = if (topPanelHeightPx > 0)
+            with(density) { topPanelHeightPx.toDp() } + 6.dp else 156.dp
+        val bottomInset = if (bottomPanelHeightPx > 0)
+            with(density) { bottomPanelHeightPx.toDp() } + 6.dp else 162.dp
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
                 NavigationMap(session, Modifier.matchParentSize(), permitted, mapAppearance)
 
-                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                    .onSizeChanged { topPanelHeightPx = it.height }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
@@ -215,7 +227,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 // Controls occupy the middle map area and scroll on shorter phones.
                 Column(
                     Modifier.align(Alignment.TopEnd).fillMaxHeight()
-                        .padding(top = 156.dp, bottom = 162.dp, end = 10.dp)
+                        .padding(top = topInset, bottom = bottomInset, end = 10.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
@@ -234,7 +246,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings = true }
                 }
 
-                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 143.dp),
+                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { showFuelStations = true },
                         enabled = permitted && session.location != null,
@@ -262,7 +274,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
 
-                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .onSizeChanged { bottomPanelHeightPx = it.height }.padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
