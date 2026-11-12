@@ -66,8 +66,15 @@ internal object NavigationPanelSigns {
         val t = normalized(metadata?.type ?: type)
         val m = normalized(metadata?.modifier ?: modifier)
         val words = normalized(metadata?.instruction ?: instruction)
-        val left = "left" in m || (m.isBlank() && "left" in words)
-        val right = "right" in m || (m.isBlank() && "right" in words)
+        // Trust structured modifiers first. When a provider omits one, use
+        // only explicit directional verbs, not a word inside a street name.
+        fun explicitSide(side: String): Boolean =
+            Regex("^(?:turn|bear|keep|fork|merge|take|exit|ramp)\\s+(?:the\\s+)?(?:(?:slight|sharp)(?:ly)?\\s+)?$side\\b")
+                .containsMatchIn(words) ||
+            Regex("\\b(?:exit|ramp|merge|fork)\\b[^.]{0,55}\\bon the $side\\b")
+                .containsMatchIn(words)
+        val left = "left" in m || (m.isBlank() && (t == "keep left" || explicitSide("left")))
+        val right = "right" in m || (m.isBlank() && (t == "keep right" || explicitSide("right")))
         val round = isRoundabout(t) || (t.isBlank() && ("roundabout" in words || "rotary" in words))
         fun sided(l: NavigationSign, r: NavigationSign) = when {
             left -> l

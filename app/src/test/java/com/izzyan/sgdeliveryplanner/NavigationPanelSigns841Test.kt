@@ -60,6 +60,17 @@ class NavigationPanelSigns841Test {
             RouteSignMetadata(exitNumber = "7")).expresswayExit)
     }
 
+    @Test fun missingModifierNeverInfersDirectionFromStreetName() {
+        assertEquals(NavigationSign.STRAIGHT,
+            NavigationPanelSigns.cue("depart", null, "Drive on Right Road").sign)
+        assertEquals(NavigationSign.KEEP_LEFT,
+            NavigationPanelSigns.cue("keep left", null, null).sign)
+        assertEquals(NavigationSign.EXIT_RIGHT,
+            NavigationPanelSigns.cue("off ramp", null, "Take the exit on the right").sign)
+        assertEquals(NavigationSign.TURN_LEFT,
+            NavigationPanelSigns.cue("turn", null, "Turn left onto Right Road").sign)
+    }
+
     @Test fun roundaboutUsesOrdinalNotExpresswayBadge() {
         val cue = NavigationPanelSigns.cue("roundabout", "left", "At the roundabout, take the 3rd exit")
         assertEquals(NavigationSign.ROUNDABOUT, cue.sign)

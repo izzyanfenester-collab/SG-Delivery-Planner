@@ -56,6 +56,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          latest_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/feature/build-841-navigation-signs-testing" --jq .object.sha)"
+          if [ "$GITHUB_SHA" != "$latest_sha" ]; then
+            echo "Skipping obsolete testing APK; a newer #841 commit exists."
+            exit 0
+          fi
           tag=v1.4.29-b841-testing
           asset="$RUNNER_TEMP/SG-Delivery-B841-Navigation-Signs-Testing.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$asset"
