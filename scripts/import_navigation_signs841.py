@@ -1,42 +1,19 @@
-# Original artwork from user-supplied SG_Delivery_GPS_21_Direction_Icons.zip.
-# Reproduce the original SVG sources and downsample the 2048px raster to 256px.
-# All 21 PNGs are generated once and committed to drawable-nodpi.
+# Exact original 21 SVG files from SG_Delivery_GPS_21_Direction_Icons.zip.
+# Source compressed losslessly; render original 2048 pixels then downsample to
+# 256 pixels for 64dp at xxxhdpi. PNG transparency and artwork unchanged.
+import base64, gzip, json
 from pathlib import Path
 from io import BytesIO
 import cairosvg
 from PIL import Image
-import re
 
-BASE = '<path d="M 256 30 L 482 256 L 256 482 L 30 256 Z" fill="#FFD21F" stroke="#FFD21F" stroke-width="3" stroke-linejoin="round"/><path d="M 256 54 L 458 256 L 256 458 L 54 256 Z" fill="none" stroke="#111111" stroke-width="10" stroke-linejoin="round"/>'
-def line(d,w):
-    return f'<path d="{d}" fill="none" stroke="#111111" stroke-width="{w}" stroke-linecap="round" stroke-linejoin="round"/>'
-def triangle(points):
-    return f'<polygon points="{points}" fill="#111111" stroke="#111111" stroke-width="3" stroke-linejoin="round"/>'
-def mirror(s):
-    return '<g transform="translate(512 0) scale(-1 1)">'+s+'</g>'
-icons={}
-icons['nav_straight']=line('M 256,359 L 256,202',34)+triangle('256.0,143.0 298.0,205.0 214.0,205.0')
-icons['nav_turn_left']=line('M 310,358 L 310,256 Q 310,228 280,228 L 213,228',32)+triangle('153.0,228.0 213.0,189.0 213.0,267.0')
-icons['nav_slight_left']=line('M 309,357 L 309,300 Q 309,280 289,259 L 228,198',32)+triangle('176.0,146.0 242.5,161.6 191.6,212.5')
-icons['nav_sharp_left']=line('M 314,358 L 314,271 Q 314,237 283,230 Q 265,226 248,244 L 216,273',31)+triangle('167.0,317.0 188.2,250.8 235.0,302.9')
-icons['nav_keep_left']=line('M 277,359 L 277,293 Q 277,269 259,246 L 230,213',32)+triangle('180.0,163.0 243.6,178.6 195.6,226.6')+line('M 277,290 Q 291,276 315,248 L 329,224',16)
-icons['nav_fork_left']=line('M 256,359 L 256,287 Q 256,265 237,245 L 216,222',32)+triangle('173.0,170.0 236.2,193.0 183.8,236.4')+line('M 256,286 Q 268,267 289,244 L 324,197',16)
-icons['nav_merge_left']=line('M 203,355 L 203,171',17)+line('M 332,357 L 332,314 Q 332,276 304,258 L 252,225 Q 237,215 237,197',31)+triangle('237.0,149.0 274.0,204.0 200.0,204.0')
-icons['nav_exit_left']=line('M 294,358 L 294,170',17)+line('M 294,349 L 294,289 Q 294,267 272,249 L 221,207',31)+triangle('170.0,167.0 234.1,175.6 191.0,228.2')
-icons['nav_ramp_left']=line('M 322,357 L 322,319 C 322,277 306,272 280,263 C 238,253 214,239 202,197',30)+triangle('191.0,155.0 237.3,200.1 171.4,216.6')+line('M 319,316 L 319,206',15)
-for k in list(icons):
-    if k.endswith('_left'):
-        icons[k[:-5]+'_right']=mirror(icons[k])
-icons['nav_uturn']=line('M 325,356 L 325,255 C 325,162 204,167 204,254 L 204,290',30)+triangle('204.0,360.0 164.0,298.0 244.0,298.0')
-icons['nav_arrive']='<path d="M 256,157 C 311,157 353,199 353,252 C 353,309 302,354 256,389 C 210,354 159,309 159,252 C 159,199 201,157 256,157 Z" fill="#111111"/><circle cx="256" cy="252" r="34" fill="#FFD21F"/>'
-icons['nav_roundabout']=line('M 256,357 L 256,329',24)+line('M 249.1,328.7 L 243.5,328.0 L 238.0,326.9 L 232.6,325.4 L 227.2,323.6 L 221.3,321.3 L 217.1,318.7 L 212.3,315.8 L 207.7,312.5 L 203.4,308.9 L 199.3,305.0 L 195.5,300.8 L 192.0,296.4 L 188.9,291.7 L 186.1,286.8 L 183.7,281.7 L 181.7,276.3 L 179.9,271.1 L 178.6,265.6 L 177.6,260.1 L 177.1,254.5 L 177.0,248.8 L 177.3,243.2 L 178.0,237.6 L 179.1,232.1 L 180.6,226.7 L 182.5,221.3 L 184.8,216.2 L 187.2,211.3 L 190.5,206.4 L 193.4,201.7 L 197.0,197.4 L 200.9,193.3 L 205.1,189.6 L 209.5,186.1 L 214.2,183.0 L 219.1,180.2 L 224.2,177.7 L 229.4,175.6 L 234.8,173.9 L 240.2,172.6 L 245.8,171.7 L 251.4,171.1 L 257.1,171.0 L 262.7,171.3 L 268.3,172.0 L 273.8,173.0 L 279.2,174.5 L 284.6,176.3 L 289.7,178.6 L 294.6,181.2 L 299.6,184.1 L 304.1,187.4 L 308.5,190.9 L 312.6,194.8 L 316.4,198.9 L 319.8,203.4 L 322.9,208.1 L 325.8,213.0 L 328.3,218.1 L 330.4,223.3 L 332.1,228.7 L 333.4,234.1 L 334.3,239.7 L 334.9,245.3 L 335.0,250.9 L 334.7,256.6 L 334.0,262.1 L 332.9,267.7 L 331.5,273.1 L 329.7,278.4 L 327.5,283.7 L 324.9,288.7 L 322.0,293.5 L 318.7,298.1 L 315.1,302.5 L 311.2,306.5 L 307.1,310.4 L 302.6,313.8 L 297.9,316.9 L 293.1,319.8',25)+triangle('293.1,319.8 318.7,272.1 346.9,325.1')
-icons['nav_roundabout_exit']=line('M 321.0,251.0 L 320.7,257.4 L 319.9,263.8 L 318.5,270.2 L 316.5,276.3 L 313.7,282.3 L 310.6,287.9 L 307.1,293.4 L 303.1,298.5 L 298.7,303.2 L 293.8,307.4 L 288.6,311.2 L 283.1,314.6 L 277.4,317.5 L 271.4,320.0 L 265.2,322.0 L 258.9,323.5 L 252.5,324.5 L 246.1,325.0 L 239.6,324.7 L 233.2,323.8 L 226.9,322.3 L 220.8,320.2 L 214.9,317.7 L 209.2,314.6 L 203.8,311.0 L 198.8,307.0 L 194.1,302.6 L 189.8,297.8 L 185.9,292.6 L 182.5,287.1 L 179.5,281.4 L 177.0,275.4 L 175.0,269.2 L 173.8,263.0 L 173.2,256.6 L 173.0,250.2 L 173.4,243.7 L 174.4,237.4 L 175.9,231.1 L 178.0,225.0 L 180.6,219.1 L 183.7,213.4 L 187.4,208.0 L 191.4,203.0 L 195.9,198.4 L 200.8,194.0 L 206.0,190.2 L 211.5,186.7 L 217.3,183.8 L 223.3,181.3 L 229.6,179.3 L 235.8,178.0 L 242.2,177.2 L 248.7,177.0 L 255.1,177.5 L 261.5,178.6 L 267.8,180.2 L 274.0,182.4 L 279.9,185.0 L 285.6,188.2 L 291.0,191.7 L 296.0,196.0 L 300.6,200.7 L 304.8,205.7 L 308.7,211.0 L 312.0,216.6 L 314.9,222.3 L 317.2,228.3 L 319.0,234.5 L 320.3,240.9 L 320.9,247.3 L 321.0,251.0',14)+line('M 247,358 L 247,325',27)+line('M 247.0,325.0 L 240.9,324.8 L 234.9,324.0 L 229.0,322.8 L 223.2,321.1 L 217.5,318.9 L 212.1,316.2 L 206.8,313.2 L 201.9,309.7 L 197.2,305.8 L 192.9,301.5 L 189.0,296.9 L 185.4,291.9 L 182.3,286.7 L 179.6,281.2 L 177.5,275.6 L 175.7,269.8 L 174.4,263.8 L 173.5,257.8 L 173.0,251.7 L 173.3,245.7 L 174.0,239.7 L 175.2,233.7 L 176.9,227.9 L 179.0,222.2 L 181.6,216.8 L 184.7,211.6 L 188.2,206.6 L 192.1,202.0 L 196.4,197.7 L 201.0,193.8 L 206.0,190.3 L 211.2,187.1 L 216.7,184.4 L 222.3,182.2 L 228.1,180.3 L 234.0,178.8 L 240.0,177.7 L 246.1,177.0 L 252.1,177.1 L 258.2,177.6 L 264.1,178.5 L 270.0,179.8 L 275.7,181.6 L 281.3,183.9 L 286.7,186.8 L 290.5,191.1',29)+line('M 291,191 Q 309,177 323,169',29)+triangle('357.0,154.0 323.5,206.3 295.6,144.3')
-# Output exactly the supplied 21 named sign designs.
-assert len(icons)==21, list(icons)
-out=Path('app/src/main/res/drawable-nodpi')
-out.mkdir(parents=True,exist_ok=True)
-for name, body in icons.items():
-    svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 512 512">{BASE}{body}</svg>'
-    image=Image.open(BytesIO(cairosvg.svg2png(bytestring=svg.encode()))).convert('RGBA')
-    image.resize((256,256),Image.Resampling.LANCZOS).save(out/(name+'.png'),optimize=True)
-    print(name)
+SOURCE = "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"
+icons = json.loads(gzip.decompress(base64.b64decode(SOURCE)))
+assert len(icons) == 21
+out = Path("app/src/main/res/drawable-nodpi")
+out.mkdir(parents=True, exist_ok=True)
+for filename, svg in icons.items():
+    assert filename.startswith("nav_") and filename.endswith(".svg")
+    image = Image.open(BytesIO(cairosvg.svg2png(bytestring=svg.encode()))).convert("RGBA")
+    image.resize((256,256), Image.Resampling.LANCZOS).save(out/(Path(filename).stem+".png"), optimize=True)
+    print(filename)
