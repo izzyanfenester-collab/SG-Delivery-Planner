@@ -163,7 +163,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             val cue = if (session.arrived) NavigationPanelCue(NavigationSign.ARRIVE) else session.panelCue
                             Image(
                                 painter = painterResource(cue.sign.drawable),
-                                contentDescription = cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
+                                contentDescription = if (cue.sign == NavigationSign.UTURN)
+                                    if (cue.mirrorHorizontally) "Left U-turn" else "Right U-turn"
+                                else cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
                                 modifier = Modifier.size(NavigationPanelSizing.directionIconDp(navigationScreenWidth).dp)
                                     .graphicsLayer { scaleX = if (cue.mirrorHorizontally) -1f else 1f },
                                 contentScale = ContentScale.Fit

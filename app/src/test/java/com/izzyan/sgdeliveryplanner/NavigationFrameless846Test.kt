@@ -22,12 +22,15 @@ class NavigationFrameless846Test {
         }
         listOf(Triple("turn","uturn left","Make a U-turn"),
             Triple("uturn","left","Make a U-turn"),
+            Triple("turn","left","Make a U-turn"),
             Triple("turn","uturn","Make a left U-turn")).forEach { (t,m,i) ->
             val cue = NavigationPanelSigns.cue(t,m,i)
             assertEquals(NavigationSign.UTURN, cue.sign)
             assertTrue(cue.mirrorHorizontally)
         }
-        assertFalse(NavigationPanelSigns.cue("turn","left","Turn left onto U-turn Road").mirrorHorizontally)
+        val roadName = NavigationPanelSigns.cue("turn","left","Turn left onto U-turn Road")
+        assertEquals(NavigationSign.TURN_LEFT, roadName.sign)
+        assertFalse(roadName.mirrorHorizontally)
         assertFalse(NavigationPanelSigns.cue("turn","uturn","Make a U-turn onto Left Road").mirrorHorizontally)
     }
 

@@ -83,13 +83,15 @@ internal object NavigationPanelSigns {
             else -> NavigationSign.STRAIGHT
         }
         val uTurnToken = Regex("\\bu\\s*turn\\b")
-        val isUTurn = uTurnToken.containsMatchIn(m) || uTurnToken.containsMatchIn(t) ||
-            uTurnToken.containsMatchIn(words)
+        val instructionUTurn = Regex("^(?:(?:left|right)\\s+)?u\\s*turn\\b|\\b(?:make|perform|take|do)\\s+(?:(?:a|an|the)\\s+)?(?:(?:left|right)\\s+)?u\\s*turn\\b")
+            .containsMatchIn(words)
+        val isUTurn = uTurnToken.containsMatchIn(m) || uTurnToken.containsMatchIn(t) || instructionUTurn
         // The supplied arrow always turns right. Mirror only an explicit left U-turn,
         // never an ordinary left turn or a street name containing "Left".
         val explicitLeftUTurn = isUTurn && (
             (uTurnToken.containsMatchIn(m) && "left" in m) ||
-                (uTurnToken.containsMatchIn(t) && ("left" in t || m == "left" || m == "sharp left")) ||
+                (uTurnToken.containsMatchIn(t) && "left" in t) ||
+                m == "left" || m == "sharp left" ||
                 Regex("^(?:(?:make|perform|take)\\s+(?:a\\s+|the\\s+)?)?left\\s+u\\s*turn\\b|\\bu\\s*turn\\s+(?:to\\s+the\\s+|to\\s+|on\\s+the\\s+)left\\b")
                     .containsMatchIn(words)
             )
