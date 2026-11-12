@@ -33,6 +33,11 @@ internal class NavigationPreferences(context: Context) {
         if (saveDefault) updateDefault(choice)
         return openDeliveryNavigation(context, plan, choice)
     }
+
+    fun launchEnd(context: Context, plan: Plan, choice: NavigationChoice, saveDefault: Boolean = false): Boolean {
+        if (saveDefault) updateDefault(choice)
+        return openEndNavigation(context, plan, choice)
+    }
 }
 
 @Composable
@@ -91,11 +96,36 @@ internal fun externalNavigationIntent(stop: Place, choice: NavigationChoice): In
 /** Handoff only: no access to ViewModel, persistence, delivery statuses or ETA writes. */
 internal fun openDeliveryNavigation(context: Context, plan: Plan, choice: NavigationChoice): Boolean {
     val stop = navigationDestination(plan) ?: return false
+    return openNavigationDestination(context, stop, choice, allowAppOnlyFallback = true)
+}
+
+/** Use the route's saved End snapshot; automatic End is the final optimized stop, not current. */
+internal fun endNavigationDestination(plan: Plan): Place? =
+    if (plan.endAtLastDelivery) plan.stops.lastOrNull()?.place
+    else runCatching { plan.endPlace }.getOrNull()
+
+/** Summary-only handoff. Never mutate the plan or replay its delivery stops. */
+internal fun openEndNavigation(context: Context, plan: Plan, choice: NavigationChoice): Boolean {
+    val end = endNavigationDestination(plan)
+    if (end == null || (!GpsPoint(end.lat, end.lon).valid() && end.address.isBlank() && end.postal.isBlank())) {
+        Toast.makeText(context, "No valid End Location is saved for this route.", Toast.LENGTH_LONG).show()
+        return false
+    }
+    if ((choice == NavigationChoice.BUILT_IN || choice == NavigationChoice.SYGIC) &&
+        !GpsPoint(end.lat, end.lon).valid()) {
+        Toast.makeText(context, "End Location needs valid GPS coordinates for ${choice.label}. Choose another navigation app.", Toast.LENGTH_LONG).show()
+        return false
+    }
+    return openNavigationDestination(context, end, choice, allowAppOnlyFallback = false)
+}
+
+/** Shared destination launcher. Summary requires a destination-bearing intent, never a bare app launch. */
+private fun openNavigationDestination(context: Context, stop: Place, choice: NavigationChoice, allowAppOnlyFallback: Boolean): Boolean {
     try {
-        val intent = if (choice == NavigationChoice.BUILT_IN) builtInNavigationIntent(context, plan) ?: return false
+        val intent = if (choice == NavigationChoice.BUILT_IN) builtInNavigationIntent(context, stop)
             else externalNavigationIntent(stop, choice)
         if (choice != NavigationChoice.BUILT_IN && intent.resolveActivity(context.packageManager) == null) {
-            if (choice == NavigationChoice.TOMTOM || choice == NavigationChoice.SYGIC) {
+            if (allowAppOnlyFallback && (choice == NavigationChoice.TOMTOM || choice == NavigationChoice.SYGIC)) {
                 // Not all releases of the consumer TomTom app accept a geo deep link.
                 // Open TomTom directly if installed; never send the destination to a
                 // different maps app or misleadingly report it as uninstalled.

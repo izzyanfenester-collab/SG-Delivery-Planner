@@ -51,6 +51,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -76,11 +77,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? = navigationDestination(plan)?.let { stop ->
+internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
+    navigationDestination(plan)?.let { builtInNavigationIntent(context, it) }
+
+/** Single destination snapshot; the activity gets its origin from live device GPS. */
+internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
-}
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
 class BuiltInNavigationActivity : ComponentActivity() {
@@ -129,7 +133,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 try { session.run() } finally { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
         }
-        val compactNavHeader = LocalConfiguration.current.screenWidthDp < 385
+        val navigationScreenWidth = LocalConfiguration.current.screenWidthDp
+        val compactNavHeader = navigationScreenWidth < 385
         // Measure the real opaque panels, including wrapping road names and
         // accessibility font scales. Controls fit between them on small phones.
         var topPanelHeightPx by remember { mutableIntStateOf(0) }
@@ -151,26 +156,42 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
                             val cue = if (session.arrived) NavigationPanelCue(NavigationSign.ARRIVE) else session.panelCue
                             Image(
                                 painter = painterResource(cue.sign.drawable),
-                                contentDescription = cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
-                                modifier = Modifier.size(if (compactNavHeader) 58.dp else 64.dp),
+                                contentDescription = if (cue.sign == NavigationSign.UTURN)
+                                    if (cue.mirrorHorizontally) "Left U-turn" else "Right U-turn"
+                                else cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
+                                modifier = Modifier.size(NavigationPanelSizing.directionIconDp(navigationScreenWidth).dp)
+                                    .graphicsLayer { scaleX = if (cue.mirrorHorizontally) -1f else 1f },
                                 contentScale = ContentScale.Fit
                             )
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Text(if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS",
-                                        modifier = Modifier.weight(1f),
-                                        color = SGColors.White,
-                                        fontSize = if (compactNavHeader) 32.sp else 38.sp,
-                                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    cue.expresswayExit?.let { ExitRoadSign(it) }
+                                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                    val exitMaxWidth = maxWidth * NavigationPanelSizing.EXIT_MAX_WIDTH_FRACTION
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        BoxWithConstraints(Modifier.weight(1f)) {
+                                            val distance = if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS"
+                                            val preferred = if (compactNavHeader) 32f else 38f
+                                            val measure = rememberTextMeasurer()
+                                            val available = with(LocalDensity.current) { maxWidth.toPx() }
+                                            val measured = measure.measure(AnnotatedString(distance),
+                                                style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
+                                                maxLines = 1, softWrap = false).size.width
+                                            val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
+                                            Text(distance, color = SGColors.White, fontSize = font.sp,
+                                                lineHeight = (font * 1.18f).sp,
+                                                fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                        }
+                                        cue.expresswayExit?.let {
+                                            ExitRoadSign(it, Modifier.widthIn(max = exitMaxWidth))
+                                        }
+                                    }
                                 }
                                 Text(if (session.arrived) "Destination reached" else
                                     NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
@@ -388,7 +409,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
     /** Chamfered yellow sign, shown only for a provider-supplied expressway exit. */
     @Composable
-    private fun ExitRoadSign(number: String) {
+    private fun ExitRoadSign(number: String, modifier: Modifier = Modifier) {
         val shape = remember {
             GenericShape { size, _ ->
                 val c = minOf(size.height * 0.30f, size.width * 0.12f)
@@ -397,11 +418,20 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 lineTo(c, size.height); lineTo(0f, size.height - c); lineTo(0f, c); close()
             }
         }
-        Surface(color = Color(0xFFFFD21F), shape = shape) {
-            Text("EXIT $number", color = Color(0xFF111111),
-                fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                maxLines = 1, softWrap = false)
+        Surface(modifier = modifier, color = Color(0xFFFFD21F), shape = shape) {
+            BoxWithConstraints(Modifier.padding(horizontal = 9.5.dp, vertical = 3.5.dp)) {
+                val label = "EXIT $number"
+                val preferred = NavigationPanelSizing.EXIT_FONT_SP
+                val measure = rememberTextMeasurer()
+                val available = with(LocalDensity.current) { maxWidth.toPx() }
+                val measured = measure.measure(AnnotatedString(label),
+                    style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
+                    maxLines = 1, softWrap = false).size.width
+                val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
+                Text(label, color = Color(0xFF111111), fontSize = font.sp,
+                    lineHeight = (font * 1.5f).sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, softWrap = false)
+            }
         }
     }
 
