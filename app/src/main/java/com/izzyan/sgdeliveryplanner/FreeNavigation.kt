@@ -89,11 +89,11 @@ internal fun FreeNavigationScreen() {
             }
         }
         Text("Or tap the map to select " + if (choosingStart) "a start location" else "a destination")
-        LocationMap(if (choosingStart) origin else destination, jb, onChoose = { point ->
-            if (!busy) choose(StartLocation("CUSTOM", point.latitude, point.longitude, "Map location",
-                "${point.latitude}, ${point.longitude}"))
-        }, routePoints = preview?.points.orEmpty())
-        Text("© OpenStreetMap contributors", style = MaterialTheme.typography.labelSmall)
+        FreeLocationMap(origin, destination, jb, choosingStart, preview?.points.orEmpty()) { point ->
+            if (!busy) choose(StartLocation("CUSTOM", point.lat, point.lon, "Map location",
+                "${point.lat}, ${point.lon}"))
+        }
+        Text("© OpenStreetMap contributors · OpenFreeMap", style = MaterialTheme.typography.labelSmall)
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         val start = origin

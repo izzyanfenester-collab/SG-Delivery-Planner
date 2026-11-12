@@ -497,8 +497,7 @@ fun StartLocationPicker(vm: PlannerViewModel) {
 }
 
 @Composable
-internal fun LocationMap(selected: StartLocation?, initialCenter: StartLocation,
-    onChoose: (GeoPoint) -> Unit, routePoints: List<GpsPoint> = emptyList()) {
+private fun LocationMap(selected: StartLocation?, initialCenter: StartLocation, onChoose: (GeoPoint) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val latestChoose by rememberUpdatedState(onChoose)
@@ -546,11 +545,6 @@ internal fun LocationMap(selected: StartLocation?, initialCenter: StartLocation,
         }
     }
     val lastFocused = remember(map) { mutableStateOf<Pair<Double, Double>?>(null) }
-    val previewLine = remember(map) { org.osmdroid.views.overlay.Polyline().apply {
-        outlinePaint.color = android.graphics.Color.rgb(24, 104, 218)
-        outlinePaint.strokeWidth = 8f
-    } }
-    val lastPreview = remember(map) { mutableStateOf<List<GpsPoint>>(emptyList()) }
     AndroidView(factory = { map }, modifier = Modifier.fillMaxWidth().height(340.dp), update = { view ->
         if (selected == null) view.overlays.remove(marker)
         else {
@@ -563,16 +557,6 @@ internal fun LocationMap(selected: StartLocation?, initialCenter: StartLocation,
             marker.title = selected.displayName
             marker.snippet = selected.address.ifBlank { locationCoordinates(selected) }
             if (!view.overlays.contains(marker)) view.overlays.add(marker)
-        }
-        if (lastPreview.value != routePoints) {
-            lastPreview.value = routePoints
-            view.overlays.remove(previewLine)
-            if (routePoints.size >= 2) {
-                val points = routePoints.map { GeoPoint(it.lat, it.lon) }
-                previewLine.setPoints(points)
-                view.overlays.add(1.coerceAtMost(view.overlays.size), previewLine)
-                view.post { view.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(points), true, 50) }
-            }
         }
         view.invalidate()
     })
