@@ -281,6 +281,7 @@ private fun ActiveTripSelection(vm: PlannerViewModel, destination: String) {
 /** Read-only schedule, accessible without reactivating a completed trip. */
 @Composable
 internal fun CompletedRouteSchedule(plan: Plan, onClose: () -> Unit) {
+    var expanded by rememberSaveable(plan.id) { mutableStateOf(true) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         MarinaBayBackdrop(Modifier.fillMaxSize()) {
@@ -295,8 +296,9 @@ internal fun CompletedRouteSchedule(plan: Plan, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${plan.startLocation.displayName} → ${plan.endDisplayName}",
                         style = MaterialTheme.typography.titleMedium)
-                    ScheduleExportActions(plan, enabled = true, expanded = true, onToggleExpanded = {})
-                    ScheduleTable(plan)
+                    ScheduleExportActions(plan, enabled = true, expanded = expanded,
+                        onToggleExpanded = { expanded = !expanded })
+                    if (expanded) ScheduleTable(plan)
                 }
             }
         }

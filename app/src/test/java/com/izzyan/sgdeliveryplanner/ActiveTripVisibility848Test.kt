@@ -81,6 +81,10 @@ class ActiveTripVisibility848Test {
         vm.continueSavedRoute(a.id)
         pump()
         assertEquals(b,vm.activeRoute)
+        vm.open(requireNotNull(runBlocking { vm.repo.dao.route(a.id) }))
+        assertEquals(b,vm.activeRoute)
+        assertEquals(a.id,vm.reportPreview?.id)
+        vm.closeReportPreview()
         assertEquals(b.id,app.getSharedPreferences("settings",0).getString("active",null))
     }
 
@@ -111,6 +115,16 @@ class ActiveTripVisibility848Test {
         assertEquals(SavedDeliveryStatus.IN_PROGRESS,savedDeliveryStatus(requireNotNull(vm.activeRoute)))
         assertEquals("Delivery",vm.screen)
         assertEquals(reviewed.id,app.getSharedPreferences("settings",0).getString("active",null))
+    }
+
+    @Test fun onlyCompletedHistoryProducesNoActiveChoicesAndKeepsEveryRecord() {
+        val a = reviewStop(reviewStop(plan(13),"DELIVERED",now),"DELIVERED",now)
+        val b = reviewStop(reviewStop(plan(14),"ON_HOLD",now,"No answer"),"SKIP",now)
+        val rows = listOf(a,b).map { SavedRoute(it.id,PlanJson.encode(it),it.created) }
+        assertTrue(unfinishedSavedPlans(rows).isEmpty())
+        assertEquals(listOf(a,b), rows.map { PlanJson.decode(it.json) })
+        assertNull(activeDeliveryPlan(a))
+        assertNull(activeDeliveryPlan(b))
     }
 
     private fun pump(target: PlannerViewModel = vm) {
