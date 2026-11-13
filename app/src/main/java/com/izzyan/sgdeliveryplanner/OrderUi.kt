@@ -548,11 +548,16 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
     var file by remember(stop) {mutableStateOf<java.io.File?>(null)}
     var bitmap by remember(stop) {mutableStateOf<Bitmap?>(null)}
     var error by remember(stop) {mutableStateOf(false)}
-    LaunchedEffect(stop) {
+    var retry by remember(stop) { mutableStateOf(0) }
+    var shareFallback by remember(stop) { mutableStateOf<WhatsAppImageShareFallbackRequest?>(null) }
+    LaunchedEffect(stop, retry) {
+        error = false
+        file = null
+        bitmap = null
         try {
             val result=withContext(Dispatchers.IO) {
                 val image=generateSingleDeliveryReport(context,stop,index)
-                image to android.graphics.BitmapFactory.decodeFile(image.absolutePath)
+                image to requireNotNull(android.graphics.BitmapFactory.decodeFile(image.absolutePath)) { "Report image could not be decoded." }
             }
             file=result.first; bitmap=result.second
         } catch(e: kotlinx.coroutines.CancellationException) {throw e}
@@ -563,12 +568,24 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
             Text("Delivery Report",color=PremiumGold,fontSize=DeliveryReportTypography.bodySp.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Bold,maxLines=2)
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 bitmap?.let { Image(it.asImageBitmap(),"Delivery Report for stop ${index+1}",Modifier.fillMaxWidth(),contentScale=ContentScale.FillWidth) }
-                    ?: Text(if(error) "Report could not be prepared. Close and try Share Report again." else "Preparing report…",color=Color.White)
+                    ?: Text(if(error) "Report could not be prepared. Tap Share Report to retry." else "Preparing report…",color=Color.White)
             }
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick={vm.deliveryReportOrderId=null},modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Close")}
-                Button(onClick={file?.let {runCatching {context.startActivity(Intent.createChooser(singleDeliveryShareIntent(context,it),"Share Delivery Report"))}.onFailure {android.widget.Toast.makeText(context,"Delivery report could not be shared. Please try again.",android.widget.Toast.LENGTH_LONG).show()}}},enabled=file!=null,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
+                Button(onClick={
+                    if (error) { retry++; error = false }
+                    else file?.let { image ->
+                        runCatching {
+                            require(image.isFile && image.length() > 0L) { "Report image unavailable." }
+                            shareFallback = openDefaultWhatsAppImageShare(context, singleDeliveryShareIntent(context,image), "Share Delivery Report")
+                        }.onFailure {
+                            android.widget.Toast.makeText(context,"Delivery report could not be shared. Please try again.",android.widget.Toast.LENGTH_LONG).show()
+                            if (!image.isFile || image.length() == 0L) { error = true; file = null; bitmap = null }
+                        }
+                    }
+                },enabled=file!=null || error,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
             }
         }
+        shareFallback?.let { request -> WhatsAppImageShareFallbackDialog(request) { shareFallback = null } }
     }
 }
