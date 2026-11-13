@@ -133,6 +133,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 try { session.run() } finally { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
         }
+        val displayedRoute=session.route
+        // Log when Compose commits the new direction state. This is not a GPU frame timestamp.
+        SideEffect { if (!session.offRoute) session.directionRendered(displayedRoute) }
         val navigationScreenWidth = LocalConfiguration.current.screenWidthDp
         val compactNavHeader = navigationScreenWidth < 385
         // Measure the real opaque panels, including wrapping road names and
@@ -176,7 +179,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                         BoxWithConstraints(Modifier.weight(1f)) {
-                                            val distance = if (session.arrived) "Arrived" else session.turnMeters?.let { metricDistance(it) } ?: "GPS"
+                                            val distance = if (session.arrived) "Arrived" else if(session.offRoute) "—" else session.turnMeters?.let { metricDistance(it) } ?: "GPS"
                                             val preferred = if (compactNavHeader) 32f else 38f
                                             val measure = rememberTextMeasurer()
                                             val available = with(LocalDensity.current) { maxWidth.toPx() }
@@ -577,6 +580,30 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     ))
     private val client = ValhallaClient()
     private val reroute = ReroutePolicy()
+    private val instantDetector = InstantRerouteDetector()
+    private val requestGate = RerouteRequestGate()
+    var offRoute by mutableStateOf(false); private set
+    private var latestReliableFix: RerouteFix? = null
+    private var latency: RerouteLatency? = null
+    private var latencyRoute: DirectionsRoute? = null
+    private data class RerouteLatency(val id: Long, val fix: Long, val detected: Long, val requested: Long,
+        var response: Long = 0, var applied: Long = 0, var line: Long = 0, var direction: Long = 0)
+    private fun recordLatency(event: String, at: Long, trace: RerouteLatency? = latency) {
+        trace ?: return
+        android.util.Log.d("SGReroute851", "id=${trace.id} phase=$event elapsedMs=$at sinceFixMs=${at-trace.fix}")
+    }
+    fun routeLineRendered(rendered: DirectionsRoute?) {
+        val trace=latency ?: return
+        if(rendered != null && rendered === latencyRoute && trace.line == 0L) {
+            trace.line=SystemClock.elapsedRealtime(); recordLatency("line-submitted",trace.line,trace)
+        }
+    }
+    fun directionRendered(rendered: DirectionsRoute?) {
+        val trace=latency ?: return
+        if(rendered != null && rendered === latencyRoute && trace.direction == 0L) {
+            trace.direction=SystemClock.elapsedRealtime(); recordLatency("direction-composed",trace.direction,trace)
+        }
+    }
     private var arrival = ArrivalDetector()
     private val voiceGate = VoiceCueGate()
     private val gpsSanityFilter = NavigationGpsSanityFilter()
@@ -589,7 +616,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var scope: CoroutineScope? = null
 
     init {
-        sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && p.directionsRoute == route) updateProgress(p) } }
+        sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute == route) updateProgress(p) } }
         speech = TextToSpeech(context) { status -> main.post {
             if (status == TextToSpeech.SUCCESS) {
                 val result = speech?.setLanguage(Locale.US)
@@ -603,7 +630,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     suspend fun run(): Unit = coroutineScope {
-        active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); voiceGate.reset(); gpsSanityFilter.reset()
+        active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); voiceGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
                 message = "Resolving destination…"
@@ -616,16 +643,15 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     delay(5_000)
                     if (!arrived && (lastFix == 0L || SystemClock.elapsedRealtime() - lastFix > 15_000)) {
                         message = "GPS signal unavailable. Enable location and move to an open area."
-                        reroute.resetDrift(); arrival = ArrivalDetector(); adaptiveEta.reset(); remainingSeconds = baseRemainingSeconds; speech?.stop()
+                        reroute.resetDrift(); instantDetector.reset(); arrival = ArrivalDetector(); adaptiveEta.reset(); remainingSeconds = baseRemainingSeconds; speech?.stop()
                     }
                 }
             }
-            var initialAttempt = false
             fusedLocations(context).collect { fix ->
                 val now = SystemClock.elapsedRealtime()
                 if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || !fix.accuracy.isFinite() || fix.accuracy < 0 || fix.accuracy > 50) {
                     message = "GPS accuracy is low. Waiting for a precise location…"
-                    reroute.resetDrift(); arrival = ArrivalDetector(); return@collect
+                    reroute.resetDrift(); instantDetector.reset(); arrival = ArrivalDetector(); return@collect
                 }
                 // Accept raw GPS coordinates as truth only after rejecting an
                 // impossible one-sample jump. Reacquisition after a gap is allowed.
@@ -637,6 +663,11 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     return@collect
                 }
                 lastFix = now; location = fix
+                val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
+                    fix.speed.takeIf { fix.hasSpeed() },
+                    fix.bearing.takeIf { fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees <= 35f) },
+                    fix.elapsedRealtimeNanos / 1_000_000L)
+                latestReliableFix = reliable
                 adaptiveEta.observe(if (fix.hasSpeed()) fix.speed.toDouble() else null, fix.accuracy.toDouble(), fix.elapsedRealtimeNanos / 1_000_000,
                     if (fix.hasSpeedAccuracy()) fix.speedAccuracyMetersPerSecond.toDouble() else null)
                 baseRemainingSeconds?.let { base -> remainingSeconds = adaptiveEta.remainingSeconds(base, remainingMeters ?: 0.0, now) }
@@ -653,21 +684,31 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     val updatedTraffic = localTraffic.snapshot(now, matched?.segmentIndex)
                     if (updatedTraffic != trafficState) trafficState = updatedTraffic
                 }
-                if (arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
+                if (!offRoute && arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
                     arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
-                if (route == null && !initialAttempt) { initialAttempt = true; requestRoute(fix) }
-                else if (route != null && !loading) {
-                    val routeDistance = distanceFromNavigationRoute(point, shape)
-                    val nearest = NavigationRoadMatcher.match(point, shape, fix.accuracy, null, null)
-                    val headingDifference = if (fix.hasSpeed() && fix.speed >= 4f &&
-                        fix.hasBearing() && nearest != null)
-                        NavigationRoadMatcher.angleDifference(fix.bearing, nearest.bearingDegrees)
-                    else null
-                    if (reroute.shouldReroute(routeDistance, fix.accuracy, now,
-                            headingDifference, fix.speed.takeIf { fix.hasSpeed() }))
-                        requestRoute(fix)
+                if (route == null && !loading && reliable.accuracy <= 35 && now - reliable.timeMs <= 2_500 &&
+                    reroute.requestAllowed(now)) requestRoute(reliable)
+                else if (route != null) {
+                    val decision = if (now - reliable.timeMs <= 2_500) instantDetector.observe(reliable,shape)
+                    else { instantDetector.reset(); null }
+                    if (decision != null) {
+                        if (!offRoute) {
+                            offRoute = true; arrival = ArrivalDetector()
+                            instruction = "Recalculating route…"; street = null; turnMeters = null
+                            panelCue = NavigationPanelCue(); speech?.stop()
+                        }
+                        if (!loading && reroute.requestAllowed(now)) requestRoute(reliable,decision)
+                        else if (loading && requestGate.shouldSupersede(reliable) && reroute.requestAllowed(now))
+                            requestRoute(reliable,decision)
+                    } else if (offRoute && loading && now - reliable.timeMs <= 2_500 &&
+                        requestGate.shouldSupersede(reliable) && reroute.requestAllowed(now)) {
+                        requestRoute(reliable,RerouteDecision("changed-heading",reliable.timeMs))
+                    } else if (offRoute && !loading && reroute.requestAllowed(now) && now - reliable.timeMs <= 2_500 &&
+                        reliable.accuracy<=25 && (reliable.speed?:0f)>=3) {
+                        requestRoute(reliable,RerouteDecision("retry-latest",reliable.timeMs))
+                    }
                 }
                 feed.updates.emit(org.maplibre.navigation.core.location.Location(
                     latitude = fix.latitude, longitude = fix.longitude, accuracyMeters = fix.accuracy,
@@ -677,32 +718,80 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "GPS or destination unavailable. Please retry." }
-        finally { active = false; requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); speech?.stop(); scope = null }
+        finally { active = false; requestGate.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); speech?.stop(); scope = null }
     }
 
-    private fun requestRoute(fix: Location) {
-        if (loading || !reroute.requestAllowed(SystemClock.elapsedRealtime())) {
-            if (route == null) message = "Please wait briefly before retrying the route."
-            return
-        }
-        reroute.requested(SystemClock.elapsedRealtime()); loading = true; message = null
-        requestJob = scope?.launch {
+    private fun requestRoute(fix: RerouteFix, decision: RerouteDecision? = null) {
+        val owner=scope ?: return
+        val now=SystemClock.elapsedRealtime()
+        if (!reroute.requestAllowed(now) || !active || arrived) return
+        // Invalidate before cancelling; an old coroutine's finally must not
+        // clear the newer request's loading state or apply its route/signs.
+        val id=requestGate.begin(fix)
+        requestJob?.cancel()
+        reroute.requested(now); loading=true
+        message=if(decision!=null || offRoute) "Recalculating route…" else null
+        val trace=decision?.let { RerouteLatency(id,it.confirmingFixMs,now,SystemClock.elapsedRealtime()) }
+        latency=trace; latencyRoute=null
+        trace?.let { recordLatency("detected",it.detected,it); recordLatency("request-start",it.requested,it) }
+        val target=GpsPoint(destination.lat,destination.lon)
+        requestJob=owner.launch(start=CoroutineStart.UNDISPATCHED) {
             try {
-                val newRoute = client.route(GpsPoint(fix.latitude, fix.longitude), GpsPoint(destination.lat, destination.lon))
-                if (!active || arrived) return@launch
-                shape = decodeNavigationGeometry(newRoute.geometry)
-                localTraffic.reset(shape, newRoute.distance, newRoute.duration)
-                trafficState = LocalTrafficState.EMPTY
-                routeSignMetadata = client.lastSignMetadata
-                panelCue = NavigationPanelCue()
-                turnMeters = null
-                route = newRoute
-                adaptiveEta.reset(); baseRemainingSeconds = newRoute.duration
-                remainingMeters = newRoute.distance; remainingSeconds = newRoute.duration
-                instruction = "Follow the route"; voiceGate.reset(); sdk.startNavigation(newRoute)
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { reroute.failed(SystemClock.elapsedRealtime()); message = ROUTE_UNAVAILABLE }
-            finally { loading = false }
+                val heading=fix.bearing?.takeIf { (fix.speed?:0f)>=3 && fix.accuracy<=20 }
+                val result=client.routeResult(fix.point,target,heading)
+                if (!active || arrived || !requestGate.isCurrent(id)) return@launch
+                trace?.let { it.response=SystemClock.elapsedRealtime(); recordLatency("response-parsed",it.response,it) }
+                val latest=latestReliableFix
+                if (latest!=null && latest.timeMs>fix.timeMs && latest.accuracy<=20 &&
+                    navigationDistance(fix.point,latest.point)>12 && !routeFitsLatestFix(result.shape,latest)) {
+                    // The vehicle missed this response too. Never paint obsolete instructions.
+                    offRoute=true
+                    requestRoute(latest,RerouteDecision("stale-route",latest.timeMs))
+                    return@launch
+                }
+                val newRoute=result.route
+                shape=result.shape
+                localTraffic.reset(shape,newRoute.distance,newRoute.duration)
+                trafficState=LocalTrafficState.EMPTY
+                routeSignMetadata=result.signs
+                val steps=newRoute.legs.single().steps
+                val current=steps.first()
+                val next=steps.getOrNull(1) ?: current
+                street=current.name
+                turnMeters=current.distance.coerceAtLeast(0.0)
+                instruction=next.maneuver.instruction?.takeIf { it.isNotBlank() }
+                    ?: current.bannerInstructions?.firstOrNull()?.primary?.text
+                    ?: "Continue on the route"
+                panelCue=NavigationPanelSigns.cue(next.maneuver.type?.toString(),next.maneuver.modifier?.toString(),
+                    instruction,routeSignMetadata.getOrNull(if(steps.size>1) 1 else 0),routeSignMetadata.firstOrNull())
+                adaptiveEta.reset(); baseRemainingSeconds=newRoute.duration
+                remainingMeters=newRoute.distance; remainingSeconds=newRoute.duration
+                instantDetector.reset(); reroute.succeeded(); offRoute=false; message=null
+                voiceGate.reset()
+                latencyRoute=newRoute; route=newRoute
+                sdk.startNavigation(newRoute)
+                // Publish the first actual new maneuver immediately, not after the next GPS tick.
+                if(trace!=null) {
+                    trace.applied=SystemClock.elapsedRealtime(); recordLatency("route-applied",trace.applied,trace)
+                    // Announce the real first maneuver once, even when it is farther than
+                    // the regular 300m voice cue range. Subsequent SDK cues still apply.
+                    voiceGate.accept(0,instruction,turnMeters?:Double.MAX_VALUE)
+                    speak("Route updated. In ${metricDistance(turnMeters?:0.0)}, $instruction","reroute-$id")
+                }
+                location?.let { currentFix ->
+                    feed.updates.tryEmit(org.maplibre.navigation.core.location.Location(
+                        latitude=currentFix.latitude,longitude=currentFix.longitude,accuracyMeters=currentFix.accuracy,
+                        speedMetersPerSeconds=currentFix.speed.takeIf { currentFix.hasSpeed() },
+                        bearing=currentFix.bearing.takeIf { currentFix.hasBearing() },
+                        timeMilliseconds=currentFix.time,provider=currentFix.provider))
+                }
+            } catch(e:CancellationException){throw e}
+            catch(e:Exception){
+                if(requestGate.isCurrent(id)) {
+                    reroute.failed(SystemClock.elapsedRealtime(),(e as? NavigationRateLimited)?.retryMs)
+                    message=ROUTE_UNAVAILABLE
+                }
+            } finally { if(requestGate.isCurrent(id)) loading=false }
         }
     }
 
@@ -750,13 +839,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
 private fun fusedLocations(context: Context): Flow<Location> = kotlinx.coroutines.flow.callbackFlow {
     val client = LocationServices.getFusedLocationProviderClient(context)
     // Foreground navigation only: request shorter, non-batched fixes for smoother puck animation.
-    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000)
-        .setMinUpdateIntervalMillis(750).setMaxUpdateDelayMillis(1_000)
-        .setWaitForAccurateLocation(true).build()
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 500)
+        .setMinUpdateIntervalMillis(250).setMaxUpdateDelayMillis(0)
+        .setWaitForAccurateLocation(false).build()
     val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) { result.locations.forEach { trySend(it) } }
     }
     try { client.requestLocationUpdates(request, callback, Looper.getMainLooper()).addOnFailureListener { close(it) } }
     catch (e: SecurityException) { close(e) }
     awaitClose { client.removeLocationUpdates(callback) }
-}
+}.buffer(kotlinx.coroutines.channels.Channel.CONFLATED)

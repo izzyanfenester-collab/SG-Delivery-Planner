@@ -16,8 +16,8 @@ class HeadingAwareReroutingTest {
     @Test fun sustainedWrongExitCanTriggerEvenBeforeSixtyMetres() {
         val p = ReroutePolicy()
         assertFalse(p.shouldReroute(28.0, 8f, 10_000, 150f, 10f))
-        assertFalse(p.shouldReroute(28.0, 8f, 21_999, 150f, 10f))
-        assertTrue(p.shouldReroute(28.0, 8f, 22_000, 150f, 10f))
+        assertFalse(p.shouldReroute(28.0, 8f, 10_399, 150f, 10f))
+        assertTrue(p.shouldReroute(28.0, 8f, 10_400, 150f, 10f))
     }
 
     @Test fun speedOrHeadingWithoutRoadDepartureNeverTriggers() {

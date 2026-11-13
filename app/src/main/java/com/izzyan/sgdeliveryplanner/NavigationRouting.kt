@@ -4,6 +4,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -33,7 +35,7 @@ internal data class GpsPoint(val lat: Double, val lon: Double) {
 /** Snapshot of just the selected delivery, never the optimized tour. */
 internal fun navigationDestination(plan: Plan): Place? = plan.stops.getOrNull(plan.current)?.place
 
-internal fun valhallaRequest(origin: GpsPoint, destination: GpsPoint): String {
+internal fun valhallaRequest(origin: GpsPoint, destination: GpsPoint, heading: Float? = null): String {
     require(origin.valid() && destination.valid())
     return JsonObject().apply {
         addProperty("format", "osrm")
@@ -44,8 +46,14 @@ internal fun valhallaRequest(origin: GpsPoint, destination: GpsPoint): String {
         addProperty("voice_instructions", true)
         add("directions_options", JsonObject().apply { addProperty("units", "kilometers") })
         add("locations", JsonArray().apply {
-            listOf(origin, destination).forEach { point ->
-                add(JsonObject().apply { addProperty("lat", point.lat); addProperty("lon", point.lon); addProperty("type", "break") })
+            listOf(origin, destination).forEachIndexed { index, point ->
+                add(JsonObject().apply {
+                    addProperty("lat", point.lat); addProperty("lon", point.lon); addProperty("type", "break")
+                    if (index == 0 && heading != null && heading.isFinite()) {
+                        addProperty("heading", NavigationRoadMatcher.normalizeBearing(heading).toInt())
+                        addProperty("heading_tolerance", 60)
+                    }
+                })
             }
         })
     }.toString()
@@ -66,6 +74,9 @@ internal fun parseNavigationRoute(json: String, origin: GpsPoint, destination: G
     ))
 }
 
+internal data class NavigationRouteResult(val route: DirectionsRoute, val signs: List<RouteSignMetadata>, val shape: List<GpsPoint>)
+internal class NavigationRateLimited(val retryMs: Long) : IOException(ROUTE_UNAVAILABLE)
+
 internal class ValhallaClient(
     private val endpoint: String = VALHALLA_ENDPOINT,
     private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
@@ -74,24 +85,34 @@ internal class ValhallaClient(
     var lastSignMetadata: List<RouteSignMetadata> = emptyList(); private set
 
     suspend fun route(origin: GpsPoint, destination: GpsPoint): DirectionsRoute {
+        val result = routeResult(origin, destination, retryTransient = true)
+        lastSignMetadata = result.signs
+        return result.route
+    }
+
+    // Same connection pool across requests; no delayed retry in the live reroute path.
+    suspend fun routeResult(origin: GpsPoint, destination: GpsPoint, heading: Float? = null,
+        retryTransient: Boolean = false): NavigationRouteResult = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(endpoint)
             .header("X-Client-Id", "runner-route-planning-personal")
             .header("User-Agent", "RunnerRoutePlanning/1.2 personal navigation")
-            .post(valhallaRequest(origin, destination).toRequestBody("application/json".toMediaType())).build()
-        repeat(2) { attempt ->
+            .post(valhallaRequest(origin, destination, heading).toRequestBody("application/json".toMediaType())).build()
+        val attempts = if (retryTransient) 2 else 1
+        repeat(attempts) { attempt ->
             try {
-                val response = client.newCall(request).awaitResponse()
-                response.use {
-                    if (it.code == 429 || it.code in 400..499) throw RoutingRejected()
+                client.newCall(request).awaitResponse().use {
+                    if (it.code == 429) throw NavigationRateLimited(
+                        (it.header("Retry-After")?.toLongOrNull()?.coerceIn(1L, 600L) ?: 60L) * 1000)
+                    if (it.code in 400..499) throw RoutingRejected()
                     if (!it.isSuccessful) throw IOException("Routing service unavailable")
                     val json = it.body?.string() ?: error("Empty response")
                     val parsed = parseNavigationRoute(json, origin, destination)
-                    lastSignMetadata = NavigationPanelSigns.metadata(json)
-                    return parsed
+                    return@withContext NavigationRouteResult(parsed, NavigationPanelSigns.metadata(json), decodeNavigationGeometry(parsed.geometry))
                 }
             } catch (e: CancellationException) { throw e }
+            catch (e: NavigationRateLimited) { throw e }
             catch (e: RoutingRejected) { throw IOException(ROUTE_UNAVAILABLE) }
-            catch (e: IOException) { if (attempt == 1) throw IOException(ROUTE_UNAVAILABLE, e); delay(1_000) }
+            catch (e: IOException) { if (attempt == attempts - 1) throw IOException(ROUTE_UNAVAILABLE, e); delay(1_000) }
         }
         error(ROUTE_UNAVAILABLE)
     }
@@ -151,34 +172,31 @@ internal fun distanceFromNavigationRoute(point: GpsPoint, shape: List<GpsPoint>)
 
 internal class ReroutePolicy {
     private var offSince: Long? = null
-    private var lastRequest: Long? = null
-    private var blockedUntil: Long = 0
-    fun requestAllowed(now: Long) = now >= blockedUntil && (lastRequest?.let { now - it >= 30_000 } ?: true)
-    fun failed(now: Long) { blockedUntil = now + 60_000; offSince = null }
-    fun requested(now: Long) { lastRequest = now; offSince = null }
+    private var blockedUntil = 0L
+    private var failures = 0
+    fun requestAllowed(now: Long) = now >= blockedUntil
+    fun failed(now: Long, retryMs: Long? = null) {
+        failures = (failures + 1).coerceAtMost(5)
+        blockedUntil = now + (retryMs ?: (1000L shl failures).coerceAtMost(30_000))
+        offSince = null
+    }
+    fun requested(now: Long) { offSince = null }
+    fun succeeded() { failures = 0; blockedUntil = 0L; offSince = null }
     fun resetDrift() { offSince = null }
 
-    /** Requires repeated off-route observations, not a single drifting GPS sample. */
-    fun shouldReroute(
-        distance: Double, accuracy: Float, now: Long,
-        headingDifference: Float? = null, speedMetersPerSecond: Float? = null
-    ): Boolean {
-        if (!distance.isFinite() || !accuracy.isFinite() || accuracy > 35f || accuracy < 0f) {
-            offSince = null
-            return false
+    /** Conservative fallback for ambiguous geometry; no 10-second dwell. */
+    fun shouldReroute(distance: Double, accuracy: Float, now: Long,
+        headingDifference: Float? = null, speedMetersPerSecond: Float? = null): Boolean {
+        if (!distance.isFinite() || !accuracy.isFinite() || accuracy !in 0f..25f ||
+            speedMetersPerSecond == null || !speedMetersPerSecond.isFinite() || speedMetersPerSecond < 3f) {
+            offSince = null; return false
         }
-        val definitelyOff = distance > max(60.0, accuracy * 2.0)
-        // A wrong exit on a nearby parallel road can begin only 20 m away. Require
-        // strong reverse-direction evidence, good accuracy and sustained movement.
-        val wrongExit = distance >= 22.0 && accuracy <= 18f &&
-            speedMetersPerSecond != null && speedMetersPerSecond.isFinite() &&
-            speedMetersPerSecond >= 4f &&
-            headingDifference != null && headingDifference.isFinite() &&
-            headingDifference > 115f
-        if (!definitelyOff && !wrongExit) { offSince = null; return false }
+        val strong = distance >= max(35.0, accuracy * 2.5)
+        val diverging = distance >= max(16.0, accuracy * 1.8) &&
+            headingDifference != null && headingDifference.isFinite() && headingDifference >= 55f
+        if (!strong && !diverging) { offSince = null; return false }
         if (offSince == null) offSince = now
-        val requiredDuration = if (definitelyOff) 10_000L else 12_000L
-        return now - requireNotNull(offSince) >= requiredDuration && requestAllowed(now)
+        return now - requireNotNull(offSince) >= 400L && requestAllowed(now)
     }
 }
 

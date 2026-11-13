@@ -232,6 +232,7 @@ internal fun NavigationMap(
             android.graphics.Color.rgb(4, 51, 123), 17f)
         routeLine = refreshRouteSection(native, null, frame?.remaining ?: session.shape,
             android.graphics.Color.rgb(0, 132, 255), 11f)
+        session.routeLineRendered(session.route)
     }
 
     // Local, opt-in traffic overlays are updated separately. Keep the solid
@@ -275,12 +276,12 @@ internal fun NavigationMap(
     // The displayed puck is gently snapped to a compatible route segment. Raw FusedLocation
     // fixes remain untouched in NavigationSession for off-route detection, ETA and arrival.
     // Updating when session.route changes also reprojects the existing fix on a fresh route.
-    LaunchedEffect(styleReady, session.location, session.route) {
+    LaunchedEffect(styleReady, session.location, session.route, session.offRoute) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val fix = session.location ?: return@LaunchedEffect
         val visual = visualTracker.update(
-            GpsPoint(fix.latitude, fix.longitude), session.shape,
+            GpsPoint(fix.latitude, fix.longitude), if(session.offRoute) emptyList() else session.shape,
             fix.accuracy, fix.speed.takeIf { fix.hasSpeed() },
             fix.bearing.takeIf { fix.hasBearing() },
             fix.elapsedRealtimeNanos / 1_000_000L)
