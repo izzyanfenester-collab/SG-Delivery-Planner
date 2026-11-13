@@ -95,26 +95,26 @@ class NavigationRoutingTest {
         try { decodeNavigationGeometry("~"); fail("Truncated geometry accepted") } catch (_: IllegalArgumentException) { }
     }
 
-    @Test fun reroutesOnlyAfterSustainedDeviationAndCooldownNotGpsDrift() {
-        val policy = ReroutePolicy()
+    @Test fun reroutesAfterShortConfirmingMotionNotBlanketCooldown() {
+        val policy=ReroutePolicy()
         policy.requested(0)
-        assertFalse(policy.shouldReroute(90.0, 10f, 30_000))
-        assertFalse(policy.shouldReroute(90.0, 10f, 39_999))
-        assertTrue(policy.shouldReroute(90.0, 10f, 40_000))
-        policy.requested(40_000)
-        assertFalse(policy.shouldReroute(150.0, 10f, 50_000))
-        assertFalse(policy.shouldReroute(150.0, 10f, 69_999))
-        assertTrue(policy.shouldReroute(150.0, 10f, 70_000))
-        assertFalse(policy.shouldReroute(100.0, 70f, 80_000))
-        assertFalse(policy.shouldReroute(20.0, 10f, 90_000))
-        assertFalse(policy.shouldReroute(100.0, 10f, 90_001))
+        assertFalse(policy.shouldReroute(90.0,10f,500,90f,8f))
+        assertTrue(policy.shouldReroute(90.0,10f,900,90f,8f))
+        policy.requested(900)
+        assertTrue(policy.requestAllowed(901))
+        assertFalse(policy.shouldReroute(100.0,70f,1000,90f,8f))
+        assertFalse(policy.shouldReroute(20.0,10f,1100,0f,8f))
+        assertFalse(policy.shouldReroute(100.0,10f,1200,90f,0f))
     }
 
-    @Test fun failedRequestsBackOffForOneMinuteAndVoiceAnnouncementsDeduplicate() {
-        val policy = ReroutePolicy()
-        policy.requested(0); policy.failed(10_000)
-        assertFalse(policy.requestAllowed(69_999))
-        assertTrue(policy.requestAllowed(70_000))
+    @Test fun failedRequestsUseShortBackoffAndRespectExplicitRateLimit() {
+        val policy=ReroutePolicy()
+        policy.failed(10_000)
+        assertFalse(policy.requestAllowed(11_999))
+        assertTrue(policy.requestAllowed(12_000))
+        policy.failed(12_000,60_000)
+        assertFalse(policy.requestAllowed(71_999))
+        assertTrue(policy.requestAllowed(72_000))
         val gate = VoiceCueGate()
         assertTrue(gate.acceptCue(0, 0, "Continue straight"))
         assertFalse(gate.acceptCue(0, 0, "Continue straight"))
