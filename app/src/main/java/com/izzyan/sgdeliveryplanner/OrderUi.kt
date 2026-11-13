@@ -577,14 +577,15 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
                     else file?.let { image ->
                         runCatching {
                             require(image.isFile && image.length() > 0L) { "Report image unavailable." }
-                            shareFallback = openDefaultWhatsAppImageShare(context, singleDeliveryShareIntent(context,image), "Share Delivery Report")
+                            shareFallback = openSmartWhatsAppShare(context, singleDeliveryShareIntent(context,image), SmartShareKind.REPORT)
                         }.onFailure {
                             android.widget.Toast.makeText(context,"Delivery report could not be shared. Please try again.",android.widget.Toast.LENGTH_LONG).show()
                             if (!image.isFile || image.length() == 0L) { error = true; file = null; bitmap = null }
                         }
                     }
-                },enabled=file!=null || error,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
+                },enabled=(file!=null || error) && !SmartShareSession.active,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
             }
+            SmartShareStatus(SmartShareKind.REPORT)
         }
         shareFallback?.let { request -> WhatsAppImageShareFallbackDialog(request) { shareFallback = null } }
     }

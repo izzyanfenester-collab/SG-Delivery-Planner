@@ -9,6 +9,10 @@
   <provider android:name=".ExcelFileProvider" android:authorities="${applicationId}.excel-files" android:exported="false" android:grantUriPermissions="true">
    <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/excel_file_paths"/>
   </provider>
+  <service android:name=".SmartWhatsAppAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true" android:label="@string/smart_whatsapp_service_label">
+   <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+   <meta-data android:name="android.accessibilityservice" android:resource="@xml/smart_whatsapp_accessibility"/>
+  </service>
   <activity android:name=".BuiltInNavigationActivity" android:exported="false"/>
   <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
  </application>

@@ -375,7 +375,7 @@ fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean,
                             }
                             val send = schedulePhotoShareIntent(context, image)
                             if (useDefaultWhatsApp) {
-                                shareFallback = openDefaultWhatsAppImageShare(context, send, "Share Photo")
+                                shareFallback = openSmartWhatsAppShare(context, send, SmartShareKind.ROUTE)
                             } else {
                                 context.startActivity(Intent.createChooser(send, "Share Photo"))
                             }
@@ -389,7 +389,7 @@ fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean,
                         }
                     }
                 },
-                enabled = enabled && !export.busy && !sharingPhoto,
+                enabled = enabled && !export.busy && !sharingPhoto && (!useDefaultWhatsApp || !SmartShareSession.active),
                 modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                 shape = RoundedCornerShape(18.dp),
                 border = BorderStroke(1.dp, PremiumGold),
@@ -408,6 +408,7 @@ fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean,
                 Text(if (expanded) "Minimize below table" else "Maximize below table")
             }
         }
+        if (useDefaultWhatsApp) SmartShareStatus(SmartShareKind.ROUTE)
         if (export.busy) {
             LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)
             Text(export.progress.ifEmpty { "Preparing Excel file…" }, style = MaterialTheme.typography.bodySmall)

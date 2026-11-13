@@ -636,6 +636,7 @@ fun Settings(vm: PlannerViewModel) {
                     }
                 }
         }
+        SmartWhatsAppSettings(vm)
         CompactSettingsSection("Default Navigation", vm.navigationPreferences.default?.label ?: "Ask every time", Icons.Outlined.Navigation) {
                 (listOf<NavigationChoice?>(null) + NavigationChoice.entries).forEach { choice ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)

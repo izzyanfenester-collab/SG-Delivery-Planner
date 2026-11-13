@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">SG Delivery</string>
+    <string name="smart_whatsapp_service_label">SG Delivery · WhatsApp Share Assist</string>
+    <string name="smart_whatsapp_service_description">Optional, user-initiated WhatsApp group search assistance for SG Delivery image sharing. Only the configured WhatsApp app is examined during a share request. Recipient and image must be reviewed before Send. No background messages or chat collection.</string>
 </resources>
