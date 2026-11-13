@@ -1119,7 +1119,7 @@ fun Results(vm: PlannerViewModel, p: Plan) {
                 )
             }
         }
-        ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded,
+        ScheduleExportActions(p, enabled = !vm.busy, expanded = scheduleExpanded, useDefaultWhatsApp = true,
             onToggleExpanded = { scheduleExpanded = !scheduleExpanded })
         if (scheduleExpanded) {
             Text("Swipe the table horizontally to see driving times, delivery periods and departures.",

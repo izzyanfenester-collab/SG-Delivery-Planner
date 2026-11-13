@@ -329,11 +329,14 @@ private fun retainExcelWriteGrant(context: Context, uri: Uri, permissionFlags: I
 }
 
 @Composable
-fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean, onToggleExpanded: () -> Unit) {
+fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean,
+    useDefaultWhatsApp: Boolean = false, onToggleExpanded: () -> Unit) {
     val export: ScheduleExportViewModel = viewModel()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var sharingPhoto by remember(plan.id) { mutableStateOf(false) }
+    var shareFallback by remember(plan.id) { mutableStateOf<WhatsAppImageShareFallbackRequest?>(null) }
+    shareFallback?.let { request -> WhatsAppImageShareFallbackDialog(request) { shareFallback = null } }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Keep the original Excel actions and their ViewModel behavior unchanged.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -370,9 +373,14 @@ fun ScheduleExportActions(plan: Plan, enabled: Boolean, expanded: Boolean, onTog
                             val image = withContext(Dispatchers.IO) {
                                 generateSchedulePhoto(context.applicationContext, snapshot)
                             }
-                            context.startActivity(Intent.createChooser(
-                                schedulePhotoShareIntent(context, image), "Share Photo"
-                            ))
+                            val send = schedulePhotoShareIntent(context, image)
+                            if (useDefaultWhatsApp) {
+                                shareFallback = openDefaultWhatsAppImageShare(context, send, "Share Photo")
+                            } else {
+                                context.startActivity(Intent.createChooser(send, "Share Photo"))
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
                         } catch (_: Exception) {
                             Toast.makeText(context, "Could not share schedule photo. Please try again.",
                                 Toast.LENGTH_LONG).show()
