@@ -43,3 +43,15 @@ internal suspend fun loadPersistedRouteForDelivery(dao: PlannerDao, routeId: Str
     }
     return selected
 }
+
+/** Active pages use the same status as the existing History chop. A completed
+ * snapshot may still be held by Summary, but is never an active selection. */
+internal fun activeDeliveryPlan(plan: Plan?): Plan? =
+    plan?.takeIf { savedDeliveryStatus(it) != SavedDeliveryStatus.COMPLETED }
+
+internal fun unfinishedSavedPlans(records: List<SavedRoute>): List<Plan> =
+    records.mapNotNull { record ->
+        runCatching { PlanJson.decode(record.json) }.getOrNull()
+            ?.takeIf { it.id == record.id && it.stops.isNotEmpty() }
+            ?.let(::activeDeliveryPlan)
+    }
