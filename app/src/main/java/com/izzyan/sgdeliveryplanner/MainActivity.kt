@@ -34,7 +34,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Navigation
@@ -532,28 +532,25 @@ fun Settings(vm: PlannerViewModel) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = SGDimensions.ScreenHorizontal, vertical = SGDimensions.Small),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        PageTitle("Settings", "Set the defaults for your next route.")
+        Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = SGColors.White)
+        Text("Navigation, maps & delivery preferences", fontSize = 13.sp, color = SGColors.Silver)
         NavigationAppearanceSettingsCard()
         OfflineMapSettingsCard(vm)
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("Singapore Postal Database", style = MaterialTheme.typography.titleLarge)
+        val postal = postalStatus
+        CompactSettingsSection("Singapore Postal Database", if (checkingPostal) "Checking…" else postal?.status ?: "Loading…",
+            Icons.Outlined.Storage, settingsPostalColor(postal?.status, checkingPostal), essential = {
                 val state = postalStatus
                 if (state == null) {
                     Text("Loading offline database status…")
                 } else {
-                    Text("Status: " + if (checkingPostal) "Checking…" else state.status,
-                        color = if (state.status == "Update failed") MaterialTheme.colorScheme.error
-                        else PremiumGold, style = MaterialTheme.typography.titleMedium)
-                    Text("Database version: ${state.version}")
-                    Text("Postal codes: ${state.total}  •  Sources: ${state.sources}")
-                    Text("Last checked: ${readablePostalDate(state.lastChecked)}")
-                    Text("Last successful update: ${readablePostalDate(state.lastUpdated)}")
-                    if (state.newCodes > 0) Text("New postal codes added: ${state.newCodes}")
-                    Text(state.detail, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CompactSettingsMetrics(listOf("Version" to state.version.toString(),
+                        "Postal codes" to "%,d".format(Locale.ENGLISH, state.total),
+                        "Sources" to state.sources.toString(),
+                        "Last checked" to compactSettingsDate(state.lastChecked),
+                        "Last updated" to compactSettingsDate(state.lastUpdated)))
+                    if (state.status == "Update failed") Text(state.detail, fontSize = 12.sp, color = SGColors.Error)
                 }
                 OutlinedButton(onClick = {
                     postalScope.launch {
@@ -561,18 +558,30 @@ fun Settings(vm: PlannerViewModel) {
                         try { postalStatus = PostalSnapshotUpdater(postalContext).checkAndRecord() }
                         finally { checkingPostal = false }
                     }
-                }, enabled = !checkingPostal, modifier = Modifier.fillMaxWidth()) {
-                    if (checkingPostal) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("Check for Updates")
+                }, enabled = !checkingPostal, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                    if (checkingPostal) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Check / Update Database", fontSize = 14.sp)
                 }
-                Text("Checks automatically every 7 days when internet is available."
-                    , style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            }) {
+                postal?.let { state ->
+                    CompactSettingsMetric("Checked at", readablePostalDate(state.lastChecked))
+                    CompactSettingsMetric("Successful update", readablePostalDate(state.lastUpdated))
+                    if (state.newCodes > 0) CompactSettingsMetric("New postal codes", state.newCodes.toString())
+                    CompactSettingsDetail(state.detail)
+                }
+                CompactSettingsDetail("Checks automatically every 7 days when internet is available. Failed updates retain the last installed database.")
         }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("App Updates", style = MaterialTheme.typography.titleLarge)
+        val appState = appUpdateStatus
+        val appStatus = when {
+            checkingAppUpdate -> "Checking…"
+            appState.error.isNotEmpty() -> "Unable to check"
+            appState.updateAvailable -> "New version available"
+            appState.lastChecked > 0 && appState.latestBuild != null -> "Up to date"
+            else -> "Not checked yet"
+        }
+        CompactSettingsSection("App Updates", "Build #${appState.currentBuild} · $appStatus", Icons.Outlined.SystemUpdate,
+            settingsAppColor(appState, checkingAppUpdate), essential = {
                 val state = appUpdateStatus
                 val statusText = when {
                     checkingAppUpdate -> "Checking…"
@@ -581,10 +590,7 @@ fun Settings(vm: PlannerViewModel) {
                     state.lastChecked > 0 -> "Up to date"
                     else -> "Not checked yet"
                 }
-                Text("Status: $statusText", color = PremiumGold, style = MaterialTheme.typography.titleMedium)
-                Text("Current version: Build #${state.currentBuild}")
-                Text("Latest version: " + (state.latestBuild?.let { "Build #$it" } ?: "Not available"))
-                Text("Last checked: ${readablePostalDate(state.lastChecked)}")
+                // Status and build are shown in the compact header.
                 if (state.error.isNotEmpty()) Text(state.error,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = {
@@ -594,7 +600,8 @@ fun Settings(vm: PlannerViewModel) {
                             appUpdateStatus = withContext(Dispatchers.IO) { AppReleaseChecker(postalContext).checkNow() }
                         } finally { checkingAppUpdate = false }
                     }
-                }, enabled = !checkingAppUpdate, modifier = Modifier.fillMaxWidth()) {
+                }, enabled = !checkingAppUpdate, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                     if (checkingAppUpdate) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text("Check for App Updates")
                 }
@@ -606,26 +613,21 @@ fun Settings(vm: PlannerViewModel) {
                             Toast.makeText(postalContext, "A browser is required to download the APK.", Toast.LENGTH_LONG).show()
                         }
                     }, modifier = Modifier.fillMaxWidth()) { Text("Download & Install") }
-                    Text("Downloads the official APK in your browser. Android will ask you to confirm installation.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }) {
+                val state = appUpdateStatus
+                CompactSettingsMetric("Current version", "Build #${state.currentBuild}")
+                CompactSettingsMetric("Latest version", state.latestBuild?.let { "Build #$it" } ?: "Not available")
+                CompactSettingsMetric("Last checked", readablePostalDate(state.lastChecked))
+                if (state.updateAvailable) CompactSettingsDetail("Downloads the official APK in your browser. Android will ask you to confirm installation.")
                 if (!appNotificationsAllowed && Build.VERSION.SDK_INT >= 33) {
                     OutlinedButton(onClick = { appNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
                         modifier = Modifier.fillMaxWidth()) { Text("Enable update notifications") }
                 }
-                Text("Checks automatically every day when internet is available. No account or API token required.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+                CompactSettingsDetail("Checks automatically every day when internet is available. No account or API token required.")
         }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)
-                BackupRestoreActions(vm)
-            }
-        }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("Default WhatsApp App", style = MaterialTheme.typography.titleLarge)
+        CompactSettingsBackup(vm)
+        CompactSettingsSection("Default WhatsApp App", vm.whatsappPreferences.default?.label ?: "Ask every time", Icons.Outlined.Chat) {
                 (listOf<WhatsAppChoice?>(null) + WhatsAppChoice.entries).forEach { choice ->
                     Row(Modifier.fillMaxWidth().heightIn(min=48.dp).selectable(vm.whatsappPreferences.default == choice, enabled=!vm.busy, role=androidx.compose.ui.semantics.Role.RadioButton,
                         onClick={vm.whatsappPreferences.updateDefault(choice)}),verticalAlignment=Alignment.CenterVertically) {
@@ -633,8 +635,8 @@ fun Settings(vm: PlannerViewModel) {
                         Text(choice?.label ?: "Ask every time",Modifier.padding(start=5.dp))
                     }
                 }
-                HorizontalDivider()
-                Text("Default Navigation", style = MaterialTheme.typography.titleLarge)
+        }
+        CompactSettingsSection("Default Navigation", vm.navigationPreferences.default?.label ?: "Ask every time", Icons.Outlined.Navigation) {
                 (listOf<NavigationChoice?>(null) + NavigationChoice.entries).forEach { choice ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .selectable(vm.navigationPreferences.default == choice, enabled = !vm.busy, role = androidx.compose.ui.semantics.Role.RadioButton,
@@ -643,12 +645,13 @@ fun Settings(vm: PlannerViewModel) {
                         Text(choice?.label ?: "Ask every time", Modifier.padding(start = 5.dp))
                     }
                 }
-            }
         }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Schedule", style = MaterialTheme.typography.titleLarge)
-                DeliveryDateControl(vm)
+        CompactGpsPreferences()
+        CompactSettingsSection("Schedule", "${vm.service} min/stop · ${vm.traffic}", Icons.Outlined.Schedule) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DeliveryDateControl(vm, Modifier.weight(1f), compact = true)
+                    Clock(vm, Modifier.weight(1f), compact = true)
+                }
                 OutlinedTextField(
                     serviceText,
                     { text ->
@@ -663,8 +666,7 @@ fun Settings(vm: PlannerViewModel) {
                     supportingText = { Text("Enter a whole number from 1 to 120 minutes.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
-                Clock(vm)
-                Text("Traffic estimate", style = MaterialTheme.typography.titleMedium)
+                Text("Traffic estimate", fontSize = 15.sp, color = SGColors.Gold)
                 listOf("Normal", "Light Traffic", "Heavy Traffic").forEach { mode ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { vm.traffic = mode; vm.persist() },
@@ -674,17 +676,16 @@ fun Settings(vm: PlannerViewModel) {
                         Text(trafficLabel(mode))
                     }
                 }
-            }
         }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Road routing", style = MaterialTheme.typography.titleLarge)
+        CompactSettingsSection("Road Routing", "OSRM-compatible server", Icons.Outlined.Route) {
                 OutlinedTextField(
                     vm.endpoint, { vm.endpoint = it.trim(); vm.persist() }, label = { Text("Routing server address (HTTPS)") },
                     modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
                 )
-                Text("The default routing server is for evaluation and may be unavailable. For regular deliveries, use a reliable OSRM-compatible server with Singapore road data. Saved routes keep the settings used when they were planned.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            }
+                CompactSettingsDetail("The default routing server is for evaluation and may be unavailable. For regular deliveries, use a reliable OSRM-compatible server with Singapore road data. Saved routes keep the settings used when they were planned.")
+        }
+        CompactSettingsSection("Language", "English", Icons.Outlined.Language) {
+            CompactSettingsDetail("SG Delivery uses English for app and framework captions. Your device language is unchanged.")
         }
     }
 }
