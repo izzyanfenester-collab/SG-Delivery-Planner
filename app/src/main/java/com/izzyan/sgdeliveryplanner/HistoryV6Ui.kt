@@ -63,6 +63,8 @@ internal fun HistoryViewV6(
 ) {
     val summary = remember(plan) { deliverySummary(plan) }
     var detailsOpen by remember(plan.id) { mutableStateOf(false) }
+    var scheduleOpen by remember(plan.id) { mutableStateOf(false) }
+    if (scheduleOpen) CompletedRouteSchedule(plan) { scheduleOpen = false }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         MarinaBayBackdrop(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().background(V6Background.copy(alpha = .12f))) {
@@ -175,6 +177,10 @@ internal fun HistoryViewV6(
                                 Text("Success Rate: " + String.format(Locale.ENGLISH, "%.1f%%", summary.successRate))
                                 Text("Cash on Hand: " + formatCurrency(plan.cashOnHand) + " · Tax: " + plan.tax)
                                 Text("Remark: " + plan.remark.ifBlank { "—" })
+                                if (activeDeliveryPlan(plan) == null) {
+                                    SGSecondaryButton("View full route and schedule",
+                                        onClick = { scheduleOpen = true }, modifier = Modifier.fillMaxWidth())
+                                }
                             }
                         }
                     }

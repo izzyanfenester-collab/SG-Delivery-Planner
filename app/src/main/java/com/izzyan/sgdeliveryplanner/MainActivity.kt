@@ -197,8 +197,9 @@ fun App(vm: PlannerViewModel) {
                 }
             }
             // Keep route form drafts and scroll positions when the driver opens another screen.
+            val pageRoute = if (vm.screen == "Route" || vm.screen == "Delivery") vm.activeRoute else vm.route
             val screenStateKey = if (vm.screen in setOf("Route", "Delivery", "Map", "Summary"))
-                "${vm.screen}:${vm.route?.id.orEmpty()}" else vm.screen
+                "${vm.screen}:${pageRoute?.id.orEmpty()}" else vm.screen
             screenStates.SaveableStateProvider(screenStateKey) {
                 when (vm.screen) {
                     "Home" -> Home(vm)
@@ -206,8 +207,14 @@ fun App(vm: PlannerViewModel) {
                     "History" -> History(vm)
                     "Payment" -> PaymentScreen(vm)
                     "LocationPicker" -> StartLocationPicker(vm)
+                    "Route", "Delivery" -> {
+                        val p = vm.activeRoute
+                        if (p == null) ActiveTripSelection(vm, vm.screen)
+                        else if (vm.screen == "Delivery") Delivery(vm, p)
+                        else Results(vm, p)
+                    }
                     else -> {
-                        val p = vm.route
+                        val p = pageRoute
                         if (p == null) {
                             Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 PremiumCard(Modifier.fillMaxWidth()) {
@@ -217,7 +224,6 @@ fun App(vm: PlannerViewModel) {
                                 PrimaryAction("Plan a route", { vm.screen = "Home" }, enabled = !vm.busy)
                             }
                         } else when (vm.screen) {
-                            "Delivery" -> Delivery(vm, p)
                             "Map" -> RouteMap(p)
                             "Summary" -> Summary(vm, p)
                             else -> Results(vm, p)
@@ -230,6 +236,72 @@ fun App(vm: PlannerViewModel) {
     }
     vm.reportPreview?.let { plan ->
         DeliverySummaryReportPreview(plan, onClose = vm::closeReportPreview)
+    }
+}
+
+/** Only unfinished persisted trips are offered; choosing one is explicit. */
+@Composable
+private fun ActiveTripSelection(vm: PlannerViewModel, destination: String) {
+    val saved by vm.history.collectAsState(initial = emptyList())
+    val plans = remember(saved) { unfinishedSavedPlans(saved) }
+    val delivery = destination == "Delivery"
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(SGDimensions.Normal),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            if (plans.isEmpty()) {
+                PageTitle(if (delivery) "No Active Deliveries" else "No Active Routes",
+                    if (delivery) "All deliveries are completed. Create a new route or select an unfinished trip from History."
+                    else "Plan a new route on Home or select an unfinished trip from History.")
+                PrimaryAction("Go to Home", { vm.screen = "Home" }, enabled = !vm.busy)
+            } else {
+                PageTitle(if (delivery) "Select an Active Delivery" else "Select an Active Route",
+                    "Choose an unfinished trip to continue. Completed trips remain in History.")
+            }
+        }
+        items(plans, key = { it.id }) { plan ->
+            val status = savedDeliveryStatus(plan)
+            PremiumCard(Modifier.fillMaxWidth().clickable(enabled = !vm.busy) {
+                vm.continueSavedRoute(plan.id, destination)
+            }, borderColor = historyStatusAccent(status).copy(alpha = .38f)) {
+                Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(plan.deliveryDate.toString(), style = MaterialTheme.typography.titleLarge)
+                    Text(status.label, color = historyStatusAccent(status), fontWeight = FontWeight.Bold)
+                    DetailRow("Route ID", plan.id.take(8))
+                    DetailRow("Delivered / Total", "${deliverySummary(plan).delivered} / ${plan.stops.size}")
+                    Text("Tap to continue", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        if (plans.isNotEmpty()) item {
+            SecondaryAction("Go to Home", { vm.screen = "Home" }, enabled = !vm.busy)
+        }
+    }
+}
+
+/** Read-only schedule, accessible without reactivating a completed trip. */
+@Composable
+internal fun CompletedRouteSchedule(plan: Plan, onClose: () -> Unit) {
+    var expanded by rememberSaveable(plan.id) { mutableStateOf(true) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        MarinaBayBackdrop(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(SGDimensions.Normal),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Saved route & schedule", Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge, color = PremiumGold)
+                    TextButton(onClick = onClose) { Text("Close") }
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${plan.startLocation.displayName} → ${plan.endDisplayName}",
+                        style = MaterialTheme.typography.titleMedium)
+                    ScheduleExportActions(plan, enabled = true, expanded = expanded,
+                        onToggleExpanded = { expanded = !expanded })
+                    if (expanded) ScheduleTable(plan)
+                }
+            }
+        }
     }
 }
 
@@ -1132,6 +1204,8 @@ fun ScheduleTable(p: Plan) {
 @Composable
 fun Summary(vm: PlannerViewModel, p: Plan) {
     val context = LocalContext.current
+    var showCompletedSchedule by remember(p.id) { mutableStateOf(false) }
+    if (showCompletedSchedule) CompletedRouteSchedule(p) { showCompletedSchedule = false }
     var showEndNavigation by remember(p.id) { mutableStateOf(false) }
     var failedEndChoice by remember(p.id) { mutableStateOf<NavigationChoice?>(null) }
     if (showEndNavigation) NavigationChooser(
@@ -1217,7 +1291,9 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
                 showEndNavigation = !launched
             }
         }, enabled = !vm.busy)
-        SecondaryAction("View full route and schedule", { vm.screen = "Route" }, enabled = !vm.busy)
+        SecondaryAction("View full route and schedule", {
+            if (activeDeliveryPlan(p) == null) showCompletedSchedule = true else vm.screen = "Route"
+        }, enabled = !vm.busy)
         val remaining = p.stops.withIndex().filter { normalizedStatus(it.value.status) != "DELIVERED" }
         if (remaining.isNotEmpty()) {
             Text("Revisit a delivery", style = MaterialTheme.typography.titleLarge)

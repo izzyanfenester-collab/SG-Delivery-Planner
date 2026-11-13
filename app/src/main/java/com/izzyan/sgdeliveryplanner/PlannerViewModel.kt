@@ -139,7 +139,15 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         private set
     var savedHome by mutableStateOf(locationSettings.home())
         private set
+    // Keep the last route snapshot for Summary/report/proof actions. Active
+    // Route and Delivery must use activeRoute, not this report snapshot.
     var route by mutableStateOf<Plan?>(null)
+    internal val activeRoute: Plan? get() = activeDeliveryPlan(route)
+
+    private fun clearCompletedSelection(plan: Plan) {
+        if (activeDeliveryPlan(plan) == null && prefs.getString("active", null) == plan.id)
+            prefs.edit().remove("active").apply()
+    }
     var reportPreview by mutableStateOf<Plan?>(null)
         private set
     var busy by mutableStateOf(false)
@@ -247,12 +255,14 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             try {
                 active?.let { id ->
                     repo.dao.route(id)?.let { saved ->
-                        route = repo.decode(saved)
-                        val restored = route!!
-                        screen = when {
-                            restored.reviewedFinishedAt != null -> "Summary"
-                            restored.stops.any { it.reviewedAt != null } -> "Delivery"
-                            else -> "Home"
+                        val restored = repo.decode(saved)
+                        if (activeDeliveryPlan(restored) == null) {
+                            // Older installs can still have a completed active pointer.
+                            // Keep the Room record; never resume that trip at startup.
+                            clearCompletedSelection(restored)
+                        } else {
+                            route = restored
+                            screen = if (restored.stops.any { it.reviewedAt != null }) "Delivery" else "Home"
                         }
                     }
                 }
@@ -464,7 +474,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
      * state, and busy blocks switching during those writes. Never save the
      * previous in-memory snapshot here: doing so could overwrite newer data.
      */
-    fun continueSavedRoute(routeId: String) {
+    fun continueSavedRoute(routeId: String, destination: String = "Delivery") {
         if (busy) return
         if (proofRequest != null) {
             message = "Finish or cancel the open proof photo action before switching routes."
@@ -484,7 +494,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 route = selected
                 deliveryReportOrderId = null
                 reportPreview = null
-                screen = "Delivery"
+                screen = if (destination == "Route") "Route" else "Delivery"
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 message = englishError(e,
@@ -496,7 +506,14 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
     fun open(record: SavedRoute) {
         if (busy) return
         try {
-            route = repo.decode(record)
+            val selected = repo.decode(record)
+            if (activeDeliveryPlan(selected) == null) {
+                // Completed History is view-only; never replace another active trip.
+                reportPreview = selected
+                clearCompletedSelection(selected)
+                return
+            }
+            route = selected
             prefs.edit().putString("active", record.id).apply()
             message = ""
             notice = ""
@@ -506,7 +523,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
 
     fun progress(action: String, holdReason: String? = null, holdNote: String? = null) {
         if (busy) return
-        val planned = route ?: return
+        val planned = activeRoute ?: return
         if (planned.current !in planned.stops.indices) { screen = "Summary"; return }
         val actionTime = LocalDateTime.now().toString()
         busy = true
@@ -518,7 +535,10 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 // Persist before advancing the visible stop so a failed save does not lose a delivery action.
                 repo.save(updated)
                 route = updated
-                if (updated.reviewedFinishedAt != null) screen = "Summary"
+                if (activeDeliveryPlan(updated) == null) {
+                    clearCompletedSelection(updated)
+                    screen = "Summary"
+                }
                 if (action == "DELIVERED" || action == "ON_HOLD") deliveryReportOrderId = planned.stops[planned.current].orderId
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { message = englishError(e, "Could not save your delivery progress. Please try again.") }
@@ -530,6 +550,10 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
         if (busy) return
         val planned = route ?: return
         if (index !in planned.stops.indices) return
+        // A completed trip may only be explicitly revisited for an unresolved
+        // stop from its final Summary, as supported by the existing workflow.
+        if (activeDeliveryPlan(planned) == null &&
+            (screen != "Summary" || normalizedStatus(planned.stops[index].status) == "DELIVERED")) return
         busy = true
         viewModelScope.launch {
             try {
@@ -543,7 +567,13 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 }
                 repo.save(updated)
                 route = updated
-                screen = "Delivery"
+                if (activeDeliveryPlan(updated) != null) {
+                    prefs.edit().putString("active", updated.id).apply()
+                    screen = "Delivery"
+                } else {
+                    clearCompletedSelection(updated)
+                    screen = "Summary"
+                }
                 message = ""
                 notice = ""
             } catch (e: CancellationException) { throw e }
@@ -573,6 +603,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 latestExchangeRate = normalizedRate
                 prefs.edit().putString("exchangeRate", normalizedRate).apply()
                 route = updated
+                clearCompletedSelection(updated)
                 message = ""
                 notice = "Summary saved."
                 reportPreview = updated
