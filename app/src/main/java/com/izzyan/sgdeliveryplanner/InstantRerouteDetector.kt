@@ -77,10 +77,12 @@ internal class InstantRerouteDetector {
             val traveled=navigationDistance(prior.point,fix.point)
             val headingWrong=NavigationRoadMatcher.angleDifference(heading,turn.outgoing)>=40f
             val headingContinues=NavigationRoadMatcher.angleDifference(heading,turn.incoming)<=50f
+            val course=NavigationRoadMatcher.bearingFromTwoPoints(prior.point,fix.point)
+            val coherent=course==null || NavigationRoadMatcher.angleDifference(heading,course)<=45f
             // Crossing the incoming tangent's junction plane, off the actual routed geometry,
             // with coherent movement. A correct turn or parallel GPS jitter cannot satisfy this.
             if(past>=max(7.0,fix.accuracy*1.1) && past>oldPast+2 && traveled>=3 &&
-                gap>=max(8.0,fix.accuracy*1.3) && headingWrong && headingContinues) {
+                gap>=max(8.0,fix.accuracy*1.3) && headingWrong && headingContinues && coherent) {
                 return RerouteDecision("missed-junction",fix.timeMs)
             }
         }
@@ -90,7 +92,10 @@ internal class InstantRerouteDetector {
             junction=junctionAhead(shape,local)
             offSince=null; return null
         }
-        val strong=gap>=max(35.0,fix.accuracy*2.5)
+        // Same-direction parallel roads can be indistinguishable with GNSS alone.
+        // Require a larger separation in that ambiguous case.
+        val sameDirection=delta!=null && delta<=35f
+        val strong=gap>=max(if(sameDirection) 50.0 else 35.0,fix.accuracy*2.5)
         val diverging=gap>=max(16.0,fix.accuracy*1.8) && delta!=null && delta>=55f
         if(!strong && !diverging) { offSince=null; return null }
         if(offSince==null) offSince=fix.timeMs

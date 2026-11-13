@@ -134,6 +134,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
             }
         }
         val displayedRoute=session.route
+        // Log when Compose commits the new direction state. This is not a GPU frame timestamp.
         SideEffect { if (!session.offRoute) session.directionRendered(displayedRoute) }
         val navigationScreenWidth = LocalConfiguration.current.screenWidthDp
         val compactNavHeader = navigationScreenWidth < 385
@@ -615,7 +616,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var scope: CoroutineScope? = null
 
     init {
-        sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute === route) updateProgress(p) } }
+        sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute == route) updateProgress(p) } }
         speech = TextToSpeech(context) { status -> main.post {
             if (status == TextToSpeech.SUCCESS) {
                 val result = speech?.setLanguage(Locale.US)
@@ -687,9 +688,11 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); speak("You have arrived at the destination.", "arrival"); return@collect
                 }
-                if (route == null && !loading && reroute.requestAllowed(now)) requestRoute(reliable)
+                if (route == null && !loading && reliable.accuracy <= 35 && now - reliable.timeMs <= 2_500 &&
+                    reroute.requestAllowed(now)) requestRoute(reliable)
                 else if (route != null) {
-                    val decision = instantDetector.observe(reliable,shape)
+                    val decision = if (now - reliable.timeMs <= 2_500) instantDetector.observe(reliable,shape)
+                    else { instantDetector.reset(); null }
                     if (decision != null) {
                         if (!offRoute) {
                             offRoute = true; arrival = ArrivalDetector()
@@ -699,7 +702,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                         if (!loading && reroute.requestAllowed(now)) requestRoute(reliable,decision)
                         else if (loading && requestGate.shouldSupersede(reliable) && reroute.requestAllowed(now))
                             requestRoute(reliable,decision)
-                    } else if (offRoute && !loading && reroute.requestAllowed(now) &&
+                    } else if (offRoute && loading && now - reliable.timeMs <= 2_500 &&
+                        requestGate.shouldSupersede(reliable) && reroute.requestAllowed(now)) {
+                        requestRoute(reliable,RerouteDecision("changed-heading",reliable.timeMs))
+                    } else if (offRoute && !loading && reroute.requestAllowed(now) && now - reliable.timeMs <= 2_500 &&
                         reliable.accuracy<=25 && (reliable.speed?:0f)>=3) {
                         requestRoute(reliable,RerouteDecision("retry-latest",reliable.timeMs))
                     }
@@ -767,8 +773,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 // Publish the first actual new maneuver immediately, not after the next GPS tick.
                 if(trace!=null) {
                     trace.applied=SystemClock.elapsedRealtime(); recordLatency("route-applied",trace.applied,trace)
-                    if(voiceGate.accept(0,instruction,turnMeters?:Double.MAX_VALUE))
-                        speak("In ${metricDistance(turnMeters?:0.0)}, $instruction","reroute-$id")
+                    // Announce the real first maneuver once, even when it is farther than
+                    // the regular 300m voice cue range. Subsequent SDK cues still apply.
+                    voiceGate.accept(0,instruction,turnMeters?:Double.MAX_VALUE)
+                    speak("Route updated. In ${metricDistance(turnMeters?:0.0)}, $instruction","reroute-$id")
                 }
                 location?.let { currentFix ->
                     feed.updates.tryEmit(org.maplibre.navigation.core.location.Location(

@@ -51,6 +51,16 @@ class InstantReroute851Test {
         assertNull(d.observe(fix(0.0,5.0,500),round))
         assertNotNull(d.observe(fix(0.0,20.0,1000),round))
     }
+    @Test fun degradedFixAndTunnelReacquisitionDoNotReuseOldJunctionEvidence(){
+        val shape=listOf(p(0.0,-100.0),p(0.0,0.0),p(-100.0,0.0))
+        val d=InstantRerouteDetector()
+        assertNull(d.observe(fix(0.0,-10.0,0),shape))
+        assertNull(d.observe(fix(0.0,15.0,500,a=40f),shape))
+        assertNull(d.observe(fix(0.0,20.0,7000),shape))
+        // A fresh, valid correct path after a tunnel must not inherit the old approach.
+        assertNull(d.observe(fix(-15.0,0.0,7500,270f),shape))
+        assertNull(d.observe(fix(-25.0,0.0,8000,270f),shape))
+    }
     @Test fun generationAndFreshRouteGuardRejectObsoleteResponses(){
         val gate=RerouteRequestGate()
         val a=gate.begin(fix(0.0,0.0,0))
