@@ -13,7 +13,13 @@ import android.widget.Toast
  * WhatsApp does not expose a reliable stable group ID or the attached content URI
  * in this screen; never select a recipient or click Send based on a name.
  */
+internal fun isWhatsAppPickerClass(value: String?): Boolean =
+    value == "com.whatsapp.contact.picker.ContactPicker" ||
+        value == "com.whatsapp.w4b.contact.picker.ContactPicker"
+
 class SmartWhatsAppAccessibilityService : AccessibilityService() {
+    private var pickerRequestId: String? = null
+    private var pickerWindowId: Int? = null
     override fun onServiceConnected() { super.onServiceConnected(); SmartShareSession.serviceConnected(true) }
     override fun onInterrupt() { SmartShareSession.cancel() }
     override fun onUnbind(intent: android.content.Intent?): Boolean {
@@ -33,9 +39,25 @@ class SmartWhatsAppAccessibilityService : AccessibilityService() {
             prefs.eligibleGroup(request.kind,request.choice) != request.group) {
             SmartShareSession.finish("Sharing settings changed. Manual sharing available."); return
         }
+        if (pickerRequestId != request.id) {
+            pickerRequestId = request.id
+            pickerWindowId = null
+        }
+        // Require a known recipient-picker activity event before inspecting
+        // any view nodes. Unknown activity/window changes fail closed.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val className = event.className?.toString()
+            if (isWhatsAppPickerClass(className)) pickerWindowId = event.windowId
+            else if (className?.startsWith("com.whatsapp") == true ||
+                (pickerWindowId != null && pickerWindowId != event.windowId)) {
+                SmartShareSession.finish("Unexpected WhatsApp screen. Manual sharing available.")
+                return
+            }
+        }
+        if (pickerWindowId == null || event.windowId != pickerWindowId) return
         val root = rootInActiveWindow ?: return
         try {
-            if (root.packageName?.toString() != request.choice.packageName) return
+            if (root.packageName?.toString() != request.choice.packageName || root.windowId != pickerWindowId) return
             // Never inspect unrelated chat content. Only query fixed, known
             // picker labels and search view IDs; unsupported UI times out.
             if (!hasPickerTitle(root)) return

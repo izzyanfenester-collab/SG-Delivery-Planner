@@ -48,6 +48,13 @@ class SmartWhatsApp851Test {
         assertTrue(SmartShareSession.status.contains("Verify recipient"))
         assertFalse(SmartShareSession.status.contains("Successfully"))
     }
+    @Test fun onlyKnownContactPickerActivityIsAccepted(){
+        assertTrue(isWhatsAppPickerClass("com.whatsapp.contact.picker.ContactPicker"))
+        assertTrue(isWhatsAppPickerClass("com.whatsapp.w4b.contact.picker.ContactPicker"))
+        assertFalse(isWhatsAppPickerClass("com.whatsapp.Conversation"))
+        assertFalse(isWhatsAppPickerClass("com.whatsapp.HomeActivity"))
+        assertFalse(isWhatsAppPickerClass(null))
+    }
     @Test fun cancelAndServiceDisconnectNeverReplay(){
         SmartShareSession.serviceConnected(true)
         val group=SmartGroup("Test",WhatsAppChoice.PERSONAL.packageName)

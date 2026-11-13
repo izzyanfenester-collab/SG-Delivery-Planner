@@ -109,15 +109,21 @@ internal object SmartShareSession {
     fun manual(kind: SmartShareKind, message: String) {
         if (!active) { lastKind = kind; finish(message) }
     }
+    fun clearIdleStatus() {
+        if (!active) { status = ""; lastKind = null }
+    }
 }
 
 /** Use the existing ACTION_SEND image/URI and preference, never an unofficial WhatsApp protocol. */
 internal fun openSmartWhatsAppShare(context: Context, send: Intent, kind: SmartShareKind): WhatsAppImageShareFallbackRequest? {
     val prefs = SmartSharePreferences(context)
-    if (!prefs.enabled) return openDefaultWhatsAppImageShare(context,send,kind.title)
     if (SmartShareSession.active) {
         Toast.makeText(context,"A WhatsApp sharing request is already active.",Toast.LENGTH_SHORT).show()
         return null
+    }
+    if (!prefs.enabled) {
+        SmartShareSession.clearIdleStatus()
+        return openDefaultWhatsAppImageShare(context,send,kind.title)
     }
     val choice = WhatsAppPreferences(context).default
     val group = prefs.eligibleGroup(kind, choice)

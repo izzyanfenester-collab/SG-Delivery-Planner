@@ -123,6 +123,14 @@ fun App(vm: PlannerViewModel) {
     RoutePostalReviewDialog(vm)
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && SmartShareSession.active)
+                SmartShareSession.finish("Returned to SG Delivery. Send status is unknown; no automatic resend.")
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     DisposableEffect(view, lifecycle, vm.screen) {
         val awake = DeliveryScreenAwake(view, lifecycle, vm.screen)
         onDispose { awake.close() }
