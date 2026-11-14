@@ -684,8 +684,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 lastFix = now; location = fix
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
                 if(!startAnnounced && !arrived && voice==NavigationVoice.PANDA && !muted && fix.accuracy<=35) {
-                    startAnnounced=true
-                    pandaStatus("start_navigation","Start navigation.",VoicePriority.CHARACTER)
+                    startAnnounced=pandaStatus("start_navigation","Start navigation.",VoicePriority.CHARACTER)
                 }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
@@ -800,7 +799,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 adaptiveEta.reset(); baseRemainingSeconds=newRoute.duration
                 remainingMeters=newRoute.distance; remainingSeconds=newRoute.duration
                 instantDetector.reset(); reroute.succeeded(); offRoute=false; message=null
-                voiceGate.reset(); pandaGate.reset(); voiceAudio.stop()
+                voiceGate.reset(); pandaGate.reset()
+                // Initial route reception should not cut off the start phrase.
+                // A genuine replacement always invalidates all previous audio.
+                if(route!=null || trace!=null) voiceAudio.stop()
                 unavailableAnnounced=false; approachAnnounced=false
                 latencyRoute=newRoute; route=newRoute
                 sdk.startNavigation(newRoute)
@@ -898,11 +900,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun speak(text:String,id:String) {
         if(active && !muted) voiceAudio.play(VoicePhrase(id,VoicePriority.CRITICAL,listOf(VoicePart(null,text))))
     }
-    private fun pandaStatus(id:String,fallback:String,priority:VoicePriority=VoicePriority.STATUS) {
-        if(active && !muted && voice==NavigationVoice.PANDA) {
-            android.util.Log.d("SGVoice853","voice=PANDA event=$id clip=$id.mp3")
-            voiceAudio.play(VoicePhrase(id,priority,listOf(VoicePart(id,fallback))))
-        }
+    private fun pandaStatus(id:String,fallback:String,priority:VoicePriority=VoicePriority.STATUS):Boolean {
+        if(!active || muted || voice!=NavigationVoice.PANDA) return false
+        android.util.Log.d("SGVoice853","voice=PANDA event=$id clip=$id.mp3")
+        return voiceAudio.play(VoicePhrase(id,priority,listOf(VoicePart(id,fallback))))
     }
     private fun announcePanda(index:Int,type:String?,modifier:String?,road:String?,text:String,distance:Double,
         cue:NavigationPanelCue,force:Boolean,following:PandaFollowing?,nextLength:Double,sdkDue:Boolean=true,

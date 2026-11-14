@@ -76,7 +76,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                 // Prefer an installed English voice for dynamic instructions.
                 runCatching { engine.voices?.firstOrNull{!it.isNetworkConnectionRequired && it.locale.language=="en" && it.locale.country=="US"}?.let{engine.voice=it} }
                 engine.setOnUtteranceProgressListener(object:UtteranceProgressListener(){
-                    override fun onStart(id:String?){Log.d("SGVoice852","tts-start id=$id")}
+                    override fun onStart(id:String?){Log.d("SGVoice853","tts-start id=$id")}
                     override fun onDone(id:String?){handler.post{completeTts(id)}}
                     @Deprecated("Deprecated in Java") override fun onError(id:String?){handler.post{completeTts(id)}}
                     override fun onError(id:String?,errorCode:Int){handler.post{completeTts(id)}}
@@ -112,7 +112,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                 media.setVolume(volume,volume)
                 media.setOnPreparedListener {
                     if(token==generation && player===media) {
-                        try {media.start();Log.d("SGVoice852","clip=${part.clip} startCallMs=${SystemClock.elapsedRealtime()-requested}")}
+                        try {media.start();Log.d("SGVoice853","clip=${part.clip} startCallMs=${SystemClock.elapsedRealtime()-requested}")}
                         catch(_:Exception){fallbackMedia(token,media,part.fallback)}
                     }
                 }

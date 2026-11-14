@@ -59,6 +59,50 @@ class LivePanda853Test {
         assertTrue("actual next step=$type/$mod",selected.phrase.parts.first().clip?.startsWith("exit_")==true)
         println("Valhalla type=$type modifier=$mod clip=${selected.phrase.parts.first().clip} reason=${selected.reason}")
     }
+    @Test fun replayRealValhallaStepGeometryIntoSdkProgressSelectsPandaTurn(){
+        val json=requireNotNull(javaClass.getResource("/navigation/valhalla-singapore.json")).readText()
+        val route=parseNavigationRoute(json,GpsPoint(1.35,103.8),GpsPoint(1.36,103.81))
+        val steps=route.legs.single().steps
+        val signs=NavigationPanelSigns.metadata(json)
+        val geometry=decodeNavigationGeometry(steps[4].geometry)
+        val points=geometry.map{Position(it.lon,it.lat)}
+        val lengths=geometry.zipWithNext().map{(a,b)->navigationDistance(a,b)}
+        val total=lengths.sum()
+        assertTrue(total>510)
+        // Interpolate GPS locations at actual remaining path distances along the
+        // recorded road geometry, then reconstruct SDK route-progress distance.
+        fun remainingFromSample(wanted:Double):Double {
+            var traversed=0.0
+            for(i in lengths.indices){
+                if(traversed+lengths[i]>=total-wanted && lengths[i]>0.0){
+                    val a=geometry[i];val b=geometry[i+1]
+                    val ratio=((total-wanted-traversed)/lengths[i]).coerceIn(0.0,1.0)
+                    val sample=GpsPoint(a.lat+(b.lat-a.lat)*ratio,a.lon+(b.lon-a.lon)*ratio)
+                    return navigationDistance(sample,b)+lengths.drop(i+1).sum()
+                }
+                traversed+=lengths[i]
+            }
+            return 0.0
+        }
+        val scheduler=LivePandaScheduler()
+        val played=mutableListOf<String?>()
+        listOf(530.0,510.0,490.0,350.0,210.0,190.0,110.0,58.0,43.0,12.0).forEachIndexed{i,d->
+            val remaining=remainingFromSample(d)
+            val progress=RouteProgress(directionsRoute=route,legIndex=0,distanceRemaining=remaining+800,
+                currentStepPoints=points,upcomingStepPoints=null,stepIndex=4,legDistanceRemaining=remaining+800,
+                stepDistanceRemaining=remaining,intersections=null,currentIntersection=null,upcomingIntersection=null,
+                currentLegAnnotation=null,intersectionDistancesAlongStep=null)
+            val next=progress.currentLegProgress.currentStepProgress.nextStep!!
+            val type=signs[5].type ?: next.maneuver.type?.toString()
+            val mod=signs[5].modifier ?: next.maneuver.modifier?.toString()
+            val text=next.maneuver.instruction.orEmpty()
+            val now=i*5000L
+            scheduler.evaluate(5,type,mod,text,next.name,NavigationPanelSigns.cue(type,mod,text,signs[5],signs[4]),
+                progress.stepDistanceRemaining,15f,now)?.let{played+=it.phrase.parts.first().clip;scheduler.committed(it,now)}
+        }
+        assertEquals(listOf("turn_left_500m","turn_left_200m","turn_left_50m","turn_left"),played)
+        println("Real Valhalla step geometry replay: $played")
+    }
     @Test fun everyLiveFamilyUsesRecordedCueWhenSupported(){
         val s=LivePandaScheduler()
         val cases=listOf(
