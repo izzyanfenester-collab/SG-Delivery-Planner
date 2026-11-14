@@ -22,7 +22,7 @@ internal fun NavigationVoiceSettings(session:NavigationSession) {
             val selected=session.voice==voice
             val available=voice!=NavigationVoice.PANDA || session.pandaAvailable
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).selectable(selected,enabled=available,
-                role=Role.RadioButton,onClick={session.setVoice(voice)}),verticalAlignment=Alignment.CenterVertically){
+                role=Role.RadioButton,onClick={session.selectVoice(voice)}),verticalAlignment=Alignment.CenterVertically){
                 RadioButton(selected,onClick=null,enabled=available,colors=RadioButtonDefaults.colors(selectedColor=SGColors.Gold))
                 if(voice==NavigationVoice.PANDA) Image(painterResource(R.drawable.ic_panda_warrior_voice),
                     contentDescription="Original Panda Warrior voice icon",modifier=Modifier.padding(end=6.dp).size(28.dp))
@@ -41,7 +41,7 @@ internal fun NavigationVoiceSettings(session:NavigationSession) {
             Text("Voice volume",Modifier.weight(1f),fontSize=14.sp,color=Color.White)
             Text("${(session.voiceVolume*100).toInt()}%",color=SGColors.Gold,fontSize=14.sp)
         }
-        Slider(session.voiceVolume,{session.setVoiceVolume(it)},colors=SliderDefaults.colors(thumbColor=SGColors.Gold,activeTrackColor=SGColors.Gold))
+        Slider(session.voiceVolume,{session.changeVoiceVolume(it)},colors=SliderDefaults.colors(thumbColor=SGColors.Gold,activeTrackColor=SGColors.Gold))
         OutlinedButton(onClick={if(session.previewingVoice)session.stopVoicePreview() else session.previewVoice()},
             enabled=session.pandaAvailable && !session.muted,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){
             Text(if(session.previewingVoice)"Stop Preview" else "Preview Panda Warrior",color=SGColors.Gold)

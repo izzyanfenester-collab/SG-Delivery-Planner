@@ -615,13 +615,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var startAnnounced=false
     private var approachAnnounced=false
     private var unavailableAnnounced=false
-    fun setVoice(value: NavigationVoice) {
+    fun selectVoice(value: NavigationVoice) {
         if(value==NavigationVoice.PANDA && !pandaAvailable) return
         if(voice==value) return
         voiceAudio.stop(); voice=value; gpsModePreferences.setVoice(value)
         pandaGate.reset(); voiceGate.reset()
     }
-    fun setVoiceVolume(value:Float) {
+    fun changeVoiceVolume(value:Float) {
         voiceVolume=value.coerceIn(0f,1f);gpsModePreferences.setVoiceVolume(voiceVolume)
         voiceAudio.setVolume(voiceVolume)
     }
@@ -718,8 +718,11 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                             instruction = "Recalculating route…"; street = null; turnMeters = null
                             panelCue = NavigationPanelCue(); voiceAudio.stop(); pandaGate.reset()
                             // Start playback asynchronously; the routing coroutine never waits for it.
-                            pandaStatus(if(decision.reason=="missed-junction") "wrong_turn" else "rerouting",
-                                "Recalculating route.")
+                            val statusClip=if(decision.reason=="missed-junction") "wrong_turn" else "rerouting"
+                            // Dispatch the routing request in this GPS callback before
+                            // opening audio focus or preparing a status MP3.
+                            main.post { if(active && offRoute && !arrived)
+                                pandaStatus(statusClip,"Recalculating route.") }
                         }
                         if (!loading && reroute.requestAllowed(now)) requestRoute(reliable,decision)
                         else if (loading && requestGate.shouldSupersede(reliable) && reroute.requestAllowed(now))

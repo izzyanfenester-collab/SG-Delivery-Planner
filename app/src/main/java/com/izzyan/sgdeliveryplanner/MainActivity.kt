@@ -79,7 +79,8 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
 class MainActivity : ComponentActivity() {
-    override fun onPause() { DeliveryVoiceAnnouncements.stop(); super.onPause() }
+    override fun onResume() { super.onResume(); DeliveryVoiceAnnouncements.resume() }
+    override fun onPause() { DeliveryVoiceAnnouncements.pause(); super.onPause() }
     override fun onDestroy() { DeliveryVoiceAnnouncements.close(); super.onDestroy() }
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(englishAppContext(newBase))

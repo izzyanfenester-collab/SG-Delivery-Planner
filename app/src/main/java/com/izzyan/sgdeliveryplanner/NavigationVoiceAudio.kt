@@ -157,7 +157,11 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
  * stops playback before launching it. */
 internal object DeliveryVoiceAnnouncements {
     private var audio:NavigationVoiceAudio?=null
+    private var foreground=false
+    fun resume(){foreground=true}
+    fun pause(){foreground=false;stop()}
     fun play(context:Context,id:String) {
+        if(!foreground)return
         val prefs=GpsNavigationModePreferences(context)
         if(!prefs.isSoundEnabled() || prefs.voice()!=NavigationVoice.PANDA)return
         val fallback=when(id){"next_delivery"->"On to the next delivery.";"delivery_complete"->"All deliveries completed.";else->return}
@@ -166,5 +170,5 @@ internal object DeliveryVoiceAnnouncements {
         controller.play(VoicePhrase(id,VoicePriority.CHARACTER,listOf(VoicePart(id,fallback))))
     }
     fun stop(){audio?.stop()}
-    fun close(){audio?.close();audio=null}
+    fun close(){foreground=false;audio?.close();audio=null}
 }
