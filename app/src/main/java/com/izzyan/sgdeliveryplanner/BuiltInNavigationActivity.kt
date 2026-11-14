@@ -805,7 +805,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                             next.maneuver.modifier?.toString(),next.name,instruction,
                             turnMeters?:0.0, panelCue, force=true,
                             following=steps.getOrNull(2)?.let { PandaFollowing(it.maneuver.type?.toString(),it.maneuver.modifier?.toString(),it.maneuver.instruction) },
-                            nextLength=next.distance)
+                            nextLength=next.distance,newRouteReady=true)
                     } else speak("Route updated. In ${metricDistance(turnMeters?:0.0)}, $instruction","reroute-$id")
                 } else if(!startAnnounced) {
                     startAnnounced=true
@@ -858,14 +858,14 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 val due=current.step.voiceInstructions?.any {
                     turnMeters!!<=it.distanceAlongGeometry+5 && !it.announcement.isNullOrBlank()
                 }==true
-                announcePanda(nextIndex,next.maneuver.type?.toString(),next.maneuver.modifier?.toString(),
-                    next.name,instruction,turnMeters?:0.0,panelCue,force=false,following=following,
-                    nextLength=next.distance,sdkDue=due)
-                if(!approachAnnounced && (remainingMeters?:Double.MAX_VALUE) in 35.0..80.0 &&
+                if(!approachAnnounced && (remainingMeters?:Double.MAX_VALUE) in 35.0..100.0 &&
                     panelCue.sign==NavigationSign.ARRIVE) {
                     approachAnnounced=true
                     pandaStatus("approaching_destination","Approaching destination.",VoicePriority.CHARACTER)
                 }
+                announcePanda(nextIndex,next.maneuver.type?.toString(),next.maneuver.modifier?.toString(),
+                    next.name,instruction,turnMeters?:0.0,panelCue,force=false,following=following,
+                    nextLength=next.distance,sdkDue=due)
                 return
             }
             val cue = current.step.voiceInstructions?.withIndex()?.lastOrNull {
@@ -893,11 +893,20 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             voiceAudio.play(VoicePhrase(id,priority,listOf(VoicePart(id,fallback))))
     }
     private fun announcePanda(index:Int,type:String?,modifier:String?,road:String?,text:String,distance:Double,
-        cue:NavigationPanelCue,force:Boolean,following:PandaFollowing?,nextLength:Double,sdkDue:Boolean=true) {
+        cue:NavigationPanelCue,force:Boolean,following:PandaFollowing?,nextLength:Double,sdkDue:Boolean=true,
+        newRouteReady:Boolean=false) {
         if(!active || muted || offRoute || !distance.isFinite()) return
         val speed=location?.speed?.takeIf{location?.hasSpeed()==true}?:0f
+        voiceAudio.stopObsoleteManeuver(index)
         val phrase=PandaVoiceMapper.maneuver(type,modifier,text,road,cue,distance,speed,following,nextLength)
-        if(pandaGate.accept(index,phrase,distance,force,sdkDue)) voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))
+        if(pandaGate.accept(index,phrase,distance,force,sdkDue)) {
+            // Optional reassurance only AFTER the real maneuver, only with enough time.
+            val parts=if(newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
+                distance/maxOf(speed.toDouble(),5.0)>15 && distance>250)
+                phrase.parts+VoicePart("new_route_ready","New route ready.")
+            else phrase.parts
+            voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}",parts=parts))
+        }
     }
     override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }
 }

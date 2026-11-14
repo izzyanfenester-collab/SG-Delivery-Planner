@@ -1,5 +1,7 @@
 package com.izzyan.sgdeliveryplanner
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +24,8 @@ internal fun NavigationVoiceSettings(session:NavigationSession) {
             Row(Modifier.fillMaxWidth().heightIn(min=48.dp).selectable(selected,enabled=available,
                 role=Role.RadioButton,onClick={session.setVoice(voice)}),verticalAlignment=Alignment.CenterVertically){
                 RadioButton(selected,onClick=null,enabled=available,colors=RadioButtonDefaults.colors(selectedColor=SGColors.Gold))
-                if(voice==NavigationVoice.PANDA) Text("🐼",fontSize=21.sp,modifier=Modifier.padding(end=6.dp))
+                if(voice==NavigationVoice.PANDA) Image(painterResource(R.drawable.ic_panda_warrior_voice),
+                    contentDescription="Original Panda Warrior voice icon",modifier=Modifier.padding(end=6.dp).size(28.dp))
                 Text(voice.label,color=if(selected)SGColors.Gold else Color.White,fontSize=14.sp)
             }
         }

@@ -141,6 +141,10 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     }
     private fun releasePlayer(){val old=player;player=null;runCatching{old?.release()}}
     fun stopPreview(){if(previewing)stop()}
+    fun stopObsoleteManeuver(index:Int) {
+        val key=current?.key ?: return
+        if(key.startsWith("step-") && !key.startsWith("step-$index-")) stop()
+    }
     fun stop(){
         generation++;current=null;previewing=false
         releasePlayer();runCatching{tts?.stop()}

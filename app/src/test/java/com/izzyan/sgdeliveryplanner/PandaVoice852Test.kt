@@ -42,6 +42,32 @@ class PandaVoice852Test {
         assertEquals("then_turn_right",q.parts.last().clip)
         assertNull(phrase("turn","left",5.0,text="Turn left then turn right").parts.first().clip)
     }
+    @Test fun everyRecordedManeuverFamilyIsReachable(){
+        val ids=mutableSetOf<String>()
+        fun add(t:String,m:String,d:Double,exit:Int?=null){phrase(t,m,d,exit).parts.mapNotNull{it.clip}.forEach{ids+=it}}
+        for(side in listOf("left","right")){
+            for(d in listOf(5,50,100,200,300,500,800,1000,2000))add("turn",side,d.toDouble())
+            for(d in listOf(5,200))add("keep",side,d.toDouble())
+            add("turn","slight $side",5.0);add("turn","sharp $side",5.0)
+            add("merge",side,5.0)
+            for(d in listOf(5,200,500,1000))add("off ramp",side,d.toDouble())
+            add("arrive",side,5.0)
+            val a=PandaVoiceMapper.maneuver("turn","left","Turn left",null,NavigationPanelCue(NavigationSign.TURN_LEFT),5.0,10f,
+                PandaFollowing("turn",side,"Turn $side"),30.0)
+            ids+=a.parts.last().clip!!
+            val k=PandaVoiceMapper.maneuver("turn","left","Turn left",null,NavigationPanelCue(NavigationSign.TURN_LEFT),5.0,10f,
+                PandaFollowing("keep",side,"Keep $side"),30.0)
+            ids+=k.parts.last().clip!!
+        }
+        add("continue","straight",5.0);add("continue","straight",1000.0);add("continue","straight",2000.0)
+        add("turn","uturn",5.0);add("turn","uturn",200.0);add("merge","straight",5.0)
+        add("roundabout","right",40.0)
+        for(i in 1..6)add("roundabout","right",40.0,i)
+        add("arrive","straight",200.0)
+        ids+=listOf("start_navigation","wrong_turn","rerouting","new_route_ready","approaching_destination",
+            "arrived","next_delivery","delivery_complete","gps_lost","gps_restored","route_unavailable")
+        assertEquals("All 67 manifest instruction IDs have a supported mapping/event",67,ids.size)
+    }
     @Test fun gateLimitsAdvanceAndResetsOnReroute(){
         val gate=PandaVoiceGate()
         assertTrue(gate.accept(1,phrase("turn","left",800.0),800.0,false,true))

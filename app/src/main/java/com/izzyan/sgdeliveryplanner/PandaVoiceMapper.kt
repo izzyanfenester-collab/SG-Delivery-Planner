@@ -76,7 +76,8 @@ internal object PandaVoiceMapper {
                     parts+=VoicePart("then_$next","Then ${following.text?:next!!.replace('_',' ')}")
             }
         }
-        return VoicePhrase(selected ?: if(immediate) "tts-now" else "tts-advance",priority,parts)
+        val bucket=when{d>500->"far";d>100->"mid";else->"near"}
+        return VoicePhrase(selected ?: if(immediate) "tts-now" else "tts-advance-$bucket",priority,parts)
     }
 }
 /** At most two advance cues per maneuver plus one immediate cue. A route
@@ -97,7 +98,7 @@ internal class PandaVoiceGate {
         if(immediate || advances>=2 || phrase.key in keys || (advances>0 && distance>lastAdvanceDistance*0.5))return false
         val recorded=phrase.parts.firstOrNull()?.clip!=null
         // SDK timing is used for unsupported distance TTS. Do not speak on every tick.
-        if(!force && !recorded && (!sdkDue || distance>300))return false
+        if(!force && !recorded && !sdkDue)return false
         if(!force && distance>2000)return false
         keys+=phrase.key;advances++;lastAdvanceDistance=distance;return true
     }

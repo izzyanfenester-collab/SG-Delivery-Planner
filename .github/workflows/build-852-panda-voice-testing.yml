@@ -5,6 +5,9 @@ on:
     paths: ['app/**','.github/workflows/build-852-panda-voice-testing.yml']
 permissions:
   contents: read
+concurrency:
+  group: sg-delivery-b852-private-packaging
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
