@@ -64,7 +64,7 @@ class LivePanda853Test {
         val route=parseNavigationRoute(json,GpsPoint(1.35,103.8),GpsPoint(1.36,103.81))
         val steps=route.legs.single().steps
         val signs=NavigationPanelSigns.metadata(json)
-        val geometry=decodeNavigationGeometry(steps[4].geometry)
+        val geometry=decodeNavigationGeometry(requireNotNull(steps[4].geometry))
         val points=geometry.map{Position(it.lon,it.lat)}
         val lengths=geometry.zipWithNext().map{(a,b)->navigationDistance(a,b)}
         val total=lengths.sum()

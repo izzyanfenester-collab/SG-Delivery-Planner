@@ -51,8 +51,9 @@ internal class LivePandaScheduler {
                 distance<=t && distance>=t-tolerance(t) &&
                 (old==null || old>t || old>=t-tolerance(t))
         }.minOrNull()
-        // A route can start a few metres before a recorded threshold.
-        val starting=if(old==null || force) thresholds.filter{t->
+        // A newly calculated route may need an immediate accurate advance cue.
+        // Ordinary progress waits until the threshold is reached.
+        val starting=if(force) thresholds.filter{t->
             eligible(t) && abs(distance-t)<=tolerance(t)
         }.minByOrNull{abs(distance-it)} else null
         val threshold=crossed?:starting
