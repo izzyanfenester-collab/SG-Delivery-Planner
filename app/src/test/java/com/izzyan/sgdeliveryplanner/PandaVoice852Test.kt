@@ -12,7 +12,8 @@ class PandaVoice852Test {
         for(side in listOf("left","right")){
             for((meters,suffix) in listOf(50 to "50m",100 to "100m",200 to "200m",300 to "300m",500 to "500m",800 to "800m",1000 to "1km",2000 to "2km"))
                 assertEquals("turn_${side}_$suffix",phrase("turn",side,meters.toDouble()).parts.first().clip)
-            assertNull(phrase("turn",side,137.0).parts.first().clip)
+            assertTrue(phrase("turn",side,137.0).parts.isEmpty())
+            assertEquals("turn_${side}_200m",phrase("turn",side,173.0).parts.first().clip)
             assertEquals("turn_$side",phrase("turn",side,5.0).parts.first().clip)
         }
     }
@@ -28,19 +29,18 @@ class PandaVoice852Test {
         for(exit in 1..6) assertEquals("roundabout_exit_$exit",phrase("roundabout","right",40.0,exit).parts.first().clip)
         assertNull(phrase("roundabout","right",40.0,7).parts.first().clip)
         assertNull(phrase("unknown","left",5.0).parts.first().clip)
-        assertNull(phrase("arrive","straight",5.0).parts.first().clip)
+        assertTrue(phrase("arrive","straight",5.0).parts.isEmpty())
         assertEquals("arrive_200m",phrase("arrive","left",200.0).parts.first().clip)
     }
     @Test fun dynamicExitAndConsecutiveManeuversUseRealMetadata(){
         val cue=NavigationPanelCue(NavigationSign.EXIT_LEFT,"17")
         val p=PandaVoiceMapper.maneuver("off ramp","left","Take exit 17 onto Tampines Road","Tampines Road",cue,500.0,10f)
         assertEquals("exit_left_500m",p.parts[0].clip)
-        assertTrue(p.parts[1].fallback.contains("Exit 17"))
-        assertTrue(p.parts[1].fallback.contains("Tampines Road"))
+        assertEquals(1,p.parts.size) // Road and numbered exit stay on screen.
         val q=PandaVoiceMapper.maneuver("turn","left","Turn left",null,NavigationPanelCue(NavigationSign.TURN_LEFT),5.0,10f,
             PandaFollowing("turn","right","Turn right"),30.0)
         assertEquals("then_turn_right",q.parts.last().clip)
-        assertNull(phrase("turn","left",5.0,text="Turn left then turn right").parts.first().clip)
+        assertEquals("turn_left",phrase("turn","left",5.0,text="Turn left then turn right").parts.first().clip)
     }
     @Test fun everyRecordedManeuverFamilyIsReachable(){
         val ids=mutableSetOf<String>()
@@ -78,6 +78,12 @@ class PandaVoice852Test {
         assertFalse(gate.accept(1,phrase("turn","left",5.0),5.0,false,true))
         gate.reset()
         assertTrue(gate.accept(1,phrase("turn","right",200.0),200.0,true,true))
+    }
+    @Test fun unmatchedDistanceDoesNotConsumeVoiceGate(){
+        val gate=PandaVoiceGate()
+        assertFalse(gate.accept(2,phrase("turn","left",137.0),137.0,false,true))
+        assertTrue(gate.accept(2,phrase("turn","left",100.0),100.0,false,true))
+        assertTrue(gate.accept(2,phrase("turn","left",5.0),5.0,false,true))
     }
     @Test fun deliveryAnnouncementsOnlyAfterActualDeliveredTransition(){
         val plan=schedule(listOf(depot.copy(postal="001234"),depot.copy(postal="001235")),

@@ -641,6 +641,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     suspend fun run(): Unit = coroutineScope {
+        voice = gpsModePreferences.voice(); voiceVolume = gpsModePreferences.voiceVolume(); voiceAudio.setVolume(voiceVolume)
         active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); voiceGate.reset(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
