@@ -32,6 +32,7 @@ internal fun NavigationVoiceSettings(session:NavigationSession) {
         if(session.pandaAvailable) {
             Text("English · Male / Character · 67 clips",color=SGColors.Silver,fontSize=12.sp)
             Text("Offline playback · ElevenLabs recordings",color=SGColors.Silver,fontSize=12.sp)
+            Text("Generated with ElevenLabs · Personal, non-commercial use only",color=SGColors.Silver,fontSize=11.sp)
         } else Text("Panda pack not installed. Default voice available.",color=SGColors.Warning,fontSize=12.sp)
         Row(Modifier.fillMaxWidth().heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
             Text("Voice Guidance",Modifier.weight(1f),fontSize=14.sp,color=Color.White)

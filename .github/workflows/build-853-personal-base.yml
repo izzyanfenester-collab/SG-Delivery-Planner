@@ -1,12 +1,12 @@
-name: Build SG Delivery 853 Panda Live Voice Fix Private Testing Base
+name: Build SG Delivery 853 Personal Edition unsigned base
 on:
   push:
-    branches: [feature/build-853-panda-live-voice-fix-testing]
-    paths: ['app/**','.github/workflows/build-853-panda-live-voice-fix-testing.yml']
+    branches: [personal]
+    paths: ['app/**','.github/workflows/build-853-personal-base.yml']
 permissions:
   contents: read
 concurrency:
-  group: sg-delivery-b853-private-packaging
+  group: sg-delivery-b853-personal-base
   cancel-in-progress: true
 jobs:
   build:
@@ -30,24 +30,24 @@ jobs:
       - name: Unit tests, build, lint
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug lintDebug
+          ./gradlew testDebugUnitTest assembleRelease lintDebug
       - name: Export base APK and local Android SDK signing tools
         run: |
           set -euo pipefail
           mkdir -p private-packaging
-          cp app/build/outputs/apk/debug/app-debug.apk private-packaging/base.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk private-packaging/base.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" private-packaging/
           cp "$ANDROID_HOME/build-tools/36.0.0/zipalign" private-packaging/
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging private-packaging/base.apk | grep "package: name='com.izzyan.sgdeliveryplanner.b853test'"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify private-packaging/base.apk
+          # This unsigned base has no recordings. Final audio packaging and signing are private.
       - uses: actions/upload-artifact@v4
         with:
-          name: B853-Private-Packaging-Base
+          name: B853-Personal-Unsigned-Base
           path: private-packaging/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: B853-Verification-Reports
+          name: B853-Personal-Verification-Reports
           path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
