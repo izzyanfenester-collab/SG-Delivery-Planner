@@ -1,0 +1,51 @@
+name: Build SG Delivery Official Private Packaging Base
+on:
+  push:
+    branches: [main]
+    paths: ['app/**','.github/workflows/build-official-private-base.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: python3 scripts/build_postal_seed.py
+      - name: Compile production release and verify tests
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Export production base for private audio packaging and signing
+        run: |
+          set -euo pipefail
+          mkdir -p private-packaging
+          cp app/build/outputs/apk/release/app-release-unsigned.apk private-packaging/base.apk
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" private-packaging/
+          cp "$ANDROID_HOME/build-tools/36.0.0/zipalign" private-packaging/
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging private-packaging/base.apk | grep "package: name='com.izzyan.sgdeliveryplanner'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Official-B854-Private-Packaging-Base
+          path: private-packaging/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Official-B854-Verification-Reports
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore

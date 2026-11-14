@@ -3,12 +3,6 @@ name: Build Signed SG Delivery Release APK
 # Only the owner can dispatch this on main; untrusted pull requests never see signing secrets.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'scripts/build_postal_seed.py'
-      - '.github/workflows/build-release-apk.yml'
 
 permissions:
   # The release job publishes signed APKs to public GitHub Releases for all runners.
@@ -40,6 +34,10 @@ jobs:
         run: python3 scripts/build_postal_seed.py
       - name: Verify unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug
+      - name: Require original Panda voice pack before any signed public release
+        run: |
+          test -f app/src/main/assets/voicepacks/panda_warrior/manifest.json
+          test "$(find app/src/main/assets/voicepacks/panda_warrior/audio -name '*.mp3' | wc -l)" -eq 67
       - name: Restore release keystore from protected secrets
         shell: bash
         env:
