@@ -877,7 +877,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = SGDimensions.ScreenHorizontal, vertical = SGDimensions.Small),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (p.current !in p.stops.indices) {
             PageTitle("All stops reviewed", "Your delivery summary is ready, including any stops to revisit.")
@@ -899,7 +899,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                         Text("Stop ${p.current + 1} of ${p.stops.size}", Modifier.weight(1f), color = PremiumGold, style = MaterialTheme.typography.titleLarge)
                         stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, stop) }
                     }
-                    Text(stop.place.postal, color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text(stop.place.postal, color = SGColors.SelectedGold, fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Text("Block ${stop.place.block} • ${stop.place.area}", color = Color.White, style = MaterialTheme.typography.titleMedium)
                     if (stop.order == null) Text(stop.place.address, color = SGColors.Silver, style = MaterialTheme.typography.bodyLarge) else CompositionLocalProvider(LocalContentColor provides Color.White) { CustomerDetails(vm,stop) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -913,7 +913,7 @@ fun Delivery(vm: PlannerViewModel, p: Plan) {
                     Text("Delivery period: ${time(stop.arrival)} – ${time(stop.leave)}", color = SGColors.Silver)
                     stop.etaArrival?.let { Text("Updated ETA: ${time(it)} • Finish: ${time(stop.etaLeave ?: stop.leave)}", color = PremiumGold) }
                     stop.completedAt?.let { Text("Actual / Delivered at: ${time(it)}", color = PremiumGold) }
-                    Text("Planning estimate", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
+                    Text("Planning estimate", color = SGColors.Silver, style = MaterialTheme.typography.labelMedium)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1534,6 +1534,11 @@ private fun OfflinePlannedRouteMap(p: Plan, archive: java.io.File?, modifier: Mo
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             })
             val start = p.startLocation.asPlace()
+            view.overlays.add(Marker(view).apply {
+                position = GeoPoint(start.lat, start.lon)
+                title = "START — " + p.startLocation.displayName
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            })
             val end = p.endPlace
             val pins = p.stops.map { GeoPoint(it.place.lat, it.place.lon) } +
                 GeoPoint(start.lat, start.lon) + GeoPoint(end.lat, end.lon)
