@@ -38,6 +38,20 @@ jobs:
         run: chmod +x gradlew
       - name: Generate account-free Singapore postal index
         run: python3 scripts/build_postal_seed.py
+      - name: Require complete original Panda Warrior voice pack before release
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("app/src/main/assets/voicepacks/panda_warrior")
+          assert (root / "manifest.json").is_file(), "Panda Warrior pack is missing; do not publish an incomplete Official APK."
+          clips = json.loads((root / "manifest.json").read_text())["clips"]
+          assert len(clips) == 67 and len({c["id"] for c in clips}) == 67
+          for c in clips:
+              assert c["file"] == "audio/" + c["id"] + ".mp3"
+              assert (root / c["file"]).is_file() and (root / c["file"]).stat().st_size > 0
+          assert len(list((root / "audio").glob("*.mp3"))) == 67
+          PY
       - name: Verify unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug
       - name: Restore release keystore from protected secrets
