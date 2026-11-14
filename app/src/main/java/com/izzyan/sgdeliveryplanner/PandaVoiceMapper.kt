@@ -9,9 +9,9 @@ internal data class VoicePart(val clip:String?,val fallback:String)
 internal data class VoicePhrase(val key:String,val priority:VoicePriority,val parts:List<VoicePart>)
 internal data class PandaFollowing(val type:String?,val modifier:String?,val text:String?)
 internal object PandaVoiceMapper {
-    private fun norm(s:String?)=s.orEmpty().lowercase(Locale.ROOT).replace('_',' ').replace('-',' ').trim()
+    private fun norm(s:String?)=s.orEmpty().lowercase(Locale.ROOT).replace('_',' ').replace('-',' ').replace(Regex("\\s+")," ").trim()
     private val distances= listOf(50 to "50m",100 to "100m",200 to "200m",300 to "300m",500 to "500m",800 to "800m",1000 to "1km",2000 to "2km")
-    private fun base(type:String?,modifier:String?,cue:NavigationPanelCue):String? {
+    internal fun base(type:String?,modifier:String?,cue:NavigationPanelCue):String? {
         val t=norm(type);val m=norm(modifier)
         // Unknown types are not inferred from the straight-arrow default.
         if(t.isBlank()) return null
@@ -46,12 +46,13 @@ internal object PandaVoiceMapper {
         return "${prefix}_${near.second}"
     }
     fun maneuver(type:String?,modifier:String?,instruction:String,road:String?,cue:NavigationPanelCue,
-        meters:Double,speed:Float,following:PandaFollowing?=null,nextLength:Double=Double.MAX_VALUE):VoicePhrase {
+        meters:Double,speed:Float,following:PandaFollowing?=null,nextLength:Double=Double.MAX_VALUE,
+        threshold:Int?=null, live:Boolean=false):VoicePhrase {
         val d=meters.coerceAtLeast(0.0)
         val immediate=d<=maxOf(9.0,(speed*1.5).toDouble()).coerceAtMost(30.0)
         val base=base(type,modifier,cue)
         val complex=Regex("(?i)\\b(?:then|followed by)\\b").containsMatchIn(instruction)
-        val exact=if(immediate) base else distanceId(base,d)
+        val exact=if(immediate) base else distanceId(base,threshold?.toDouble() ?: d)
         val raw=if(immediate) instruction else "In ${metricDistance(d)}, $instruction"
         // Roundabout ordinal phrase describes the actual exit, never a guessed one.
         val nearRound=base?.startsWith("roundabout")==true && d<=80
@@ -63,7 +64,9 @@ internal object PandaVoiceMapper {
         if(selected!=null) {
             val extra=buildList {
                 cue.expresswayExit?.let{add("Exit $it.")}
-                if(!road.isNullOrBlank() && road.length<=120 && instruction.contains(road,ignoreCase=true) &&
+                // For live Panda guidance the panel already shows ordinary road names.
+                // Speak only essential exit identification / complex unsupported instructions.
+                if(!live && !road.isNullOrBlank() && road.length<=120 && instruction.contains(road,ignoreCase=true) &&
                     base !in setOf("destination_left","destination_right","arrived"))
                     add("Road: $road.")
             }.joinToString(" ")

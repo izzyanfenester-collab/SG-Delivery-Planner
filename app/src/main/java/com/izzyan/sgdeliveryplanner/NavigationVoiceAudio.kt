@@ -88,7 +88,10 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     fun play(phrase:VoicePhrase):Boolean {
         if(closed || volume<=0f || phrase.parts.isEmpty())return false
         val old=current
-        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank))return false
+        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank)) {
+            Log.d("SGVoice853","deferred phrase=${phrase.key} reason=active-higher-priority")
+            return false
+        }
         stop()
         if(manager.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED)return false
         focusHeld=true;current=phrase;partIndex=0;previewing=phrase.priority==VoicePriority.PREVIEW
@@ -119,12 +122,16 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                 media.setOnErrorListener { _,_,_->fallbackMedia(token,media,part.fallback);true }
                 media.prepareAsync()
                 return
-            } catch(_:Exception){releasePlayer()}
-        }
+            } catch(e:Exception){
+                Log.w("SGVoice853","clip=${part.clip} fallback=asset-open-or-prepare-failed type=${e.javaClass.simpleName}")
+                releasePlayer()
+            }
+        } else Log.d("SGVoice853","phrase=${phrase.key} fallback=dynamic-or-unsupported-part")
         speakPart(token,part.fallback)
     }
     private fun fallbackMedia(token:Long,media:MediaPlayer,text:String) {
         if(token!=generation || player!==media)return
+        Log.w("SGVoice853","fallback=media-playback-error phrase=${current?.key}")
         releasePlayer();speakPart(token,text)
     }
     private fun speakPart(token:Long,text:String) {

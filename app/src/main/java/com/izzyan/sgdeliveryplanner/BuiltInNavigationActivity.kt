@@ -606,7 +606,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val main = android.os.Handler(Looper.getMainLooper())
     private var active = false
     private val voiceAudio = NavigationVoiceAudio(context)
-    private val pandaGate = PandaVoiceGate()
+    private val pandaGate = LivePandaScheduler()
     var voice by mutableStateOf(gpsModePreferences.voice()); private set
     var voiceVolume by mutableStateOf(gpsModePreferences.voiceVolume()); private set
     val pandaAvailable get() = voiceAudio.pack.available
@@ -619,6 +619,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(value==NavigationVoice.PANDA && !pandaAvailable) return
         if(voice==value) return
         voiceAudio.stop(); voice=value; gpsModePreferences.setVoice(value)
+        android.util.Log.d("SGVoice853","voice-selected=${value.name} pack=${pandaAvailable}")
         pandaGate.reset(); voiceGate.reset()
     }
     fun changeVoiceVolume(value:Float) {
@@ -642,6 +643,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
 
     suspend fun run(): Unit = coroutineScope {
         active = true; scope = this; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); voiceGate.reset(); pandaGate.reset(); gpsSanityFilter.reset()
+        voice=gpsModePreferences.voice(); voiceVolume=gpsModePreferences.voiceVolume()
+        muted=!gpsModePreferences.isSoundEnabled();voiceAudio.setVolume(voiceVolume)
+        android.util.Log.d("SGVoice853","session-start voice=${voice.name} muted=$muted pack=${pandaAvailable}")
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
                 message = "Resolving destination…"
@@ -679,6 +683,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 }
                 lastFix = now; location = fix
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
+                if(!startAnnounced && !arrived && voice==NavigationVoice.PANDA && !muted && fix.accuracy<=35) {
+                    startAnnounced=true
+                    pandaStatus("start_navigation","Start navigation.",VoicePriority.CHARACTER)
+                }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
                     fix.bearing.takeIf { fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees <= 35f) },
@@ -810,10 +818,6 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                             following=steps.getOrNull(2)?.let { PandaFollowing(it.maneuver.type?.toString(),it.maneuver.modifier?.toString(),it.maneuver.instruction) },
                             nextLength=next.distance,newRouteReady=true)
                     } else speak("Route updated. In ${metricDistance(turnMeters?:0.0)}, $instruction","reroute-$id")
-                } else if(!startAnnounced) {
-                    startAnnounced=true
-                    if(voice==NavigationVoice.PANDA && (turnMeters?:0.0)>80)
-                        pandaStatus("start_navigation","Start navigation.",VoicePriority.CHARACTER)
                 }
                 location?.let { currentFix ->
                     feed.updates.tryEmit(org.maplibre.navigation.core.location.Location(
@@ -892,8 +896,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(active && !muted) voiceAudio.play(VoicePhrase(id,VoicePriority.CRITICAL,listOf(VoicePart(null,text))))
     }
     private fun pandaStatus(id:String,fallback:String,priority:VoicePriority=VoicePriority.STATUS) {
-        if(active && !muted && voice==NavigationVoice.PANDA)
+        if(active && !muted && voice==NavigationVoice.PANDA) {
+            android.util.Log.d("SGVoice853","voice=PANDA event=$id clip=$id.mp3")
             voiceAudio.play(VoicePhrase(id,priority,listOf(VoicePart(id,fallback))))
+        }
     }
     private fun announcePanda(index:Int,type:String?,modifier:String?,road:String?,text:String,distance:Double,
         cue:NavigationPanelCue,force:Boolean,following:PandaFollowing?,nextLength:Double,sdkDue:Boolean=true,
@@ -901,15 +907,17 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(!active || muted || offRoute || !distance.isFinite()) return
         val speed=location?.speed?.takeIf{location?.hasSpeed()==true}?:0f
         voiceAudio.stopObsoleteManeuver(index)
-        val phrase=PandaVoiceMapper.maneuver(type,modifier,text,road,cue,distance,speed,following,nextLength)
-        if(pandaGate.accept(index,phrase,distance,force,sdkDue)) {
-            // Optional reassurance only AFTER the real maneuver, only with enough time.
-            val parts=if(newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
-                distance/maxOf(speed.toDouble(),5.0)>15 && distance>250)
-                phrase.parts+VoicePart("new_route_ready","New route ready.")
-            else phrase.parts
-            voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}",parts=parts))
-        }
+        val now=SystemClock.elapsedRealtime()
+        val selected=pandaGate.evaluate(index,type,modifier,text,road,cue,distance,speed,now,
+            force,sdkDue,following,nextLength) ?: return
+        val phrase=selected.phrase
+        val parts=if(newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
+            distance/maxOf(speed.toDouble(),5.0)>15 && distance>250)
+            phrase.parts+VoicePart("new_route_ready","New route ready.")
+        else phrase.parts
+        android.util.Log.d("SGVoice853","voice=${voice.name} step=$index type=$type modifier=$modifier distanceM=$distance clip=${phrase.parts.first().clip ?: "TTS"} reason=${selected.reason}")
+        if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}",parts=parts)))
+            pandaGate.committed(selected,now)
     }
     override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }
 }
