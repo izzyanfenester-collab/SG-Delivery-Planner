@@ -9,6 +9,3 @@ local.properties
 signing.properties
 app/src/main/assets/sg_postal_seed.db
 __pycache__/
-
-# User-owned Panda Warrior recordings: private local packaging only until license verified.
-/app/src/main/assets/voicepacks/panda_warrior/
