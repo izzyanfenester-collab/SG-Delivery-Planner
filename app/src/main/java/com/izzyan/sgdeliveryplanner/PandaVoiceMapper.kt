@@ -3,9 +3,9 @@ package com.izzyan.sgdeliveryplanner
 import kotlin.math.abs
 import java.util.Locale
 
-internal enum class NavigationVoice(val label:String) { DEFAULT("Default Navigation Voice"), PANDA("Panda Warrior – English") }
+internal enum class NavigationVoice(val label:String) { PANDA("Panda Warrior – English") }
 internal enum class VoicePriority(val rank:Int) { PREVIEW(0), CHARACTER(1), STATUS(2), ADVANCE(3), CRITICAL(4) }
-internal data class VoicePart(val clip:String?,val fallback:String)
+internal data class VoicePart(val clip:String,val description:String)
 internal data class VoicePhrase(val key:String,val priority:VoicePriority,val parts:List<VoicePart>)
 internal data class PandaFollowing(val type:String?,val modifier:String?,val text:String?)
 internal object PandaVoiceMapper {
@@ -21,8 +21,10 @@ internal object PandaVoiceMapper {
             NavigationSign.SHARP_LEFT->"sharp_left";NavigationSign.SHARP_RIGHT->"sharp_right"
             NavigationSign.KEEP_LEFT,NavigationSign.FORK_LEFT->"keep_left"
             NavigationSign.KEEP_RIGHT,NavigationSign.FORK_RIGHT->"keep_right"
-            NavigationSign.MERGE_LEFT,NavigationSign.RAMP_LEFT->"merge_left"
-            NavigationSign.MERGE_RIGHT,NavigationSign.RAMP_RIGHT->"merge_right"
+            NavigationSign.MERGE_LEFT->"merge_left"
+            NavigationSign.RAMP_LEFT->"keep_left"
+            NavigationSign.MERGE_RIGHT->"merge_right"
+            NavigationSign.RAMP_RIGHT->"keep_right"
             NavigationSign.EXIT_LEFT->"exit_left";NavigationSign.EXIT_RIGHT->"exit_right"
             NavigationSign.UTURN->"u_turn"
             else->null
@@ -30,7 +32,7 @@ internal object PandaVoiceMapper {
         if(t.isBlank()) return fromSign()
         if(t in setOf("on ramp","ramp","enter motorway","enter highway")) return fromSign()
         if(m.isBlank() && t in setOf("turn","continue","new name","end of road","notification")) return fromSign()
-        if("roundabout" in t || "rotary" in t) return cue.roundaboutExit?.let { if(it in 1..6) "roundabout_exit_$it" else null }
+        if("roundabout" in t || "rotary" in t) return cue.roundaboutExit?.let { if(it in 1..6) "roundabout_exit_$it" else "roundabout" }
             ?: if(cue.roundaboutExit==null && t in setOf("roundabout","rotary","roundabout turn")) "roundabout" else null
         if(t in setOf("arrive","arrival")) return when(m){"left"->"destination_left";"right"->"destination_right";else->"arrived"}
         if("u turn" in m || m=="uturn" || "u turn" in t || t=="uturn") return "u_turn"
@@ -46,7 +48,7 @@ internal object PandaVoiceMapper {
             else->if(t=="depart" || t=="continue") "continue_straight" else null}
         return null
     }
-    private fun distanceId(base:String?,meters:Double):String? {
+    private fun distanceId(base:String?,meters:Double,speed:Float,previous:Double?):String? {
         val allowed=when(base){
             "turn_left","turn_right"->distances
             "exit_left","exit_right"->distances.filter{it.first in listOf(200,500,1000)}
@@ -55,35 +57,35 @@ internal object PandaVoiceMapper {
             else->emptyList()
         }
         val near=allowed.minByOrNull{abs(it.first-meters)}?:return null
-        // Narrow tolerance for sampled GPS distances, not nearest-clip rounding.
-        if(abs(near.first-meters)>maxOf(10.0,minOf(60.0,near.first*0.15))) return null
+        val tolerance=maxOf(5.0,minOf(25.0,near.first*0.10))
+        val crossed=previous!=null && previous>=near.first && meters<=near.first
+        val lateLimit=minOf(near.first*0.15,maxOf(tolerance,speed.coerceAtLeast(0f).toDouble()*1.5))
+        if(abs(near.first-meters)>tolerance &&
+            !(crossed && near.first-meters<=lateLimit)) return null
         val prefix=when(base){"destination_left","destination_right","arrived"->"arrive";"continue_straight"->"continue";else->base}
         return "${prefix}_${near.second}"
     }
     fun maneuver(type:String?,modifier:String?,instruction:String,road:String?,cue:NavigationPanelCue,
-        meters:Double,speed:Float,following:PandaFollowing?=null,nextLength:Double=Double.MAX_VALUE):VoicePhrase {
+        meters:Double,speed:Float,following:PandaFollowing?=null,nextLength:Double=Double.MAX_VALUE,previousDistance:Double?=null):VoicePhrase {
         val d=meters.coerceAtLeast(0.0)
         val immediate=d<=maxOf(9.0,(speed*1.5).toDouble()).coerceAtMost(30.0)
         val base=base(type,modifier,cue)
-        val exact=if(immediate) base else distanceId(base,d)
+        val exact=if(immediate) base else distanceId(base,d,speed,previousDistance)
         val raw=if(immediate) instruction else "In ${metricDistance(d)}, $instruction"
         val nearRound=base?.startsWith("roundabout")==true && d<=80
         val clip=exact ?: if(nearRound) base else null
         val selected=if(clip=="arrived") null else clip
         val priority=if(immediate) VoicePriority.CRITICAL else VoicePriority.ADVANCE
-        // Wait for an accurate recorded cue; do not consume the gate with TTS.
-        if(base!=null && selected==null) return VoicePhrase("await-recorded-cue",priority,emptyList())
-        // Unsupported maneuvers retain accurate TTS for safety.
-        // Dynamic road and exit text remains on screen.
+        // No clip means visual-only until a safe recorded cue exists.
+        if(selected==null) return VoicePhrase(if(base==null) "missing-audio" else "await-recorded-cue",priority,emptyList())
         val parts=mutableListOf(VoicePart(selected,raw))
-        if(selected!=null && immediate && following!=null && nextLength in 0.0..60.0) {
+        if(immediate && following!=null && nextLength in 0.0..60.0) {
             val nextCue=NavigationPanelSigns.cue(following.type,following.modifier,following.text)
             val next=base(following.type,following.modifier,nextCue)
             if(next in setOf("turn_left","turn_right","keep_left","keep_right"))
                 parts+=VoicePart("then_$next","Then ${following.text?:next!!.replace('_',' ')}")
         }
-        val bucket=when{d>500->"far";d>100->"mid";else->"near"}
-        return VoicePhrase(selected ?: if(immediate) "tts-now" else "tts-advance-$bucket",priority,parts)
+        return VoicePhrase(selected,priority,parts)
     }
 }
 /** At most two advance cues per maneuver plus one immediate cue. A route
@@ -94,7 +96,12 @@ internal class PandaVoiceGate {
     private var lastAdvanceDistance=Double.POSITIVE_INFINITY
     private var immediate=false
     private val keys=mutableSetOf<String>()
-    fun reset(){step=-1;advances=0;lastAdvanceDistance=Double.POSITIVE_INFINITY;immediate=false;keys.clear()}
+    private var observed:Double?=null
+    fun previousDistance(index:Int,distance:Double):Double? {
+        if(index!=step){reset();step=index}
+        val old=observed;observed=distance;return old
+    }
+    fun reset(){step=-1;advances=0;lastAdvanceDistance=Double.POSITIVE_INFINITY;immediate=false;keys.clear();observed=null}
     fun accept(index:Int,phrase:VoicePhrase,distance:Double,force:Boolean,sdkDue:Boolean):Boolean {
         if(index!=step){reset();step=index}
         if(phrase.parts.isEmpty())return false
@@ -103,9 +110,6 @@ internal class PandaVoiceGate {
             immediate=true;return true
         }
         if(immediate || advances>=2 || phrase.key in keys || (advances>0 && distance>lastAdvanceDistance*0.5))return false
-        val recorded=phrase.parts.firstOrNull()?.clip!=null
-        // SDK timing is used for unsupported distance TTS. Do not speak on every tick.
-        if(!force && !recorded && !sdkDue)return false
         if(!force && distance>2000)return false
         keys+=phrase.key;advances++;lastAdvanceDistance=distance;return true
     }

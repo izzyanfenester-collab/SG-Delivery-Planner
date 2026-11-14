@@ -13,7 +13,7 @@ class PandaVoice852Test {
             for((meters,suffix) in listOf(50 to "50m",100 to "100m",200 to "200m",300 to "300m",500 to "500m",800 to "800m",1000 to "1km",2000 to "2km"))
                 assertEquals("turn_${side}_$suffix",phrase("turn",side,meters.toDouble()).parts.first().clip)
             assertTrue(phrase("turn",side,137.0).parts.isEmpty())
-            assertEquals("turn_${side}_200m",phrase("turn",side,173.0).parts.first().clip)
+            assertTrue(phrase("turn",side,173.0).parts.isEmpty())
             assertEquals("turn_$side",phrase("turn",side,5.0).parts.first().clip)
         }
     }
@@ -27,8 +27,8 @@ class PandaVoice852Test {
             assertEquals("destination_$side",phrase("arrive",side,5.0).parts.first().clip)
         }
         for(exit in 1..6) assertEquals("roundabout_exit_$exit",phrase("roundabout","right",40.0,exit).parts.first().clip)
-        assertNull(phrase("roundabout","right",40.0,7).parts.first().clip)
-        assertNull(phrase("unknown","left",5.0).parts.first().clip)
+        assertEquals("roundabout",phrase("roundabout","right",40.0,7).parts.first().clip)
+        assertTrue(phrase("unknown","left",5.0).parts.isEmpty())
         assertTrue(phrase("arrive","straight",5.0).parts.isEmpty())
         assertEquals("arrive_200m",phrase("arrive","left",200.0).parts.first().clip)
     }
@@ -84,6 +84,16 @@ class PandaVoice852Test {
         assertFalse(gate.accept(2,phrase("turn","left",137.0),137.0,false,true))
         assertTrue(gate.accept(2,phrase("turn","left",100.0),100.0,false,true))
         assertTrue(gate.accept(2,phrase("turn","left",5.0),5.0,false,true))
+    }
+    @Test fun thresholdCrossingAndNoLegacyVoice(){
+        val cue=NavigationPanelCue(NavigationSign.TURN_RIGHT)
+        fun at(d:Double,prev:Double?)=PandaVoiceMapper.maneuver("turn","right","Turn right","Road",cue,d,15f,previousDistance=prev)
+        assertTrue(at(373.0,400.0).parts.isEmpty())
+        assertEquals("turn_right_300m",at(286.0,315.0).parts.single().clip)
+        assertTrue(at(240.0,340.0).parts.isEmpty())
+        assertEquals("turn_right_200m",at(184.0,208.0).parts.single().clip)
+        assertEquals("turn_right",at(8.0,40.0).parts.single().clip)
+        assertEquals(listOf(NavigationVoice.PANDA),NavigationVoice.entries.toList())
     }
     @Test fun deliveryAnnouncementsOnlyAfterActualDeliveredTransition(){
         val plan=schedule(listOf(depot.copy(postal="001234"),depot.copy(postal="001235")),

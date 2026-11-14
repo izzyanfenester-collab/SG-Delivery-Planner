@@ -15,10 +15,11 @@ internal class GpsNavigationModePreferences(context: Context) {
     fun setSoundEnabled(enabled: Boolean) {
         store.edit().putBoolean("navigation_sound_enabled", enabled).apply()
     }
-    fun voice(): NavigationVoice = NavigationVoice.entries.firstOrNull {
-        it.name == store.getString("navigation_voice", null)
-    } ?: NavigationVoice.DEFAULT
-    fun setVoice(value: NavigationVoice) { store.edit().putString("navigation_voice",value.name).apply() }
+    fun voice(): NavigationVoice {
+        if(store.getString("navigation_voice",null)!=NavigationVoice.PANDA.name)
+            store.edit().putString("navigation_voice",NavigationVoice.PANDA.name).apply()
+        return NavigationVoice.PANDA
+    }
     fun voiceVolume(): Float = store.getFloat("navigation_voice_volume",1f).coerceIn(0f,1f)
     fun setVoiceVolume(value:Float) { store.edit().putFloat("navigation_voice_volume",value.coerceIn(0f,1f)).apply() }
 }
