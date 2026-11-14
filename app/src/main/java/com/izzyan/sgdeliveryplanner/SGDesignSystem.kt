@@ -131,9 +131,9 @@ fun SGCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(SGDimensions.RadiusCard),
-        border = BorderStroke(1.dp, borderColor ?: SGColors.Divider),
+        border = BorderStroke(1.dp, borderColor ?: SGColors.Divider.copy(alpha = .85f)),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         content = content
     )
 }
@@ -162,7 +162,7 @@ fun SGPaymentCard(
 
 @Composable
 fun SGPageHeader(title: String, subtitle: String? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(SGDimensions.Compact)) {
+    Column(verticalArrangement = Arrangement.spacedBy(SGDimensions.Tight)) {
         Text(title, style = MaterialTheme.typography.headlineMedium, color = SGColors.White)
         subtitle?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = SGColors.Silver)
@@ -258,7 +258,7 @@ fun SGBottomNavigation(
                 val active = selected == name
                 TextButton(
                     onClick = { onSelect(name) }, enabled = enabled,
-                    modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                     shape = RoundedCornerShape(SGDimensions.RadiusSmall),
                     contentPadding = PaddingValues(horizontal = 1.dp, vertical = SGDimensions.Tight),
                     colors = ButtonDefaults.textButtonColors(
@@ -272,7 +272,9 @@ fun SGBottomNavigation(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Icon(icon, contentDescription = description,
-                            modifier = Modifier.size(SGDimensions.Icon))
+                            modifier = Modifier.size(22.dp))
+                        Box(Modifier.width(if (active) 18.dp else 0.dp).height(2.dp)
+                            .background(if (active) SGColors.SelectedGold else Color.Transparent, RoundedCornerShape(2.dp)))
                         // At extreme accessibility font scales, rely on labelled icons
                         // rather than clipping six tab captions into a narrow row.
                         if (showLabels) {

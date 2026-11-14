@@ -114,7 +114,7 @@ internal fun DesignCOverview(date: String, onLongPressDate: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Outlined.Payments, contentDescription = null, tint = SGColors.Gold, modifier = Modifier.size(21.dp))
-        Text("Payment Overview", color = SGColors.SelectedGold, fontSize = 18.sp,
+        Text("Payment Overview", color = SGColors.SelectedGold, fontSize = 19.sp,
             fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         Row(
             Modifier.heightIn(min = PaymentDesignC.ControlHeight)

@@ -113,7 +113,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
             border = BorderStroke(1.dp, PremiumGold.copy(alpha = .7f)),
             tonalElevation = 0.dp
         ) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     "Delivery Report Summary",
                     color = PremiumGold,

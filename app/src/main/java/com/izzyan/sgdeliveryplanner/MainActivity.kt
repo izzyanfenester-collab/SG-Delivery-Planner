@@ -134,7 +134,7 @@ fun App(vm: PlannerViewModel) {
         topBar = {
             Surface(color = PremiumNavy, shadowElevation = 4.dp) {
                 // Keep the safe-area inset and 48dp touch targets, but reclaim 20dp vertically on every page.
-                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 2.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (vm.canGoBack) {
                             TextButton(
@@ -146,7 +146,10 @@ fun App(vm: PlannerViewModel) {
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) { Text("← Back", style = MaterialTheme.typography.titleMedium) }
                         }
-                        Spacer(Modifier.weight(1f))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("SG DELIVERY", color = SGColors.Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(vm.screen, color = SGColors.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
                         if (vm.screen in setOf("Home", "Route", "Delivery", "Map", "History", "Payment")) {
                             SGIconButton(onClick = { vm.screen = "Settings" }, enabled = !vm.busy) {
                                 Icon(androidx.compose.material.icons.Icons.Outlined.Settings,
@@ -449,9 +452,12 @@ fun Home(vm: PlannerViewModel) {
             Clock(vm, Modifier.weight(1f), compact = true)
         }
 
-        Text("Delivery time per stop: " + vm.service + " minutes",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall)
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Time per stop", Modifier.weight(1f), color = SGColors.Silver, style = MaterialTheme.typography.bodyMedium)
+                Text("${vm.service} min", color = SGColors.SelectedGold, fontWeight = FontWeight.Bold)
+            }
+        }
 
         SGTextField(
             value = vm.input, onValueChange = vm::updatePostalInput,
@@ -1033,9 +1039,9 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) SGColors.Gold else null
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), color = SGColors.SelectedGold, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 StatusBadge(stop.status)
             }
             if (current || stop.order?.phoneNumber != null) {
@@ -1092,8 +1098,8 @@ fun Results(vm: PlannerViewModel, p: Plan) {
     // Each saved route retains its own expansion state while the driver navigates.
     var scheduleExpanded by rememberSaveable(p.id) { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(SGDimensions.Normal),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Surface(
             onClick = { scheduleExpanded = !scheduleExpanded },
@@ -1127,17 +1133,9 @@ fun Results(vm: PlannerViewModel, p: Plan) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ScheduleTable(p)
         }
-        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
-        }
-        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
-        PremiumCard(Modifier.fillMaxWidth()) {
-            Text("END — ${p.endReportLabel}\nPlanned arrival: ${time(p.returned)}", Modifier.padding(18.dp), style = MaterialTheme.typography.titleMedium)
-        }
         PageTitle("Your optimized route", "${p.startLocation.displayName} → deliveries → ${p.endDisplayName}")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .4f)) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(p.startLocation.reportLabel, style = MaterialTheme.typography.titleLarge)
                 DetailRow("Start location", p.startLocation.displayName)
                 DetailRow("End location", p.endReportLabel)
@@ -1156,8 +1154,16 @@ fun Results(vm: PlannerViewModel, p: Plan) {
         }
         PrimaryAction("Start or resume deliveries", { vm.screen = if (p.current in p.stops.indices) "Delivery" else "Summary" }, enabled = !vm.busy)
         SecondaryAction("View delivery summary", { vm.screen = "Summary" }, enabled = !vm.busy)
+        Text("Optimized stop order", style = MaterialTheme.typography.titleLarge)
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("START — ${p.startLocation.reportLabel}\n${time(p.start)}", Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        p.stops.forEachIndexed { index, stop -> StopCard(vm, p, stop, index, index == p.current) { if (!vm.busy) vm.revisit(index) } }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Text("END — ${p.endReportLabel}\nPlanned arrival: ${time(p.returned)}", Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
+        }
+        PremiumCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Planning estimate • ${trafficLabel(p.mode)}", color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
                 DetailRow("Driving time without allowance", duration(p.baseSeconds))
                 DetailRow("Traffic allowance", duration(p.bufferSeconds))
@@ -1228,11 +1234,11 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
     val estimated = p.reviewedFinishedAt == null && p.actualCompletion == null
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(SGDimensions.Normal),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         PageTitle("Delivery Report Summary", if (estimated) "Your route progress and estimated finish time." else "Your delivery progress and summary, saved on this device.")
         PremiumCard(Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f), containerColor = SGColors.Card) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Delivery success rate", color = PremiumGold, style = MaterialTheme.typography.labelLarge)
                 Text("%.1f%%".format(Locale.US, summary.successRate), color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
                 Text("${summary.delivered} of ${summary.totalParcel} parcels delivered", color = SGColors.Silver, style = MaterialTheme.typography.titleMedium)
@@ -1248,7 +1254,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
             CountTile("Pending", summary.pending, Modifier.weight(1f))
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Route details", style = MaterialTheme.typography.titleLarge)
                 DetailRow("Date", p.deliveryDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 DetailRow("Start location", p.startLocation.reportLabel)
@@ -1261,7 +1267,7 @@ fun Summary(vm: PlannerViewModel, p: Plan) {
             }
         }
         PremiumCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Cash on hand and tax", style = MaterialTheme.typography.titleLarge)
                 Text("Enter these amounts manually, then save them with this route.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CurrencyField("Cash on hand", cash, { if (validCurrencyInput(it)) cash = it }, !vm.busy)
@@ -1341,7 +1347,7 @@ fun History(vm: PlannerViewModel) {
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(SGDimensions.Normal),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
             PageTitle("Route history", "Tap an unfinished route to continue delivery. Completed routes remain view-only.")
@@ -1373,7 +1379,7 @@ fun History(vm: PlannerViewModel) {
                 borderColor = p?.let { historyStatusAccent(savedDeliveryStatus(it)).copy(alpha = .38f) }
                     ?: PremiumGold.copy(alpha = .25f)
             ) {
-                Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (selecting) Checkbox(record.id in selected, { toggle(record.id) }, enabled = !vm.busy)
                     if (p == null) {
                         Text("This saved route could not be read. Its stored data has been kept.")
@@ -1429,7 +1435,7 @@ fun History(vm: PlannerViewModel) {
 /** Small numbered red stop markers matching the route map reference: red fill, dark rim, white stop number. */
 internal fun numberedMapStopIcon(resources: android.content.res.Resources, stopNumber: Int): android.graphics.drawable.BitmapDrawable {
     val density = resources.displayMetrics.density
-    val diameter = (16f * density + 0.5f).toInt().coerceAtLeast(16)
+    val diameter = (20f * density + 0.5f).toInt().coerceAtLeast(20)
     val bitmap = android.graphics.Bitmap.createBitmap(diameter, diameter, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -1444,9 +1450,9 @@ internal fun numberedMapStopIcon(resources: android.content.res.Resources, stopN
     paint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     paint.textAlign = android.graphics.Paint.Align.CENTER
     paint.textSize = (when {
-        stopNumber >= 100 -> 7.2f
-        stopNumber >= 10 -> 9f
-        else -> 10.7f
+        stopNumber >= 100 -> 9f
+        stopNumber >= 10 -> 11f
+        else -> 13f
     }) * density
     val centeredBaseline = center - (paint.fontMetrics.ascent + paint.fontMetrics.descent) / 2f
     canvas.drawText(stopNumber.toString(), center, centeredBaseline, paint)
