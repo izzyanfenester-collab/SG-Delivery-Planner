@@ -564,8 +564,13 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
         catch(_: Exception) {error=true}
     }
     Dialog(onDismissRequest={vm.deliveryReportOrderId=null},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.fillMaxSize().background(PremiumNavy).padding(12.dp)) {
-            Text("Delivery Report",color=PremiumGold,fontSize=DeliveryReportTypography.bodySp.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Bold,maxLines=2)
+        Column(Modifier.fillMaxSize().background(PremiumNavy).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Delivery Report", color = PremiumGold, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 2)
+                    Text("Stop ${index + 1} · ${stop.place.postal}", color = SGColors.Silver, fontSize = 13.sp)
+                }
+            }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 bitmap?.let { Image(it.asImageBitmap(),"Delivery Report for stop ${index+1}",Modifier.fillMaxWidth(),contentScale=ContentScale.FillWidth) }
                     ?: Text(if(error) "Report could not be prepared. Tap Share Report to retry." else "Preparing report…",color=Color.White)
@@ -583,7 +588,8 @@ fun proofTime(value: String) = runCatching { java.time.LocalDateTime.parse(value
                             if (!image.isFile || image.length() == 0L) { error = true; file = null; bitmap = null }
                         }
                     }
-                },enabled=file!=null || error,modifier=Modifier.weight(1f).heightIn(min=52.dp)) {Text("Share Report")}
+                },enabled=file!=null || error,modifier=Modifier.weight(1f).heightIn(min=48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SGColors.Gold, contentColor = SGColors.Background)) {Text("Share Report")}
             }
         }
         shareFallback?.let { request -> WhatsAppImageShareFallbackDialog(request) { shareFallback = null } }

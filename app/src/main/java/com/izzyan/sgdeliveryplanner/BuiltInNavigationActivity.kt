@@ -154,7 +154,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
                     .onSizeChanged { topPanelHeightPx = it.height }
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                     .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
                         border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
@@ -289,8 +289,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     Text("© OpenStreetMap contributors · OpenFreeMap", color = Color.White, fontSize = 10.sp,
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
-                    Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
+                        border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = .55f))) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             val remaining = session.remainingSeconds
@@ -299,7 +300,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 .atZone(ZoneId.of("Asia/Singapore"))
                                 .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
                             Column(Modifier.weight(1f)) {
-                                Text("ARRIVAL", color = SGColors.Silver, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                                Text("ARRIVAL", color = SGColors.SelectedGold, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                                 Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                                 NavigationRemainingSummary("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}")
                                 if (session.localTrafficVisible) {

@@ -114,7 +114,7 @@ internal fun DesignCOverview(date: String, onLongPressDate: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Outlined.Payments, contentDescription = null, tint = SGColors.Gold, modifier = Modifier.size(21.dp))
-        Text("Payment Overview", color = SGColors.SelectedGold, fontSize = 18.sp,
+        Text("Payment Overview", color = SGColors.SelectedGold, fontSize = 19.sp,
             fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         Row(
             Modifier.heightIn(min = PaymentDesignC.ControlHeight)
@@ -240,10 +240,11 @@ internal fun DesignCCalculator(
         val shape = RoundedCornerShape(9.dp)
         Row(
             Modifier.fillMaxWidth().border(BorderStroke(1.dp, SGColors.Gold), shape)
-                .padding(horizontal = 8.dp, vertical = 4.dp).heightIn(min = 40.dp),
+                .background(SGColors.Gold.copy(alpha = .10f), shape)
+                .padding(horizontal = 8.dp, vertical = 6.dp).heightIn(min = 40.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("GRAND TOTAL PAYMENT", color = SGColors.SelectedGold,
+            Text("GRAND TOTAL PAYMENT (RM)", color = SGColors.SelectedGold,
                 fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
             PaymentAmountText(grandTotal, SGColors.SelectedGold, 21.sp, FontWeight.ExtraBold,
                 modifier = Modifier.weight(1f))

@@ -130,7 +130,7 @@ internal fun HistoryViewV6(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 26.dp),
-                verticalArrangement = Arrangement.spacedBy(11.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -223,8 +223,8 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         Modifier.fillMaxWidth().clip(shape)
             .background(SGColors.Card)
             .border(1.dp, V6Outline.copy(alpha = .48f), shape)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Keep Stop, Customer and Phone equally close without the stamp row creating a gap.
         // The original 35-degree COD/PayNow stamp remains beside the delivery badge.

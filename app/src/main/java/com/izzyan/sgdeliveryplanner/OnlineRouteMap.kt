@@ -31,6 +31,7 @@ internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var error by remember(plan.id) { mutableStateOf<String?>(null) }
+    var loading by remember(plan.id) { mutableStateOf(true) }
     val mapView = remember(context, plan.id) {
         MapLibre.getInstance(context)
         MapView(context).apply { onCreate(null) }
@@ -51,6 +52,7 @@ internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
         lifecycle.addObserver(observer)
         syncLifecycle()
         val failed = MapView.OnDidFailLoadingMapListener {
+            loading = false
             error = "Online map unavailable. Retry with Internet or install the Singapore Offline Maps package in Settings."
         }
         mapView.addOnDidFailLoadingMapListener(failed)
@@ -59,6 +61,7 @@ internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
             map.uiSettings.isLogoEnabled = true
             map.setStyle(Style.Builder().fromUri(ROUTE_MAP_STYLE)) {
                 try {
+                    loading = false
                     error = null
                     val validRoute = plan.geometry.mapNotNull { coord ->
                         if (coord.size >= 2 && coord[0].isFinite() && coord[1].isFinite())
@@ -83,6 +86,8 @@ internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
                     }
                     val start = plan.startLocation.asPlace()
                     val end = plan.endPlace
+                    map.addMarker(MarkerOptions().position(LatLng(start.lat, start.lon))
+                        .title("START — " + plan.startLocation.displayName))
                     val points = plan.stops.map { LatLng(it.place.lat, it.place.lon) } +
                         LatLng(start.lat, start.lon) + LatLng(end.lat, end.lon)
                     if (!plan.endAtLastDelivery) {
@@ -107,6 +112,16 @@ internal fun OnlineRouteMap(plan: Plan, modifier: Modifier = Modifier) {
 
     Box(modifier) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        if (loading && error == null) {
+            Surface(modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                color = SGColors.SolidCard, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp), color = SGColors.Gold, strokeWidth = 2.dp)
+                    Text("Loading route map…", color = SGColors.White, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
         error?.let { message ->
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
