@@ -35,6 +35,8 @@ private const val RELEASE_PATH = "/izzyanfenester-collab/SG-Delivery-Planner/rel
 private const val UPDATE_PREFS = "sg_delivery_app_update"
 private const val UPDATE_CHANNEL = "sg_delivery_app_releases"
 internal const val APP_UPDATE_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
+internal fun isPersonalEdition(context: Context) = context.packageName in setOf("com.izzyan.sgdeliveryplanner.b853test", "com.izzyan.sgdeliveryplanner.b853test.testing")
+private const val PERSONAL_UPDATE_NOTICE = "Personal Edition: updates are delivered privately, not through public runner releases."
 
 internal data class PublishedAppRelease(val build: Int, val version: String, val apkUrl: String)
 
@@ -99,6 +101,7 @@ internal data class AppUpdateState(
 
     companion object {
         fun load(context: Context): AppUpdateState {
+            if (isPersonalEdition(context)) return AppUpdateState(installedAppBuild(context), null, null, null, 0L, PERSONAL_UPDATE_NOTICE)
             val prefs = context.getSharedPreferences(UPDATE_PREFS, Context.MODE_PRIVATE)
             val storedBuild = prefs.getInt("latest_build", 0)
             return AppUpdateState(
@@ -142,6 +145,7 @@ internal class AppReleaseChecker(
 
     /** Run off the main thread; no user login or API token required. */
     fun checkNow(): AppUpdateState {
+        if (isPersonalEdition(context)) return AppUpdateState.load(context)
         val request = Request.Builder().url(RELEASES_API)
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "SG-Delivery-Android-Update-Checker")
@@ -225,6 +229,10 @@ internal class AppUpdateWorker(context: Context, params: WorkerParameters) : Cor
 
 internal object AppUpdateScheduler {
     fun schedule(context: Context) {
+        if (isPersonalEdition(context)) {
+            WorkManager.getInstance(context.applicationContext).cancelUniqueWork("sg_delivery_official_app_update_daily")
+            return
+        }
         val request = PeriodicWorkRequestBuilder<AppUpdateWorker>(1, TimeUnit.DAYS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
