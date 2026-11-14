@@ -812,8 +812,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     voiceGate.accept(0,instruction,turnMeters?:Double.MAX_VALUE)
                     if(voice==NavigationVoice.PANDA) {
                         // The new direction always wins over wrong-turn/status audio.
-                        announcePanda(if(steps.size>1) 1 else 0,next.maneuver.type?.toString(),
-                            next.maneuver.modifier?.toString(),next.name,instruction,
+                        val nextMeta=routeSignMetadata.getOrNull(if(steps.size>1) 1 else 0)
+                        announcePanda(if(steps.size>1) 1 else 0,nextMeta?.type ?: next.maneuver.type?.toString(),
+                            nextMeta?.modifier ?: next.maneuver.modifier?.toString(),next.name,instruction,
                             turnMeters?:0.0, panelCue, force=true,
                             following=steps.getOrNull(2)?.let { PandaFollowing(it.maneuver.type?.toString(),it.maneuver.modifier?.toString(),it.maneuver.instruction) },
                             nextLength=next.distance,newRouteReady=true)
@@ -870,7 +871,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     approachAnnounced=true
                     pandaStatus("approaching_destination","Approaching destination.",VoicePriority.CHARACTER)
                 }
-                announcePanda(nextIndex,next.maneuver.type?.toString(),next.maneuver.modifier?.toString(),
+                val nextMeta=routeSignMetadata.getOrNull(nextIndex)
+                announcePanda(nextIndex,nextMeta?.type ?: next.maneuver.type?.toString(),
+                    nextMeta?.modifier ?: next.maneuver.modifier?.toString(),
                     next.name,instruction,turnMeters?:0.0,panelCue,force=false,following=following,
                     nextLength=next.distance,sdkDue=due)
                 return
@@ -911,10 +914,18 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         val selected=pandaGate.evaluate(index,type,modifier,text,road,cue,distance,speed,now,
             force,sdkDue,following,nextLength) ?: return
         val phrase=selected.phrase
-        val parts=if(newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
-            distance/maxOf(speed.toDouble(),5.0)>15 && distance>250)
-            phrase.parts+VoicePart("new_route_ready","New route ready.")
-        else phrase.parts
+        val parts=when {
+            // If no accurate recorded distance fits the new route, use a brief
+            // character acknowledgement before essential exact TTS, only when safe.
+            newRouteReady && phrase.parts.first().clip==null &&
+                phrase.priority!=VoicePriority.CRITICAL &&
+                distance/maxOf(speed.toDouble(),5.0)>12 ->
+                listOf(VoicePart("new_route_ready","New route ready."))+phrase.parts
+            newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
+                distance/maxOf(speed.toDouble(),5.0)>15 && distance>250 ->
+                phrase.parts+VoicePart("new_route_ready","New route ready.")
+            else -> phrase.parts
+        }
         android.util.Log.d("SGVoice853","voice=${voice.name} step=$index type=$type modifier=$modifier distanceM=$distance clip=${phrase.parts.first().clip ?: "TTS"} reason=${selected.reason}")
         if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}",parts=parts)))
             pandaGate.committed(selected,now)

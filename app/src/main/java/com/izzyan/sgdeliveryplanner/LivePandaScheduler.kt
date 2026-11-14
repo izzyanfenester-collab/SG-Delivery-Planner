@@ -38,14 +38,22 @@ internal class LivePandaScheduler {
         // Allow the sampled fix to be just after threshold, proportional to speed
         // (up to about 1.5 seconds), capped at 12% of the spoken distance + 8m.
         fun tolerance(t:Int)=maxOf(6.0,safeSpeed*1.5).coerceAtMost(t*0.12+8.0)
+        fun eligible(t:Int):Boolean = "distance-$t" !in emitted && when(t) {
+            // Optional intermediate clips are useful if the earlier anchor was
+            // skipped, not simply because GPS has reached another round number.
+            800 -> "distance-1000" !in emitted
+            300 -> "distance-500" !in emitted
+            100 -> "distance-200" !in emitted
+            else -> true
+        }
         val crossed=thresholds.filter{t->
-            "distance-$t" !in emitted &&
+            eligible(t) &&
                 distance<=t && distance>=t-tolerance(t) &&
                 (old==null || old>t || old>=t-tolerance(t))
         }.minOrNull()
         // A route can start a few metres before a recorded threshold.
         val starting=if(old==null || force) thresholds.filter{t->
-            "distance-$t" !in emitted && abs(distance-t)<=tolerance(t)
+            eligible(t) && abs(distance-t)<=tolerance(t)
         }.minByOrNull{abs(distance-it)} else null
         val threshold=crossed?:starting
         val round=base?.startsWith("roundabout")==true && distance<=80

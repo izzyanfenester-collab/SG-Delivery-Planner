@@ -59,6 +59,43 @@ class LivePanda853Test {
         assertTrue("actual next step=$type/$mod",selected.phrase.parts.first().clip?.startsWith("exit_")==true)
         println("Valhalla type=$type modifier=$mod clip=${selected.phrase.parts.first().clip} reason=${selected.reason}")
     }
+    @Test fun everyLiveFamilyUsesRecordedCueWhenSupported(){
+        val s=LivePandaScheduler()
+        val cases=listOf(
+            Triple("fork","left",200.0) to "keep_left_200m",
+            Triple("fork","right",200.0) to "keep_right_200m",
+            Triple("turn","slight left",8.0) to "slight_left",
+            Triple("turn","slight right",8.0) to "slight_right",
+            Triple("turn","sharp left",8.0) to "sharp_left",
+            Triple("turn","sharp right",8.0) to "sharp_right",
+            Triple("merge","left",8.0) to "merge_left",
+            Triple("merge","right",8.0) to "merge_right",
+            Triple("turn","uturn",200.0) to "u_turn_200m",
+            Triple("off ramp","right",500.0) to "exit_right_500m",
+            Triple("continue","straight",1000.0) to "continue_1km",
+            Triple("arrive","left",200.0) to "arrive_200m")
+        cases.forEachIndexed { i,(input,expected)->
+            val (type,mod,meters)=input
+            val a=s.evaluate(i,type,mod,"$type $mod",null,NavigationPanelSigns.cue(type,mod,"$type $mod"),
+                meters,12f,i*5000L,force=true)!!
+            assertEquals(expected,a.phrase.parts.first().clip)
+            s.committed(a,i*5000L)
+        }
+        for(exit in 1..6){
+            val a=s.evaluate(100+exit,"roundabout","right","At roundabout take exit $exit",null,
+                NavigationPanelCue(NavigationSign.ROUNDABOUT,roundaboutExit=exit),65.0,10f,100000L+exit*5000)!!
+            assertEquals("roundabout_exit_$exit",a.phrase.parts.first().clip)
+        }
+    }
+    @Test fun coreAnchorsRemainAndOptionalDistancesDoNotRepeat(){
+        val s=LivePandaScheduler()
+        val trace=listOf(500.0,300.0,200.0,100.0,50.0,5.0)
+        val actual=trace.mapIndexedNotNull{i,d->
+            val now=i*6000L
+            eval(s,1,d,now)?.also{s.committed(it,now)}?.phrase?.parts?.first()?.clip
+        }
+        assertEquals(listOf("turn_left_500m","turn_left_200m","turn_left_50m","turn_left"),actual)
+    }
     @Test fun dynamicRoadNotRepeatedAndUnknownFallbackIsExplicit(){
         val s=LivePandaScheduler()
         val a=s.evaluate(1,"turn","left","Turn left onto Orchard Road","Orchard Road",
