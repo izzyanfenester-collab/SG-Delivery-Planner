@@ -3,6 +3,10 @@ package com.izzyan.sgdeliveryplanner
 import org.json.JSONArray
 import org.json.JSONObject
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import org.robolectric.Shadows.shadowOf
 import androidx.test.core.app.ApplicationProvider
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -83,6 +87,44 @@ class AppUpdateCheckerTest {
         assertNull(parseOfficialLatestRedirect("/other/project/releases/tag/v1.4.22-b834"))
     }
 
+    // Public runner update tests must exercise the original public package,
+    // not the Personal Edition application context used by this build.
+    private fun publicContext(): Context {
+        val app = ApplicationProvider.getApplicationContext<Context>()
+        val publicName = "com.izzyan.sgdeliveryplanner"
+        val info = PackageInfo().apply {
+            packageName = publicName
+            versionName = "1.4.39-b851"
+            @Suppress("DEPRECATION")
+            versionCode = 55
+            applicationInfo = ApplicationInfo().apply { packageName = publicName }
+        }
+        shadowOf(app.packageManager).installPackage(info)
+        return object : ContextWrapper(app) {
+            override fun getPackageName(): String = publicName
+        }
+    }
+
+    @Test fun personalEditionNeverFetchesPublicRunnerRelease() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertTrue(isPersonalEdition(context))
+        val prefs = context.getSharedPreferences("sg_delivery_app_update", Context.MODE_PRIVATE)
+        prefs.edit().clear().putInt("latest_build", 999)
+            .putString("download_url", "https://github.com/old-public.apk").commit()
+        try {
+            val client = OkHttpClient.Builder().addInterceptor {
+                throw AssertionError("Personal Edition must never fetch public runner releases")
+            }.build()
+            val state = AppReleaseChecker(context, client).checkNow()
+            assertNull(state.latestBuild)
+            assertNull(state.downloadUrl)
+            assertFalse(state.updateAvailable)
+            assertTrue(state.error.contains("Personal Edition"))
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
     private fun fakeGithub(apiCode: Int = 403, pageCode: Int = 302, assetCode: Int = 302): OkHttpClient =
         OkHttpClient.Builder().addInterceptor { chain ->
             val req = chain.request()
@@ -103,7 +145,7 @@ class AppUpdateCheckerTest {
         }.build()
 
     @Test fun http403FallsBackToWebsiteAndFindsCurrentOfficialWithoutToken() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = publicContext()
         val pref = context.getSharedPreferences("sg_delivery_app_update", Context.MODE_PRIVATE)
         pref.edit().clear().commit()
         try {
@@ -118,7 +160,7 @@ class AppUpdateCheckerTest {
     }
 
     @Test fun failedApiAndFallbackDoNotReportCachedStaleVersion() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = publicContext()
         val pref = context.getSharedPreferences("sg_delivery_app_update", Context.MODE_PRIVATE)
         pref.edit().clear()
             .putInt("latest_build", 833)
@@ -137,7 +179,7 @@ class AppUpdateCheckerTest {
     }
 
     @Test fun fallbackRequiresActualPublishedApkAsset() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context = publicContext()
         val pref = context.getSharedPreferences("sg_delivery_app_update", Context.MODE_PRIVATE)
         pref.edit().clear().commit()
         try {
