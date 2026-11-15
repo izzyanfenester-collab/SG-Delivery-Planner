@@ -115,6 +115,21 @@ class HistoryBackupTest {
         }
     }
 
+    @Test fun backupRestoreIncludesSavedHomeWithoutChangingEndpoints()=runBlocking {
+        val settings=StartLocationSettings(app)
+        val home=settings.saveHomeOnly(coordinateLocation("1.510123","103.750456")!!)
+        val start=coordinateLocation("1.320456","103.812345")!!
+        settings.select(start);settings.selectEndLastDelivery()
+        val file=File(app.cacheDir,"home-backup-"+UUID.randomUUID()+".zip")
+        try {
+            HistoryBackup(app,db().dao()).export(Uri.fromFile(file))
+            settings.saveHomeOnly(start)
+            HistoryBackup(app,db().dao()).restore(Uri.fromFile(file))
+            assertEquals(home,settings.home())
+            assertEquals(start,settings.selected())
+            assertEquals(EndLocationSelection(),settings.selectedEnd())
+        } finally {file.delete()}
+    }
     @Test fun legacyV1HistoryZipWithoutPaymentFileStillRestores()=runBlocking {
         val source = db()
         val route = plan().copy(stops = plan().stops.map {

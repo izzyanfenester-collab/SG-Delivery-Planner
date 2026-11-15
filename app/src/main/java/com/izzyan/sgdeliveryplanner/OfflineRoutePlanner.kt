@@ -109,7 +109,12 @@ internal class OfflineRoutePlanner(
             places.mapIndexed { i, place ->
                 if (i % 10 == 0) progress("Matching delivery roads to the Singapore graph…")
                 currentCoroutineContext().ensureActive()
-                graph.snap(place).node
+                try {
+                    graph.snap(place,if(i==0 || i==end) 250.0 else 1200.0).node
+                } catch(e:Exception) {
+                    if(i==0 || i==end) throw PlannerError("Start or End is outside offline Singapore road coverage. Connect to the internet and use online routing.",e)
+                    throw e
+                }
             }
         }
         val n = places.size

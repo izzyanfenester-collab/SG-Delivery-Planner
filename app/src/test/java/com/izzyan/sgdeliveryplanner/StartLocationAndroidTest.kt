@@ -60,9 +60,10 @@ class StartLocationAndroidTest {
     }
 
     @Test
-    fun endDefaultsToFinalDeliveryAndDoesNotChangeTheStart() {
+    fun endDefaultsToWoodlandsJbAndDoesNotChangeTheStart() {
         val settings = StartLocationSettings(app)
-        assertEquals(EndLocationSelection(), settings.selectedEnd())
+        assertEquals(defaultEndLocation(), settings.selectedEnd())
+        assertNotEquals(woodlandsStartLocation.asPlace(),woodlandsEndLocation.asPlace())
         assertEquals(woodlandsStartLocation, settings.selected())
 
         settings.selectEndLocation(custom)
@@ -77,6 +78,26 @@ class StartLocationAndroidTest {
         assertEquals(woodlandsStartLocation, StartLocationSettings(app).selected())
     }
 
+    @Test
+    fun coordinatesAndSavedHomeAreIndependentAndPersist() {
+        val settings=StartLocationSettings(app)
+        val start=coordinateLocation("1.437200","103.769500")!!
+        val end=coordinateLocation("1.510123","103.750456")!!
+        assertEquals("1.437200" to "103.769500",pastedCoordinatePair("1.437200, 103.769500"))
+        assertNull(pastedCoordinatePair("103.769500,1.437200"))
+        assertNull(coordinateLocation("NaN","103.7"))
+        assertNotNull(coordinateLocation("-2.123456","-103.123456"))
+        assertFalse(supportedPlanningCoordinates(-2.123456,-103.123456))
+        settings.select(start);settings.selectEndLocation(end)
+        val home=settings.saveHomeOnly(end)
+        assertEquals(start,settings.selected())
+        assertEquals(EndLocationSelection(false,end),settings.selectedEnd())
+        assertEquals(home,StartLocationSettings(app).home())
+        val original=plan(start).copy(endLocation=end)
+        settings.saveHomeOnly(start)
+        assertEquals(end.asPlace(),PlanJson.decode(PlanJson.encode(original)).endPlace)
+        assertEquals(end,settings.selectedEnd().location)
+    }
     @Test
     fun savedRouteKeepsSelectedEndWhenCurrentEndChanges() {
         val settings = StartLocationSettings(app)

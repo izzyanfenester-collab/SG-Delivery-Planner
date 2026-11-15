@@ -208,6 +208,7 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 val result = HistoryBackup(getApplication(), repo.dao).restore(source)
                 // Payments were written by the restore service; refresh observable Compose state.
                 paymentRecords = paymentLedger.read()
+                savedHome = locationSettings.home()
                 backupNotice = "Restore complete: "+result.restored+" new routes, "+
                     result.skipped+" existing routes unchanged, "+result.photos+" proof photos, "+
                     result.payments+" payment records added."
@@ -391,6 +392,13 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
             message = ""
             notice = "Home location saved and selected as Start. The End choice is unchanged."
         } catch (e: Exception) { message = englishError(e, "Could not save your Home location. Please try again.") }
+    }
+
+    fun saveCoordinateHome(location:StartLocation):StartLocation? {
+        if(busy)return null
+        return try {
+            locationSettings.saveHomeOnly(location).also { savedHome=it;message="";notice="Home saved. Confirm to apply to the selected endpoint." }
+        } catch(e:Exception){message=englishError(e,"Could not save Home.");null}
     }
 
     fun useHome() {

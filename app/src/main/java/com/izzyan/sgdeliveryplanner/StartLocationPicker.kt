@@ -52,215 +52,64 @@ private fun locationCoordinates(location: StartLocation): String =
 /** Home only changes after a confirmed choice; opening or cancelling the picker is harmless. */
 @Composable
 fun StartLocationControls(vm: PlannerViewModel) {
-    var showChoices by remember { mutableStateOf(false) }
-    var showEndChoices by remember { mutableStateOf(false) }
-    var replaceHome by remember { mutableStateOf(false) }
-    val selected = vm.selectedStartLocation
-    val isCheckpoint = selected.type == woodlandsStartLocation.type
-
-    PremiumCard(
-        Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
-        containerColor = SGColors.Card
-    ) {
-        Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Start location", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
-                    Text(selected.displayName, color = Color.White,
-                        style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                }
-                Button(
-                    onClick = { showChoices = true }, enabled = !vm.busy,
-                    modifier = Modifier.height(40.dp), shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 17.dp, vertical = 0.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PremiumGold, contentColor = PremiumNavy)
-                ) { Text("Change", fontWeight = FontWeight.Bold) }
-            }
-            if (selected.address.isNotBlank()) {
-                Text(selected.address, color = LocationMuted,
-                    style = MaterialTheme.typography.bodySmall, maxLines = 2)
-            }
-            if (selected.postalCode.isNotBlank()) Text("Singapore " + selected.postalCode,
-                color = LocationMuted, style = MaterialTheme.typography.bodySmall)
+    var target by remember { mutableStateOf("") }
+    val start=vm.selectedStartLocation
+    val end=vm.selectedEndLocation
+    LocationSummary("Start location", if(start.type=="WOODLANDS") "Woodlands Checkpoint towards Singapore" else start.displayName,
+        start, !vm.busy) { target="START" }
+    LocationSummary("End location", if(end.useLastDelivery) "Last Delivery" else end.location?.displayName ?: "Last Delivery",
+        end.location, !vm.busy) { target="END" }
+    if(target.isNotEmpty()) {
+        val isEnd=target=="END"
+        val current=if(isEnd) end.location else start
+        var choice by remember(target) { mutableStateOf(when {
+            isEnd && end.useLastDelivery -> "LAST"
+            current?.type in setOf("WOODLANDS","WOODLANDS_JB") -> "CHECKPOINT"
+            !isEnd && current?.type=="CUSTOM" && current.postalCode.isNotBlank() -> "SEARCH"
+            else -> "COORD"
+        }) }
+        fun confirm(location:StartLocation) {
+            if(isEnd) vm.selectEndLocation(location) else vm.selectStartLocation(location)
+            target=""
         }
-    }
-
-    PremiumCard(
-        Modifier.fillMaxWidth(), borderColor = PremiumGold.copy(alpha = .5f),
-        containerColor = SGColors.Card
-    ) {
-        val chosenEnd = vm.selectedEndLocation
-        Column(Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("End location", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
-                    Text(if (chosenEnd.useLastDelivery) "Last delivery (automatic)"
-                         else chosenEnd.location?.displayName ?: "Last delivery (automatic)",
-                        color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                }
-                Button(
-                    onClick = { showEndChoices = true }, enabled = !vm.busy,
-                    modifier = Modifier.height(40.dp), shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 17.dp, vertical = 0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = PremiumNavy)
-                ) { Text("Change", fontWeight = FontWeight.Bold) }
-            }
-            if (chosenEnd.useLastDelivery) {
-                Text("Route ends at the final optimized delivery stop. No return journey.",
-                    color = LocationMuted, style = MaterialTheme.typography.bodySmall)
-            } else {
-                val destination = chosenEnd.location
-                if (destination != null) {
-                    if (destination.address.isNotBlank()) Text(destination.address,
-                        color = LocationMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                    if (destination.postalCode.isNotBlank()) Text("Singapore " + destination.postalCode,
-                        color = LocationMuted, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-
-    if (showEndChoices) {
-        val savedSelection = vm.selectedEndLocation
-        var endChoice by remember { mutableStateOf(if (savedSelection.useLastDelivery) "LAST" else
-            if (savedSelection.location?.type == "WOODLANDS") "WOODLANDS"
-            else if (savedSelection.location?.type == "HOME") "HOME" else "CUSTOM") }
-        AlertDialog(
-            onDismissRequest = { showEndChoices = false },
-            containerColor = PremiumNavy, titleContentColor = PremiumGold, textContentColor = Color.White,
-            title = { Text("Choose end location") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LocationChoice("Last delivery (default)",
-                        "Finish at the final optimized stop without returning to Start.",
-                        endChoice == "LAST") { endChoice = "LAST" }
-                    LocationChoice("Woodlands Checkpoint", "Return to Woodlands after deliveries.",
-                        endChoice == "WOODLANDS") { endChoice = "WOODLANDS" }
-                    vm.savedHome?.takeIf { it.isValid() }?.let { home ->
-                        LocationChoice("Saved Home", home.reportLabel, endChoice == "HOME") {
-                            endChoice = "HOME"
-                        }
-                    }
-                    if (savedSelection.location?.type == "CUSTOM") {
-                        LocationChoice("Current custom end", savedSelection.location!!.reportLabel,
-                            endChoice == "CUSTOM") { endChoice = "CUSTOM" }
-                    }
-                    Text("Search a custom end point", color = PremiumGold,
-                        style = MaterialTheme.typography.titleSmall)
-                    LocationSearchPanel("End location or postal code") { location ->
-                        vm.selectEndLocation(location)
-                        showEndChoices = false
-                    }
-                    LocationOutlineButton("Or choose on Map", {
-                        showEndChoices = false
-                        vm.goLocationPicker("END")
-                    }, enabled = !vm.busy)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    when (endChoice) {
-                        "LAST" -> vm.selectEndLastDelivery()
-                        "WOODLANDS" -> vm.selectEndLocation(woodlandsStartLocation)
-                        "HOME" -> vm.savedHome?.let(vm::selectEndLocation)
-                        "CUSTOM" -> savedSelection.location?.let(vm::selectEndLocation)
-                    }
-                    showEndChoices = false
-                }, enabled = !vm.busy) { Text("Use this End", color = PremiumGold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEndChoices = false }) { Text("Close", color = LocationMuted) }
-            }
-        )
-    }
-
-    if (showChoices) {
-        var chooseCustom by remember { mutableStateOf(!isCheckpoint) }
-        AlertDialog(
-            onDismissRequest = { showChoices = false },
-            containerColor = PremiumNavy,
-            titleContentColor = PremiumGold,
-            textContentColor = Color.White,
-            title = { Text("Choose start location") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LocationChoice("Woodlands Checkpoint", "Default start location", !chooseCustom) {
-                        chooseCustom = false
-                    }
-                    LocationChoice("Custom / Home", "Search a place, enter a postal code, or use Home", chooseCustom) {
-                        chooseCustom = true
-                    }
-                    if (chooseCustom) {
-                        if (vm.savedHome == null) {
-                            Text("No Home location saved", color = PremiumGold,
-                                style = MaterialTheme.typography.titleSmall)
-                            Text("Search a location or postal code below, or select a point on the map.",
-                                color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Text("Saved Home: ${vm.savedHome!!.displayName}", color = LocationMuted)
-                            if (vm.savedHome!!.postalCode.isNotBlank())
-                                Text("Singapore " + vm.savedHome!!.postalCode, color = LocationMuted,
-                                    style = MaterialTheme.typography.bodySmall)
-                        }
-                        LocationSearchPanel("Start location or postal code") { location ->
-                            vm.selectStartLocation(location)
-                            showChoices = false
-                        }
-                        LocationOutlineButton("Or choose on Map", {
-                            showChoices = false
-                            vm.goLocationPicker("START")
-                        }, enabled = !vm.busy)
-                        LocationOutlineButton("Use Home", {
-                            vm.useHome()
-                            showChoices = false
-                        }, enabled = !vm.busy && vm.savedHome?.isValid() == true)
-                        LocationOutlineButton(if (vm.savedHome == null) "Set Home" else "Update Home", {
-                            if (vm.savedHome != null) replaceHome = true
-                            else {
-                                vm.saveHome(selected)
-                                showChoices = false
-                            }
-                        }, enabled = !vm.busy && !isCheckpoint && selected.isValid())
-                        if (isCheckpoint) Text("Select a custom place or postal code before setting Home.",
-                            color = LocationMuted, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            },
-            confirmButton = {
-                if (!chooseCustom) TextButton(onClick = {
-                    vm.selectStartLocation(woodlandsStartLocation)
-                    showChoices = false
-                }, enabled = !vm.busy) { Text("Use Woodlands Checkpoint", color = PremiumGold) }
-            },
-            dismissButton = { TextButton(onClick = { showChoices = false }) { Text("Close", color = LocationMuted) } }
-        )
-    }
-    if (replaceHome) {
-        AlertDialog(
-            onDismissRequest = { replaceHome = false },
-            containerColor = PremiumNavy,
-            titleContentColor = PremiumGold,
-            textContentColor = Color.White,
-            title = { Text("Replace Home?") },
-            text = { Text("Save ${selected.displayName} as your Home location? This replaces the Home saved on this device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.saveHome(selected)
-                    replaceHome = false
-                    showChoices = false
-                }, enabled = !vm.busy) { Text("Replace Home", color = PremiumGold) }
-            },
-            dismissButton = { TextButton(onClick = { replaceHome = false }) { Text("Cancel", color = LocationMuted) } }
-        )
+        AlertDialog(onDismissRequest={target=""},containerColor=PremiumNavy,
+            titleContentColor=PremiumGold,textContentColor=Color.White,
+            title={Text(if(isEnd) "Choose End Location" else "Choose Start Location")},
+            text={ Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                LocationChoice(if(isEnd) "Woodlands Checkpoint towards JB (Default)" else "Woodlands Checkpoint towards Singapore (Default)",
+                    if(isEnd) "Return towards Malaysia" else "Enter Singapore",choice=="CHECKPOINT") { choice="CHECKPOINT" }
+                if(isEnd) LocationChoice("Last Delivery","No additional return journey",choice=="LAST") {choice="LAST"}
+                else LocationChoice("Custom / Search Postal Code","Singapore postal code or place name",choice=="SEARCH") {choice="SEARCH"}
+                LocationChoice("Longitude, Latitude / Home","Enter coordinates or use saved Home",choice=="COORD") {choice="COORD"}
+                if(choice=="SEARCH" && !isEnd) LocationSearchPanel("Start location or postal code") {confirm(it)}
+                if(choice=="COORD") CoordinateLocationCard(vm,current?.takeUnless {it.type.startsWith("WOODLANDS")},::confirm)
+            }},
+            confirmButton={if(choice=="CHECKPOINT" || choice=="LAST") TextButton(onClick={
+                if(choice=="LAST") {vm.selectEndLastDelivery();target=""}
+                else confirm(if(isEnd) woodlandsEndLocation else woodlandsStartLocation)
+            },enabled=!vm.busy){Text("Confirm Location",color=PremiumGold)}},
+            dismissButton={TextButton(onClick={target=""}){Text("Close",color=LocationMuted)}})
     }
 }
 
+@Composable
+private fun LocationSummary(title:String,name:String,location:StartLocation?,enabled:Boolean,onChange:()->Unit) {
+    PremiumCard(Modifier.fillMaxWidth(),borderColor=PremiumGold.copy(alpha=.5f),containerColor=SGColors.Card) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                Text(title,color=PremiumGold,style=MaterialTheme.typography.labelMedium)
+                Text(name,color=Color.White,style=MaterialTheme.typography.titleMedium,maxLines=2)
+                if(location!=null && !location.type.startsWith("WOODLANDS"))
+                    Text(location.address.ifBlank {locationCoordinates(location)},color=LocationMuted,style=MaterialTheme.typography.bodySmall,maxLines=2)
+                if(location?.postalCode?.isNotBlank()==true)
+                    Text("Postal: "+location.postalCode,color=LocationMuted,style=MaterialTheme.typography.bodySmall)
+            }
+            Button(onClick=onChange,enabled=enabled,modifier=Modifier.height(36.dp),shape=RoundedCornerShape(12.dp),
+                contentPadding=PaddingValues(horizontal=12.dp,vertical=0.dp),
+                colors=ButtonDefaults.buttonColors(containerColor=PremiumGold,contentColor=PremiumNavy)){Text("Change",fontWeight=FontWeight.Bold)}
+        }
+    }
+}
 @Composable
 private fun LocationChoice(label: String, description: String, selected: Boolean, onClick: () -> Unit) {
     Row(

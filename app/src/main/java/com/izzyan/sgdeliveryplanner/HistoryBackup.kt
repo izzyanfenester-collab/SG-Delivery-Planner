@@ -39,6 +39,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
         val taxOverridesJson=gson.toJson(taxOverrides).toByteArray()
         require(taxOverridesJson.size<=1024*1024) { "Tax override data is too large." }
         val manifest=gson.toJson(mapOf("format" to "sg-delivery-history","version" to 3,
+            "savedHome" to StartLocationSettings(context).home(),
             "routeCount" to routes.size,"paymentCount" to payments.size,
             "taxOverrideCount" to taxOverrides.size,
             "exportedAt" to LocalDateTime.now().toString()))
@@ -121,6 +122,12 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             val header=JsonParser.parseString(requireNotNull(manifest) { "Not an SG Delivery backup." }.toString(Charsets.UTF_8)).asJsonObject
             val version=header.get("version")?.asInt
             require(header.get("format")?.asString=="sg-delivery-history"&&version!=null&&version in 1..3) { "Unsupported backup format." }
+            val restoredHome=header.get("savedHome")?.takeUnless {it.isJsonNull}?.let {
+                gson.fromJson(it,StartLocation::class.java).also { home ->
+                    require(home.type=="HOME" && home.isValid() &&
+                        supportedPlanningCoordinates(home.latitude,home.longitude)) {"Invalid saved Home in backup."}
+                }
+            }
             // v1 is routes/proofs; v2 adds payment records; v3 adds per-day Tax overrides.
             val payments=if(version>=2) {
                 val bytes=requireNotNull(paymentsJson) { "Payment history missing from backup." }
@@ -176,6 +183,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 // Restore on top of existing data; repeated ZIP imports do not duplicate payments.
                 val restoredPayments=paymentLedger.mergeRestored(payments)
                 taxOverrideLedger.mergeRestored(overrides)
+                if(restoredHome!=null) StartLocationSettings(context).saveHomeOnly(restoredHome)
                 HistoryRestoreResult(restored,rows.size-restored,newFiles.size,restoredPayments)
             } catch(e:Exception) {
                 newFiles.forEach { it.delete() }

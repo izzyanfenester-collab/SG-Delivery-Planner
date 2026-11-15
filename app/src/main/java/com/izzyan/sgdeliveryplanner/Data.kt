@@ -94,6 +94,7 @@ class Repository(context:Context) {
   checkPlanning(endpoint.startsWith("https://")) { "The routing server address must start with https://. Update it in Settings." }
   checkPlanning(location.isValid()) { "Choose a valid start location before planning." }
   checkPlanning(endSelection.isValid()) { "Choose a valid end location before planning." }
+  checkPlanning(supportedPlanningCoordinates(location.latitude,location.longitude) && (endSelection.location?.let { supportedPlanningCoordinates(it.latitude,it.longitude) } ?: true)) { "Start or End is outside Singapore/Malaysia routing coverage." }
   val resolved=codes.mapIndexed { index, code ->
    progress("Checking postal code ${index+1} of ${codes.size}…")
    try { Result.success(resolve(code)) }
