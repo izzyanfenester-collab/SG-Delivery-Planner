@@ -13,7 +13,7 @@ data class StartLocation(
     val postalCode: String = ""
 ) {
     val displayName: String get() = when (type) {
-        "WOODLANDS" -> "Woodlands Checkpoint towards Singapore"
+        "WOODLANDS" -> "Woodlands Checkpoint"
         "WOODLANDS_JB" -> "Woodlands Checkpoint towards JB"
         "HOME" -> "Home"
         else -> label.trim().let {
@@ -51,6 +51,10 @@ fun coordinateLocation(lat:String,lon:String):StartLocation? {
     val b=lon.trim().toDoubleOrNull()?:return null
     return StartLocation("CUSTOM",a,b,"GPS coordinates","$a, $b").takeIf{it.isValid()}
 }
+fun isSupportedCoordinateRegion(point:StartLocation):Boolean =
+    (point.latitude in 0.8..7.5 && point.longitude in 99.5..105.0) ||
+    (point.latitude in 0.8..7.5 && point.longitude in 109.0..119.5)
+
 class StartLocationSettings(context: Context) {
     private val prefs = context.getSharedPreferences("start_end_locations", Context.MODE_PRIVATE)
     private val gson = Gson()

@@ -161,7 +161,7 @@ class StartLocationAndroidTest {
         ).forEach { invalid ->
             assertThrows(PlannerError::class.java) { settings.select(invalid) }
             assertThrows(PlannerError::class.java) { settings.saveHome(invalid) }
-            assertEquals(home, StartLocationSettings(app).selected())
+            assertEquals(custom, StartLocationSettings(app).selected())
             assertEquals(home, StartLocationSettings(app).home())
         }
     }

@@ -54,7 +54,6 @@ private fun locationCoordinates(location: StartLocation): String =
 fun StartLocationControls(vm: PlannerViewModel) {
     var showChoices by remember { mutableStateOf(false) }
     var showEndChoices by remember { mutableStateOf(false) }
-    var replaceHome by remember { mutableStateOf(false) }
     val selected = vm.selectedStartLocation
     val isCheckpoint = selected.type == woodlandsStartLocation.type
 
@@ -68,7 +67,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Start location", color = PremiumGold, style = MaterialTheme.typography.labelMedium)
-                    Text(selected.displayName, color = Color.White,
+                    Text(if (isCheckpoint) "Woodlands Checkpoint towards Singapore" else selected.displayName, color = Color.White,
                         style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 }
                 Button(
@@ -131,7 +130,7 @@ fun StartLocationControls(vm: PlannerViewModel) {
 @Composable
 private fun EndpointDialog(vm:PlannerViewModel,end:Boolean,close:()->Unit){
     val initial=if(end) vm.selectedEndLocation.location else vm.selectedStartLocation
-    var choice by remember { mutableStateOf(if(end&&vm.selectedEndLocation.useLastDelivery) 1 else if(initial?.type in setOf("WOODLANDS","WOODLANDS_JB")) 0 else 2) }
+    var choice by remember { mutableStateOf(if(end&&vm.selectedEndLocation.useLastDelivery) 1 else if(initial?.type in setOf("WOODLANDS","WOODLANDS_JB")) 0 else if(!end && initial?.postalCode?.isNotBlank()==true && initial.type=="CUSTOM") 1 else 2) }
     fun apply(point:StartLocation){if(end)vm.selectEndLocation(point) else vm.selectStartLocation(point);close()}
     AlertDialog(onDismissRequest=close,containerColor=PremiumNavy,titleContentColor=PremiumGold,textContentColor=Color.White,
         title={Text(if(end)"Choose End Location" else "Choose Start Location")},
@@ -163,7 +162,8 @@ private fun CoordinateEndpointCard(vm:PlannerViewModel,initial:StartLocation?,co
         }catch(e:SecurityException){loading=false;status="Location permission denied"}
     }
     val permission=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()){grants->if(grants.values.any{it})gps()else status="Location permission denied"}
-    val point=coordinateLocation(lat,lon)
+    val parsed=coordinateLocation(lat,lon)
+    val point=parsed?.takeIf(::isSupportedCoordinateRegion)
     OutlinedTextField(lat,{value->val pair=value.split(",");if(pair.size==2){lat=pair[0].trim();lon=pair[1].trim()}else lat=value;home=false},label={Text("Latitude")},singleLine=true,modifier=Modifier.fillMaxWidth())
     OutlinedTextField(lon,{lon=it;home=false},label={Text("Longitude")},singleLine=true,modifier=Modifier.fillMaxWidth())
     if(home)Text("Location Name: Home",color=PremiumGold)
@@ -177,7 +177,8 @@ private fun CoordinateEndpointCard(vm:PlannerViewModel,initial:StartLocation?,co
         TextButton(onClick={point?.let{vm.saveHome(it);home=true;status="Home saved"}},enabled=point!=null){Text("Save as Home")}
     }
     if(status.isNotBlank())Text(status,color=LocationMuted)
-    if(point==null&&(lat.isNotBlank()||lon.isNotBlank()))Text("Invalid latitude or longitude",color=MaterialTheme.colorScheme.error)
+    if(parsed==null&&(lat.isNotBlank()||lon.isNotBlank()))Text("Invalid latitude or longitude",color=MaterialTheme.colorScheme.error)
+    else if(parsed!=null && point==null) Text("Outside Singapore / Malaysia routing region",color=MaterialTheme.colorScheme.error)
     LocationGoldButton("Confirm Location",{point?.let{confirm(if(home)it.copy(type="HOME",label="Home")else it)}},point!=null&&!loading)
 }
 
