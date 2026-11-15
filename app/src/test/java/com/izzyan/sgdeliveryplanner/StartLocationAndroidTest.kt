@@ -64,6 +64,8 @@ class StartLocationAndroidTest {
         val settings = StartLocationSettings(app)
         assertEquals(defaultEndLocation(), settings.selectedEnd())
         assertNotEquals(woodlandsStartLocation.asPlace(),woodlandsEndLocation.asPlace())
+        assertEquals(1.4467448,woodlandsEndLocation.latitude,0.0)
+        assertEquals(103.7679164,woodlandsEndLocation.longitude,0.0)
         assertEquals(woodlandsStartLocation, settings.selected())
 
         settings.selectEndLocation(custom)

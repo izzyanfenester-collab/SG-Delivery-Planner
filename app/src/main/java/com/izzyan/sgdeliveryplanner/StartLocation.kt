@@ -45,8 +45,9 @@ data class EndLocationSelection(val useLastDelivery: Boolean = true, val locatio
 val woodlandsStartLocation = StartLocation("WOODLANDS", depot.lat, depot.lon,
     "Woodlands Checkpoint", "21 Woodlands Crossing, Singapore 738203", depot.postal)
 
-// Distinct mapped car checkpoint point; preserve the legacy inbound depot.
-val woodlandsEndLocation = StartLocation("WOODLANDS_JB", 1.44618, 103.76946,
+// OSM node 7102270869, one-way car departure way 760260082, after outbound booths
+// and before joining the JB-bound Causeway at node 7102270871. Preserve inbound depot.
+val woodlandsEndLocation = StartLocation("WOODLANDS_JB", 1.4467448, 103.7679164,
     "Woodlands Checkpoint towards JB", "Woodlands Checkpoint, departure towards Malaysia", "738203")
 fun defaultEndLocation() = EndLocationSelection(false, woodlandsEndLocation)
 
