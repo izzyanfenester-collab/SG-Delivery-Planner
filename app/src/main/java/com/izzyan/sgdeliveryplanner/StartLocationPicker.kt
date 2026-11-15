@@ -125,140 +125,60 @@ fun StartLocationControls(vm: PlannerViewModel) {
         }
     }
 
-    if (showEndChoices) {
-        val savedSelection = vm.selectedEndLocation
-        var endChoice by remember { mutableStateOf(if (savedSelection.useLastDelivery) "LAST" else
-            if (savedSelection.location?.type == "WOODLANDS") "WOODLANDS"
-            else if (savedSelection.location?.type == "HOME") "HOME" else "CUSTOM") }
-        AlertDialog(
-            onDismissRequest = { showEndChoices = false },
-            containerColor = PremiumNavy, titleContentColor = PremiumGold, textContentColor = Color.White,
-            title = { Text("Choose end location") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LocationChoice("Last delivery (default)",
-                        "Finish at the final optimized stop without returning to Start.",
-                        endChoice == "LAST") { endChoice = "LAST" }
-                    LocationChoice("Woodlands Checkpoint", "Return to Woodlands after deliveries.",
-                        endChoice == "WOODLANDS") { endChoice = "WOODLANDS" }
-                    vm.savedHome?.takeIf { it.isValid() }?.let { home ->
-                        LocationChoice("Saved Home", home.reportLabel, endChoice == "HOME") {
-                            endChoice = "HOME"
-                        }
-                    }
-                    if (savedSelection.location?.type == "CUSTOM") {
-                        LocationChoice("Current custom end", savedSelection.location!!.reportLabel,
-                            endChoice == "CUSTOM") { endChoice = "CUSTOM" }
-                    }
-                    Text("Search a custom end point", color = PremiumGold,
-                        style = MaterialTheme.typography.titleSmall)
-                    LocationSearchPanel("End location or postal code") { location ->
-                        vm.selectEndLocation(location)
-                        showEndChoices = false
-                    }
-                    LocationOutlineButton("Or choose on Map", {
-                        showEndChoices = false
-                        vm.goLocationPicker("END")
-                    }, enabled = !vm.busy)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    when (endChoice) {
-                        "LAST" -> vm.selectEndLastDelivery()
-                        "WOODLANDS" -> vm.selectEndLocation(woodlandsStartLocation)
-                        "HOME" -> vm.savedHome?.let(vm::selectEndLocation)
-                        "CUSTOM" -> savedSelection.location?.let(vm::selectEndLocation)
-                    }
-                    showEndChoices = false
-                }, enabled = !vm.busy) { Text("Use this End", color = PremiumGold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEndChoices = false }) { Text("Close", color = LocationMuted) }
-            }
-        )
+    if(showEndChoices) EndpointDialog(vm,true){showEndChoices=false}
+    if(showChoices) EndpointDialog(vm,false){showChoices=false}
+}
+@Composable
+private fun EndpointDialog(vm:PlannerViewModel,end:Boolean,close:()->Unit){
+    val initial=if(end) vm.selectedEndLocation.location else vm.selectedStartLocation
+    var choice by remember { mutableStateOf(if(end&&vm.selectedEndLocation.useLastDelivery) 1 else if(initial?.type in setOf("WOODLANDS","WOODLANDS_JB")) 0 else 2) }
+    fun apply(point:StartLocation){if(end)vm.selectEndLocation(point) else vm.selectStartLocation(point);close()}
+    AlertDialog(onDismissRequest=close,containerColor=PremiumNavy,titleContentColor=PremiumGold,textContentColor=Color.White,
+        title={Text(if(end)"Choose End Location" else "Choose Start Location")},
+        text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(4.dp)){
+            LocationChoice(if(end)"Woodlands Checkpoint towards JB (Default)" else "Woodlands Checkpoint towards Singapore (Default)","",choice==0){choice=0}
+            LocationChoice(if(end)"Last Delivery" else "Custom / Search Postal Code","",choice==1){choice=1}
+            LocationChoice("Longitude, Latitude / Home","",choice==2){choice=2}
+            if(choice==1&&!end) LocationSearchPanel("Search postal code / place"){apply(it)}
+            if(choice==2) CoordinateEndpointCard(vm,initial,::apply)
+        }},confirmButton={if(choice==0||(choice==1&&end))TextButton(onClick={
+            if(choice==1){vm.selectEndLastDelivery();close()}else apply(if(end)woodlandsEndLocation else woodlandsStartLocation)
+        }){Text("Confirm Location",color=PremiumGold)}},dismissButton={TextButton(onClick=close){Text("Close")}})
+}
+@Composable
+private fun CoordinateEndpointCard(vm:PlannerViewModel,initial:StartLocation?,confirm:(StartLocation)->Unit){
+    val context=LocalContext.current
+    var lat by remember{mutableStateOf(initial?.takeUnless{it.type.startsWith("WOODLANDS")}?.latitude?.toString().orEmpty())}
+    var lon by remember{mutableStateOf(initial?.takeUnless{it.type.startsWith("WOODLANDS")}?.longitude?.toString().orEmpty())}
+    var home by remember{mutableStateOf(initial?.type=="HOME")}
+    var status by remember{mutableStateOf("")}
+    var loading by remember{mutableStateOf(false)}
+    fun gps(){
+        loading=true
+        try{
+            com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
+                .getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,null)
+                .addOnSuccessListener{point->loading=false;if(point==null)status="GPS unavailable" else {lat=point.latitude.toString();lon=point.longitude.toString();home=false;status="Accuracy: ${point.accuracy.toInt()} m"}}
+                .addOnFailureListener{loading=false;status="GPS unavailable"}
+        }catch(e:SecurityException){loading=false;status="Location permission denied"}
     }
-
-    if (showChoices) {
-        var chooseCustom by remember { mutableStateOf(!isCheckpoint) }
-        AlertDialog(
-            onDismissRequest = { showChoices = false },
-            containerColor = PremiumNavy,
-            titleContentColor = PremiumGold,
-            textContentColor = Color.White,
-            title = { Text("Choose start location") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LocationChoice("Woodlands Checkpoint", "Default start location", !chooseCustom) {
-                        chooseCustom = false
-                    }
-                    LocationChoice("Custom / Home", "Search a place, enter a postal code, or use Home", chooseCustom) {
-                        chooseCustom = true
-                    }
-                    if (chooseCustom) {
-                        if (vm.savedHome == null) {
-                            Text("No Home location saved", color = PremiumGold,
-                                style = MaterialTheme.typography.titleSmall)
-                            Text("Search a location or postal code below, or select a point on the map.",
-                                color = LocationMuted, style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Text("Saved Home: ${vm.savedHome!!.displayName}", color = LocationMuted)
-                            if (vm.savedHome!!.postalCode.isNotBlank())
-                                Text("Singapore " + vm.savedHome!!.postalCode, color = LocationMuted,
-                                    style = MaterialTheme.typography.bodySmall)
-                        }
-                        LocationSearchPanel("Start location or postal code") { location ->
-                            vm.selectStartLocation(location)
-                            showChoices = false
-                        }
-                        LocationOutlineButton("Or choose on Map", {
-                            showChoices = false
-                            vm.goLocationPicker("START")
-                        }, enabled = !vm.busy)
-                        LocationOutlineButton("Use Home", {
-                            vm.useHome()
-                            showChoices = false
-                        }, enabled = !vm.busy && vm.savedHome?.isValid() == true)
-                        LocationOutlineButton(if (vm.savedHome == null) "Set Home" else "Update Home", {
-                            if (vm.savedHome != null) replaceHome = true
-                            else {
-                                vm.saveHome(selected)
-                                showChoices = false
-                            }
-                        }, enabled = !vm.busy && !isCheckpoint && selected.isValid())
-                        if (isCheckpoint) Text("Select a custom place or postal code before setting Home.",
-                            color = LocationMuted, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            },
-            confirmButton = {
-                if (!chooseCustom) TextButton(onClick = {
-                    vm.selectStartLocation(woodlandsStartLocation)
-                    showChoices = false
-                }, enabled = !vm.busy) { Text("Use Woodlands Checkpoint", color = PremiumGold) }
-            },
-            dismissButton = { TextButton(onClick = { showChoices = false }) { Text("Close", color = LocationMuted) } }
-        )
+    val permission=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()){grants->if(grants.values.any{it})gps()else status="Location permission denied"}
+    val point=coordinateLocation(lat,lon)
+    OutlinedTextField(lat,{value->val pair=value.split(",");if(pair.size==2){lat=pair[0].trim();lon=pair[1].trim()}else lat=value;home=false},label={Text("Latitude")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    OutlinedTextField(lon,{lon=it;home=false},label={Text("Longitude")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    if(home)Text("Location Name: Home",color=PremiumGold)
+    LocationOutlineButton(if(loading)"Locating…" else "Use Current Location",{
+        if(androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED ||
+           androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.ACCESS_COARSE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)gps()
+        else permission.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION))
+    },!loading)
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+        TextButton(onClick={vm.savedHome?.let{lat=it.latitude.toString();lon=it.longitude.toString();home=true}},enabled=vm.savedHome!=null){Text("Use Saved Home")}
+        TextButton(onClick={point?.let{vm.saveHome(it);home=true;status="Home saved"}},enabled=point!=null){Text("Save as Home")}
     }
-    if (replaceHome) {
-        AlertDialog(
-            onDismissRequest = { replaceHome = false },
-            containerColor = PremiumNavy,
-            titleContentColor = PremiumGold,
-            textContentColor = Color.White,
-            title = { Text("Replace Home?") },
-            text = { Text("Save ${selected.displayName} as your Home location? This replaces the Home saved on this device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.saveHome(selected)
-                    replaceHome = false
-                    showChoices = false
-                }, enabled = !vm.busy) { Text("Replace Home", color = PremiumGold) }
-            },
-            dismissButton = { TextButton(onClick = { replaceHome = false }) { Text("Cancel", color = LocationMuted) } }
-        )
-    }
+    if(status.isNotBlank())Text(status,color=LocationMuted)
+    if(point==null&&(lat.isNotBlank()||lon.isNotBlank()))Text("Invalid latitude or longitude",color=MaterialTheme.colorScheme.error)
+    LocationGoldButton("Confirm Location",{point?.let{confirm(if(home)it.copy(type="HOME",label="Home")else it)}},point!=null&&!loading)
 }
 
 @Composable
