@@ -14,6 +14,7 @@ data class StartLocation(
 ) {
     val displayName: String get() = when (type) {
         "WOODLANDS" -> "Woodlands Checkpoint"
+        "WOODLANDS_JB" -> "Woodlands Checkpoint towards JB"
         "HOME" -> "Home"
         else -> label.trim().let {
             if ((it.isEmpty() || it == "Custom Location") && address.isNotBlank()) address else it.ifEmpty { "Custom Location" }
@@ -25,7 +26,7 @@ data class StartLocation(
     fun isValid(): Boolean = runCatching {
         // Gson can populate nulls from a damaged persisted payload despite Kotlin's types.
         label.trim(); address.trim(); postalCode.trim()
-        type in setOf("WOODLANDS", "CUSTOM", "HOME") &&
+        type in setOf("WOODLANDS", "WOODLANDS_JB", "CUSTOM", "HOME") &&
             latitude.isFinite() && longitude.isFinite() && latitude in -90.0..90.0 && longitude in -180.0..180.0
     }.getOrDefault(false)
 
@@ -44,12 +45,23 @@ data class EndLocationSelection(val useLastDelivery: Boolean = true, val locatio
 val woodlandsStartLocation = StartLocation("WOODLANDS", depot.lat, depot.lon,
     "Woodlands Checkpoint", "21 Woodlands Crossing, Singapore 738203", depot.postal)
 
+// OSM car checkpoint node 7108056564; separate from the historical Singapore-bound depot.
+val woodlandsEndLocation = StartLocation("WOODLANDS_JB",1.44652,103.76962,"Woodlands Checkpoint towards JB","21 Woodlands Crossing","738203")
+fun coordinateLocation(lat:String,lon:String):StartLocation? {
+    val a=lat.trim().toDoubleOrNull()?:return null
+    val b=lon.trim().toDoubleOrNull()?:return null
+    return StartLocation("CUSTOM",a,b,"GPS coordinates","$a, $b").takeIf{it.isValid()}
+}
+fun isSupportedCoordinateRegion(point:StartLocation):Boolean =
+    (point.latitude in 0.8..7.5 && point.longitude in 99.5..105.0) ||
+    (point.latitude in 0.8..7.5 && point.longitude in 109.0..119.5)
+
 class StartLocationSettings(context: Context) {
     private val prefs = context.getSharedPreferences("start_end_locations", Context.MODE_PRIVATE)
     private val gson = Gson()
     fun selected(): StartLocation = read("selected") ?: woodlandsStartLocation
     fun home(): StartLocation? = read("home")?.takeIf { it.type == "HOME" }
-    fun selectedEnd(): EndLocationSelection = if (prefs.getString("end_mode", "LAST_DELIVERY") == "FIXED") {
+    fun selectedEnd(): EndLocationSelection = if (!prefs.contains("end_mode")) EndLocationSelection(false,woodlandsEndLocation) else if (prefs.getString("end_mode", "LAST_DELIVERY") == "FIXED") {
         read("end_selected")?.let { EndLocationSelection(false, it) } ?: EndLocationSelection()
     } else EndLocationSelection()
     fun selectEndLastDelivery() {
@@ -71,7 +83,7 @@ class StartLocationSettings(context: Context) {
         val home = location.copy(type = "HOME", label = "Home",
             address = location.address.ifBlank { location.displayName })
         val snapshot = gson.toJson(home)
-        if (!prefs.edit().putString("home", snapshot).putString("selected", snapshot).commit())
+        if (!prefs.edit().putString("home", snapshot).commit())
             throw PlannerError("Could not save your Home location. Please try again.")
         return home
     }

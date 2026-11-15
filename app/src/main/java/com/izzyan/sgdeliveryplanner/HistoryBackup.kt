@@ -51,6 +51,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             textEntry("routes.json",json)
             textEntry("payments.json",paymentJson)
             textEntry("payment_tax_overrides.json",taxOverridesJson)
+            StartLocationSettings(context).home()?.let { textEntry("home_location.json",gson.toJson(it).toByteArray()) }
             available.forEach { (id,file) ->
                 require(file.length()<=20L*1024*1024) { "Proof file too large." }
                 zip.putNextEntry(ZipEntry("proofs/"+id))
@@ -78,6 +79,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
             var routesJson:ByteArray?=null
             var paymentsJson:ByteArray?=null
             var taxOverridesJson:ByteArray?=null
+            var homeJson:ByteArray?=null
             var total=0L
             val stream=context.contentResolver.openInputStream(uri) ?: error("Cannot read backup.")
             stream.use { source -> ZipInputStream(source.buffered()).use { zip ->
@@ -86,7 +88,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                     val name=entry.name
                     require(!entry.isDirectory&&seen.add(name)) { "Invalid or duplicate archive entry." }
                     val cap=when {
-                        name=="manifest.json" -> 32768L
+                        name=="manifest.json" || name=="home_location.json" -> 32768L
                         name=="routes.json" -> 30L*1024*1024
                         name=="payments.json" -> 5L*1024*1024
                         name=="payment_tax_overrides.json" -> 1024L*1024
@@ -96,7 +98,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                     var size=0L
                     val buffer=ByteArray(8192)
                     val text=if(name=="manifest.json"||name=="routes.json"||name=="payments.json"||
-                        name=="payment_tax_overrides.json")ByteArrayOutputStream() else null
+                        name=="payment_tax_overrides.json"||name=="home_location.json")ByteArrayOutputStream() else null
                     val id=name.removePrefix("proofs/")
                     if(text==null) require(images.size<5000) { "Too many images." }
                     val file=if(text==null)File(tmp,id) else null
@@ -114,6 +116,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                     else if(name=="routes.json")routesJson=text!!.toByteArray()
                     else if(name=="payments.json")paymentsJson=text!!.toByteArray()
                     else if(name=="payment_tax_overrides.json")taxOverridesJson=text!!.toByteArray()
+                    else if(name=="home_location.json")homeJson=text!!.toByteArray()
                     else images[id]=file!!
                     zip.closeEntry()
                 }
@@ -146,6 +149,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 require(taxOverridesJson==null) { "Unexpected Tax overrides in legacy backup." }
                 emptyMap()
             }
+            val restoredHome=homeJson?.let { gson.fromJson(it.toString(Charsets.UTF_8),StartLocation::class.java).also { p -> require(p.isValid() && p.type=="HOME") } }
             val rows=gson.fromJson(requireNotNull(routesJson) { "History data missing." }.toString(Charsets.UTF_8),
                 Array<SavedRoute>::class.java).toList()
             require(rows.size<=2000&&rows.size==header.get("routeCount")?.asInt) { "Invalid history count." }
@@ -176,6 +180,7 @@ class HistoryBackup(private val context:Context, private val dao:PlannerDao) {
                 // Restore on top of existing data; repeated ZIP imports do not duplicate payments.
                 val restoredPayments=paymentLedger.mergeRestored(payments)
                 taxOverrideLedger.mergeRestored(overrides)
+                restoredHome?.let { StartLocationSettings(context).saveHome(it) }
                 HistoryRestoreResult(restored,rows.size-restored,newFiles.size,restoredPayments)
             } catch(e:Exception) {
                 newFiles.forEach { it.delete() }
