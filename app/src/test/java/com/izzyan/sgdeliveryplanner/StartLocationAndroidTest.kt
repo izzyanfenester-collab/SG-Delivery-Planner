@@ -51,6 +51,12 @@ class StartLocationAndroidTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun coordinateValidation(){
+        assertNotNull(coordinateLocation("-1.123456","103.123456"))
+        assertNull(coordinateLocation("103.123456","1.123456"))
+        assertNull(coordinateLocation("","103"))
+        assertNull(coordinateLocation("NaN","103"))
+    }
     @Test
     fun firstLaunchUsesWoodlandsAndHasNoSavedHome() {
         val settings = StartLocationSettings(app)
@@ -60,9 +66,9 @@ class StartLocationAndroidTest {
     }
 
     @Test
-    fun endDefaultsToFinalDeliveryAndDoesNotChangeTheStart() {
+    fun endDefaultsToJBAndDoesNotChangeTheStart() {
         val settings = StartLocationSettings(app)
-        assertEquals(EndLocationSelection(), settings.selectedEnd())
+        assertEquals(EndLocationSelection(false,woodlandsEndLocation), settings.selectedEnd())
         assertEquals(woodlandsStartLocation, settings.selected())
 
         settings.selectEndLocation(custom)
@@ -121,7 +127,7 @@ class StartLocationAndroidTest {
         assertEquals(custom.latitude, home.latitude, 0.0)
         assertEquals(custom.address, home.address)
         assertEquals(home, StartLocationSettings(app).home())
-        assertEquals(home, StartLocationSettings(app).selected())
+        assertEquals(custom, StartLocationSettings(app).selected())
 
         val secondCustom = custom.copy(
             latitude = 1.410123, longitude = 103.765432,
@@ -135,7 +141,7 @@ class StartLocationAndroidTest {
         assertEquals(secondCustom.longitude, updated.longitude, 0.0)
         assertEquals(secondCustom.address, updated.address)
         assertEquals(secondCustom.postalCode, updated.postalCode)
-        assertEquals(updated, reopened.selected())
+        assertEquals(custom, reopened.selected())
 
         reopened.select(requireNotNull(reopened.home()))
         assertEquals(updated, StartLocationSettings(app).selected())
@@ -299,13 +305,13 @@ class StartLocationAndroidTest {
         assertEquals("HOME", updatedHome.type)
         assertEquals(newLocation.latitude, updatedHome.latitude, 0.0)
         assertEquals(newLocation.longitude, updatedHome.longitude, 0.0)
-        assertEquals(updatedHome, vm.selectedStartLocation)
+        assertEquals(woodlandsStartLocation, vm.selectedStartLocation)
         assertSame(active, vm.route)
         assertEquals(originalHome, requireNotNull(vm.route).startLocation)
 
         val restarted = model()
         assertEquals(updatedHome, restarted.savedHome)
-        assertEquals(updatedHome, restarted.selectedStartLocation)
+        assertEquals(woodlandsStartLocation, restarted.selectedStartLocation)
         restarted.selectStartLocation(woodlandsStartLocation)
         restarted.useHome()
         assertEquals(updatedHome, restarted.selectedStartLocation)
