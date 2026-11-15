@@ -1,0 +1,25 @@
+name: Publish B856 verified testing APK download
+on:
+  push:
+    branches: [feature/build-856-b851-home-coordinates]
+    paths: ['.github/workflows/publish-b856-testing.yml']
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SG856-TESTING-APK
+          run-id: 43776878852
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+      - name: Verify and publish existing tested APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo '5d81cbfa480e8b15efef35b71ef9d58bc925a5c7eb8a9b9e02a357b150803eab  dist/SG856-TESTING.apk' | sha256sum -c -
+          gh release create v1.4.44-b856-testing dist/SG856-TESTING.apk --repo "$GITHUB_REPOSITORY" --target c0cfb7f1446be17011d5fce3939be1d39e0a4955 --prerelease --title "SG Delivery B856 TESTING" --notes "Isolated ARM64 testing build based on Official B851. Home coordinate endpoints. Verified APK from successful CI run 43776878852. Not an official update."
