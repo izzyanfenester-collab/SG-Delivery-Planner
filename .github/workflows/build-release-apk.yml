@@ -72,6 +72,14 @@ jobs:
           apk="app/build/outputs/apk/release/app-release.apk"
           test -s "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          # Verify that existing B851 installations can be updated in place.
+          curl --fail --location --retry 3 --silent --show-error "https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.39-b851/SG-Delivery-B851-Official.apk" -o "$RUNNER_TEMP/b851.apk"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          old_cert=$("$signer" verify --print-certs "$RUNNER_TEMP/b851.apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          new_cert=$("$signer" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$old_cert"
+          test "$old_cert" = "$new_cert"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep "package: name='com.izzyan.sgdeliveryplanner' versionCode='60' versionName='1.4.44-b856'"
           echo "Release APK SHA-256:"
           sha256sum "$apk"
       - name: Upload signed APK (keystore NEVER uploaded)
@@ -100,7 +108,7 @@ jobs:
             gh release upload "$tag" "$asset" --clobber
           else
             gh release create "$tag" "$asset" --target "$GITHUB_SHA" \
-              --title "SG Delivery Build #$build" \
+              --latest --title "SG Delivery Build #$build" \
               --notes "Official APK signed using the SG Delivery permanent release key. Runners can download and install without a GitHub account. Back up data before switching from a testing package."
           fi
           echo "Official runner APK: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
