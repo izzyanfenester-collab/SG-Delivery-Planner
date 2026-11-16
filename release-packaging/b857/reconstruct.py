@@ -9,13 +9,13 @@ assert sha(base)==ops["base_sha256"]=="0d4cfcf37eb2f25929ad5686a715f85bdc78b7cd6
 out=bytearray()
 pos=0
 for op in ops["ops"]:
-    if op[0]=="literal":
+    if isinstance(op, list) and len(op)==2 and isinstance(op[1],int):
         n=op[1]; assert 0<=n<=len(literal)-pos
         out.extend(literal[pos:pos+n]); pos+=n
-    elif op[0]=="copy":
+    elif isinstance(op, list) and len(op)==3 and all(isinstance(v,int) for v in op[1:]):
         offset,n=op[1:]; assert 0<=offset<=len(base) and 0<=n<=len(base)-offset
         out.extend(base[offset:offset+n])
-    else: raise ValueError("invalid delta")
+    else: raise ValueError(f"Unsupported delta operation type={type(op).__name__}, shape={len(op) if isinstance(op,(list,dict)) else None}, tag={op[0] if isinstance(op,list) and op else None}")
 assert pos==len(literal)
 assert len(out)==91548446
 assert sha(out)==ops["target_sha256"]=="a961d7be6156b701c7da52508098a0247bf3dcbe8da897c13feac9832505b9da"
