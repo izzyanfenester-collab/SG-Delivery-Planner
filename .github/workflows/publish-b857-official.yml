@@ -1,0 +1,65 @@
+name: Publish verified SG Delivery B857 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b857-official.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: sg-delivery-b857-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/download-artifact@v4
+        with:
+          name: B857-Official-Candidate-Base
+          run-id: 43791573586
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: private-packaging
+      - name: Restore encrypted exact candidate delta
+        env:
+          KS_STORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          KS_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+          KS_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export KS_PATH="$RUNNER_TEMP/b857-keystore.jks"
+          trap 'rm -f "$KS_PATH" "$RUNNER_TEMP/b857-delta.zip" "$RUNNER_TEMP/b857-delta.enc"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS_PATH"
+          cat release-packaging/b857/part-*.bin > "$RUNNER_TEMP/b857-delta.enc"
+          echo 'b872c95aef314ebc67a053cab466bebbd260f7269ba62f0d68c7af8d7909ab5f  '"$RUNNER_TEMP/b857-delta.enc" | sha256sum -c -
+          java release-packaging/b857/UnwrapB857.java "$RUNNER_TEMP/b857-delta.enc" "$RUNNER_TEMP/b857-delta.zip"
+          mkdir -p dist
+          python3 release-packaging/b857/reconstruct.py private-packaging/base.apk "$RUNNER_TEMP/b857-delta.zip" dist/SG-Delivery-B857-Official.apk
+      - name: Verify original signer and package identity
+        run: |
+          set -euo pipefail
+          apk=dist/SG-Delivery-B857-Official.apk
+          java -jar private-packaging/apksigner.jar verify --verbose --print-certs "$apk" | tee signer.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' signer.txt
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          test -x "$aapt"
+          "$aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='61' versionName='1.4.45-b857'"
+          echo 'a961d7be6156b701c7da52508098a0247bf3dcbe8da897c13feac9832505b9da  dist/SG-Delivery-B857-Official.apk' | sha256sum -c -
+      - name: Publish owner-approved stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.45-b857
+          apk=dist/SG-Delivery-B857-Official.apk
+          gh release create "$tag" "$apk" --target ac1ae00dfb41a906caeff61fe392b9405e55eafd --latest --title "SG Delivery Build #857 Official – Panda Warrior V2" --notes "Owner confirmed actual navigation acceptance and audio distribution rights. Universal APK, original official signing key, 185 original ElevenLabs Panda Warrior clips and dynamic offline navigation voice. Update from Settings > App Updates > Check for App Updates. Exact approved release candidate SHA-256: a961d7be6156b701c7da52508098a0247bf3dcbe8da897c13feac9832505b9da."
+          gh release view "$tag" --json tagName,isPrerelease,isDraft,assets
