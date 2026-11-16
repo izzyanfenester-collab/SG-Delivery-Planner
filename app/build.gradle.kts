@@ -33,6 +33,8 @@ android {
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 
  testOptions { unitTests.isIncludeAndroidResources = true }
+ // Use the canonical Maven Central endpoint for Robolectric runtime SDK artifacts.
+
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
@@ -63,3 +65,7 @@ dependencies {
  testImplementation("org.apache.poi:poi-ooxml:5.4.1")
  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
+
+ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+ }
