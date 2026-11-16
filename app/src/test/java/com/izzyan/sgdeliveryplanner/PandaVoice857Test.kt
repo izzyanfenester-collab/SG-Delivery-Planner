@@ -20,4 +20,17 @@ class PandaVoice857Test {
   assertEquals(listOf("distance_in_3km","turn_right"),phrase.parts.map{it.clip})
   assertEquals(VoicePriority.ADVANCE,phrase.priority)
  }
+ @Test fun wavCompositionAndUnsupportedExit(){
+  val out=java.io.ByteArrayOutputStream()
+  PandaWav.write(out,listOf(byteArrayOf(1,2),byteArrayOf(3,4)))
+  val b=out.toByteArray()
+  assertEquals("RIFF",String(b,0,4,Charsets.US_ASCII))
+  assertEquals("WAVE",String(b,8,4,Charsets.US_ASCII))
+  assertEquals(44+4+3120,b.size)
+  assertEquals(listOf("exit_right"),parts(0,"off ramp","right",NavigationPanelCue(NavigationSign.EXIT_RIGHT,"17Z")))
+ }
+ @Test fun checkpointsAndRoadNames(){
+  assertEquals(listOf("follow_woodlands"),PandaVoiceMapper.composeAtDistance("notification",null,"Follow the signs towards Woodlands Checkpoint",null,NavigationPanelCue(),0))
+  assertEquals(listOf("distance_in_3km","turn_right","word_onto","road_pie"),PandaVoiceMapper.composeAtDistance("turn","right","Turn right onto PIE","PIE",NavigationPanelCue(NavigationSign.TURN_RIGHT),3000))
+ }
 }

@@ -885,13 +885,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(phrase.key=="missing-audio" || (cue.roundaboutExit?:0)>10)
             android.util.Log.w("SGPanda857","missing coverage type=$type modifier=$modifier distance=$distance exit=${cue.roundaboutExit}; visual guidance; legacy voice disabled")
         if(pandaGate.accept(index,phrase,distance,force,sdkDue)) {
-            // Optional reassurance only AFTER the real maneuver, only with enough time.
-            val parts=if(newRouteReady && phrase.priority!=VoicePriority.CRITICAL &&
-                distance/maxOf(speed.toDouble(),5.0)>15 && distance>250)
-                phrase.parts+VoicePart("new_route_ready","New route ready.")
-            else phrase.parts
             android.util.Log.d("SGPanda857","navigation step=$index type=$type modifier=$modifier distance=$distance clip=${phrase.parts.firstOrNull()?.clip}")
-            voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}",parts=parts))
+            voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))
         }
     }
     override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }

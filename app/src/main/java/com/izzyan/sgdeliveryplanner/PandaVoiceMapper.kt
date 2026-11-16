@@ -98,22 +98,30 @@ internal object PandaVoiceMapper {
     fun composeAtDistance(type:String?,modifier:String?,instruction:String,road:String?,cue:NavigationPanelCue,metres:Int):List<String> {
         val t=norm(type)
         val b=base(type,modifier,cue)
-        if(b==null || b in setOf("arrived","destination_left","destination_right")) return if(metres==200 && b!=null)listOf("arrive_200m")else emptyList()
-        val exit=if(t in setOf("off ramp","exit","exit ramp","motorway exit"))exitParts(cue.expresswayExit)else emptyList()
-        val direction=if(exit.isNotEmpty())exit else listOf(b)
         val text=norm(instruction)
+        if(b in setOf("arrived","destination_left","destination_right")) return if(metres==200)listOf("arrive_200m")else emptyList()
+        val exit=if(t in setOf("off ramp","exit","exit ramp","motorway exit"))exitParts(cue.expresswayExit)else emptyList()
+        val direction=if(exit.isNotEmpty())exit else listOfNotNull(b)
         val explicit=when {
             text.startsWith("follow the signs towards woodlands checkpoint")->"follow_woodlands"
             text.startsWith("follow the signs towards tuas checkpoint")->"follow_tuas"
             text.startsWith("proceed towards singapore")->"proceed_singapore"
             text.startsWith("proceed towards johor bahru")->"proceed_johor_bahru"
+            text.startsWith("continue onto the expressway")->"continue_onto_expressway"
+            text.startsWith("stay on the main road")->"stay_main_road"
+            text.startsWith("take the next exit")->"take_next_exit"
+            text.startsWith("take the next left")->"take_next_left"
+            text.startsWith("take the next right")->"take_next_right"
+            text.startsWith("enter the roundabout")->"enter_roundabout"
+            text.startsWith("go straight through the roundabout")->"roundabout_straight"
             else->null
         }
         val command=if(explicit!=null)listOf(explicit)else direction
+        if(command.isEmpty())return emptyList()
         val roadId=roadClip(road)
         val roadTail=if(roadId!=null && text.contains("onto") && b in setOf("turn_left","turn_right","keep_left","keep_right","fork_keep_left","fork_keep_right","continue_straight"))listOf("word_onto",roadId)else emptyList()
         if(metres<=0)return command+roadTail
-        if(exit.isEmpty()&&explicit==null&&roadTail.isEmpty())full(b,metres)?.let{return listOf(it)}
+        if(exit.isEmpty()&&explicit==null&&roadTail.isEmpty()&&b!=null)full(b,metres)?.let{return listOf(it)}
         val prefix=distanceParts(metres)
         if(prefix.isEmpty())return emptyList()
         return prefix+command+roadTail

@@ -535,6 +535,8 @@ class PlannerViewModel @JvmOverloads constructor(app: Application, private val e
                 // Persist before advancing the visible stop so a failed save does not lose a delivery action.
                 repo.save(updated)
                 route = updated
+                // Announce only after the actual delivery action has been persisted.
+                deliveryVoiceEvent(planned,updated,action)?.let { DeliveryVoiceAnnouncements.play(getApplication(),it) }
                 if (activeDeliveryPlan(updated) == null) {
                     clearCompletedSelection(updated)
                     screen = "Summary"
