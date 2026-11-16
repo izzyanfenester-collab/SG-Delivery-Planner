@@ -3,12 +3,12 @@ name: Build Signed SG Delivery Release APK
 # Only the owner can dispatch this on main; untrusted pull requests never see signing secrets.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'scripts/build_postal_seed.py'
-      - '.github/workflows/build-release-apk.yml'
+    inputs:
+      audio_rights_and_device_tests_confirmed:
+        description: "Owner confirms all audio distribution rights and actual navigation/playback acceptance tests"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   # The release job publishes signed APKs to public GitHub Releases for all runners.
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.audio_rights_and_device_tests_confirmed == true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -34,6 +34,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Require complete licensed Panda V2 assets before release
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("app/src/main/assets/voicepacks/panda_warrior_v2")
+          clips = json.loads((root / "manifest.json").read_text())["clips"]
+          assert len(clips) == 185 and len({c["id"] for c in clips}) == 185
+          for c in clips:
+              assert (root / c["file"]).is_file()
+              assert (root / "audio_pcm" / (c["id"] + ".pcm")).is_file()
+          PY
       - name: Enable launcher
         run: chmod +x gradlew
       - name: Generate account-free Singapore postal index
@@ -72,14 +84,14 @@ jobs:
           apk="app/build/outputs/apk/release/app-release.apk"
           test -s "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
-          # Verify that existing B851 installations can be updated in place.
-          curl --fail --location --retry 3 --silent --show-error "https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.39-b851/SG-Delivery-B851-Official.apk" -o "$RUNNER_TEMP/b851.apk"
+          # Verify that existing B856 installations can be updated in place.
+          curl --fail --location --retry 3 --silent --show-error "https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.44-b856/SG-Delivery-B856-Official.apk" -o "$RUNNER_TEMP/b856.apk"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          old_cert=$("$signer" verify --print-certs "$RUNNER_TEMP/b851.apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          old_cert=$("$signer" verify --print-certs "$RUNNER_TEMP/b856.apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           new_cert=$("$signer" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           test -n "$old_cert"
           test "$old_cert" = "$new_cert"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep "package: name='com.izzyan.sgdeliveryplanner' versionCode='60' versionName='1.4.44-b856'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep "package: name='com.izzyan.sgdeliveryplanner' versionCode='61' versionName='1.4.45-b857'"
           echo "Release APK SHA-256:"
           sha256sum "$apk"
       - name: Upload signed APK (keystore NEVER uploaded)

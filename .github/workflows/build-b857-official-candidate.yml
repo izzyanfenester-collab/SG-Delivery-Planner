@@ -1,0 +1,53 @@
+name: Build B857 Official identity candidate (private audio packaging)
+on:
+  push:
+    branches: [main]
+    paths: ['app/**','.github/workflows/build-b857-official-candidate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: python3 scripts/build_postal_seed.py
+      - name: Compile and validate release candidate
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Export unsigned release base for owner-only audio packaging
+        run: |
+          set -euo pipefail
+          mkdir -p private-packaging
+          cp app/build/outputs/apk/release/app-release-unsigned.apk private-packaging/base.apk
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" private-packaging/
+          cp "$ANDROID_HOME/build-tools/36.0.0/zipalign" private-packaging/
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging private-packaging/base.apk | grep "package: name='com.izzyan.sgdeliveryplanner' versionCode='61' versionName='1.4.45-b857'"
+          unzip -l private-packaging/base.apk | grep 'lib/arm64-v8a/'
+          unzip -l private-packaging/base.apk | grep 'lib/armeabi-v7a/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B857-Official-Candidate-Base
+          path: private-packaging/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B857-Official-Candidate-Reports
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore

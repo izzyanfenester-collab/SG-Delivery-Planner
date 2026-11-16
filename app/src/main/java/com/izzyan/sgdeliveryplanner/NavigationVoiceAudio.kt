@@ -1,0 +1,170 @@
+package com.izzyan.sgdeliveryplanner
+
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.google.gson.JsonParser
+import java.io.File
+import java.io.OutputStream
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+
+internal const val PANDA_ASSET_ROOT="voicepacks/panda_warrior_v2"
+internal data class PandaClip(val id:String,val path:String,val text:String,val seconds:Double)
+internal class PandaVoicePack(private val context:Context) {
+    val clips:Map<String,PandaClip> by lazy {
+        runCatching {
+            val root=context.assets.open("$PANDA_ASSET_ROOT/manifest.json").bufferedReader().use {
+                JsonParser.parseReader(it).asJsonObject
+            }
+            val list=root["clips"].asJsonArray.map { element ->
+                val c=element.asJsonObject
+                val id=c["id"].asString;val path=c["file"].asString
+                require(id.matches(Regex("[a-z0-9_]+")) && path=="audio/$id.mp3")
+                PandaClip(id,path,c["text"].asString,c["duration_seconds"].asDouble)
+            }
+            require(list.size==185 && list.map{it.id}.toSet().size==185)
+            val files=context.assets.list("$PANDA_ASSET_ROOT/audio")?.toSet().orEmpty()
+            require(list.all{it.path.substringAfter('/') in files})
+            val pcm=context.assets.list("$PANDA_ASSET_ROOT/audio_pcm")?.toSet().orEmpty()
+            require(list.all{"${it.id}.pcm" in pcm})
+            list.associateBy{it.id}
+        }.getOrDefault(emptyMap())
+    }
+    val available get()=clips.size==185
+    fun open(id:String)=clips[id]?.let { context.assets.openFd("$PANDA_ASSET_ROOT/${it.path}") }
+}
+/** Original MP3s stay intact. Prepared PCM is decoded from those same recordings.
+ * Buffer a whole sentence into one WAV before playback, with controlled gaps.
+ * Preparation runs off the navigation thread and is cancelled on route change. */
+internal object PandaWav {
+    const val SAMPLE_RATE=24000
+    fun write(out:OutputStream,parts:List<ByteArray>,gapMs:Int=65) {
+        require(parts.isNotEmpty() && parts.all{it.isNotEmpty()&&it.size%2==0})
+        val gap=ByteArray(SAMPLE_RATE*2*gapMs/1000)
+        val size=parts.sumOf{it.size}+gap.size*(parts.size-1)
+        require(size in 1..4_000_000)
+        fun ascii(s:String)=out.write(s.toByteArray(Charsets.US_ASCII))
+        fun le(n:Int,bytes:Int){repeat(bytes){out.write((n ushr (it*8)) and 255)}}
+        ascii("RIFF");le(size+36,4);ascii("WAVEfmt ");le(16,4);le(1,2);le(1,2)
+        le(SAMPLE_RATE,4);le(SAMPLE_RATE*2,4);le(2,2);le(16,2);ascii("data");le(size,4)
+        parts.forEachIndexed{i,bytes->if(i>0)out.write(gap);out.write(bytes)}
+    }
+}
+internal class NavigationVoiceAudio(context:Context):AutoCloseable {
+    private val app=context.applicationContext
+    val pack=PandaVoicePack(app)
+    private val manager=app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val handler=Handler(Looper.getMainLooper())
+    private val executor=Executors.newSingleThreadExecutor()
+    private var preparation:Future<*>?=null
+    private val attrs=AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+    private val focus=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        .setAudioAttributes(attrs).setOnAudioFocusChangeListener({change->
+            if(change==AudioManager.AUDIOFOCUS_LOSS || change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
+                change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) stop()
+        },handler).build()
+    private var focusHeld=false
+    private var player:MediaPlayer?=null
+    private var waveFile:File?=null
+    private var closed=false
+    private var generation=0L
+    private var current:VoicePhrase?=null
+    private var volume=1f
+    var previewing by mutableStateOf(false);private set
+    companion object { private var owner:NavigationVoiceAudio?=null }
+    fun setVolume(value:Float){volume=value.coerceIn(0f,1f);runCatching{player?.setVolume(volume,volume)};if(volume<=0f)stop()}
+    fun play(phrase:VoicePhrase):Boolean {
+        if(closed || volume<=0f || phrase.parts.isEmpty())return false
+        if(!pack.available || phrase.parts.any{it.clip !in pack.clips}) { Log.w("SGPanda857","missing audio event=${phrase.key}; legacy voice disabled");return false }
+        val oldOwner=owner
+        val old=oldOwner?.current
+        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank))return false
+        oldOwner?.stop()
+        if(oldOwner!==this)stop()
+        if(manager.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED)return false
+        focusHeld=true;owner=this;current=phrase;previewing=phrase.priority==VoicePriority.PREVIEW
+        val token=generation
+        val requested=SystemClock.elapsedRealtime()
+        preparation=executor.submit {
+            var file:File?=null
+            try {
+                val parts=phrase.parts.map { part ->
+                    if(Thread.currentThread().isInterrupted)throw InterruptedException()
+                    app.assets.open("$PANDA_ASSET_ROOT/audio_pcm/${part.clip}.pcm").use{it.readBytes()}
+                }
+                val created=File.createTempFile("panda857_",".wav",app.cacheDir)
+                file=created
+                created.outputStream().use{PandaWav.write(it,parts)}
+                if(Thread.currentThread().isInterrupted)throw InterruptedException()
+                handler.post {
+                    if(token!=generation || closed){created.delete();return@post}
+                    waveFile=created
+                    try {
+                        val media=MediaPlayer();player=media
+                        media.setAudioAttributes(attrs)
+                        media.setDataSource(created.absolutePath)
+                        media.setVolume(volume,volume)
+                        media.setOnPreparedListener {
+                            if(token==generation && player===media) {
+                                try {media.start();Log.d("SGPanda857","event=${phrase.key} parts=${phrase.parts.size} startCallMs=${SystemClock.elapsedRealtime()-requested}")}
+                                catch(e:Exception){Log.e("SGPanda857","start failed",e);stop()}
+                            }
+                        }
+                        media.setOnCompletionListener {if(token==generation&&player===media)stop()}
+                        media.setOnErrorListener{_,what,extra->if(token==generation&&player===media){Log.e("SGPanda857","audio error $what/$extra");stop()};true}
+                        media.prepareAsync()
+                    }catch(e:Exception){Log.e("SGPanda857","prepare failed; no TTS",e);stop()}
+                }
+            }catch(e:Exception){
+                file?.delete()
+                if(e !is InterruptedException)handler.post {if(token==generation){Log.e("SGPanda857","phrase build failed; no TTS",e);stop()}}
+            }
+        }
+        return true
+    }
+    fun stopPreview(){if(previewing)stop()}
+    fun stopObsoleteManeuver(index:Int) {
+        val key=current?.key ?: return
+        if(key.startsWith("step-") && !key.startsWith("step-$index-")) stop()
+    }
+    fun stop(){
+        generation++;current=null;previewing=false
+        preparation?.cancel(true);preparation=null
+        val old=player;player=null;runCatching{old?.release()}
+        waveFile?.delete();waveFile=null
+        if(owner===this)owner=null
+        if(focusHeld){focusHeld=false;runCatching{manager.abandonAudioFocusRequest(focus)}}
+    }
+    override fun close(){stop();closed=true;executor.shutdownNow()}
+}
+/** Delivery events use the same controller, scoped to MainActivity's foreground
+ * lifetime. The navigation activity has its own controller and MainActivity
+ * stops playback before launching it. */
+internal object DeliveryVoiceAnnouncements {
+    private var audio:NavigationVoiceAudio?=null
+    private var foreground=false
+    fun resume(){foreground=true}
+    fun pause(){foreground=false;stop()}
+    fun play(context:Context,id:String) {
+        if(!foreground)return
+        val prefs=GpsNavigationModePreferences(context)
+        if(!prefs.isSoundEnabled())return
+        val fallback=when(id){"next_delivery"->"On to the next delivery.";"delivery_complete"->"All deliveries completed.";else->return}
+        val controller=audio?:NavigationVoiceAudio(context).also{audio=it}
+        controller.setVolume(prefs.voiceVolume())
+        controller.play(VoicePhrase(id,VoicePriority.CHARACTER,listOf(VoicePart(id,fallback))))
+    }
+    fun stop(){audio?.stop()}
+    fun close(){foreground=false;audio?.close();audio=null}
+}
