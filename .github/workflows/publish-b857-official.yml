@@ -26,7 +26,7 @@ jobs:
           run-id: 43791573586
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: private-packaging
-      - name: Restore encrypted exact candidate delta (validate operation shape and exact SHA-256)
+      - name: Restore encrypted exact candidate delta (restore raw deflate and validate exact SHA-256)
         env:
           KS_STORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
           KS_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
