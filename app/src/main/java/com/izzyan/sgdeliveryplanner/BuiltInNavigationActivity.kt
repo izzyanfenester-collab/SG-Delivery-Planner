@@ -884,9 +884,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         val phrase=PandaVoiceMapper.maneuver(type,modifier,text,road,cue,distance,speed,following,nextLength,previous,force)
         if(phrase.key=="missing-audio" || (cue.roundaboutExit?:0)>10)
             android.util.Log.w("SGPanda857","missing coverage type=$type modifier=$modifier distance=$distance exit=${cue.roundaboutExit}; visual guidance; legacy voice disabled")
-        if(pandaGate.accept(index,phrase,distance,force,sdkDue)) {
+        if(pandaGate.eligible(index,phrase,distance)) {
             android.util.Log.d("SGPanda857","navigation step=$index type=$type modifier=$modifier distance=$distance clip=${phrase.parts.firstOrNull()?.clip}")
-            voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))
+            if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))) pandaGate.mark(index,phrase,distance)
         }
     }
     override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }

@@ -89,8 +89,8 @@ internal object PandaVoiceMapper {
         return mapOf("pie" to "pie","pan island expressway" to "pie","bke" to "bke","bukit timah expressway" to "bke","kje" to "kje","kranji expressway" to "kje","sle" to "sle","seletar expressway" to "sle","tpe" to "tpe","tampines expressway" to "tpe","cte" to "cte","central expressway" to "cte","ecp" to "ecp","east coast parkway" to "ecp","aye" to "aye","ayer rajah expressway" to "aye","kpe" to "kpe","kallang paya lebar expressway" to "kpe","mce" to "mce","marina coastal expressway" to "mce")[key]?.let{"road_$it"}
     }
     private fun threshold(d:Double,speed:Float,previous:Double?):Int? {
-        val marks=if(speed>=20f) listOf(50000,40000,30000,25000,20000,15000,10000,9000,8000,7000,6000,5000,4000,3000,2000,1000,500,200)
-                  else listOf(3000,2000,1000,500,300,200,100,50)
+        val marks=if(speed>=20f) listOf(50000,30000,15000,10000,7000,5000,3000,1000,200)
+                  else listOf(3000,1000,500,200,100,50)
         val crossed=marks.firstOrNull { previous!=null && previous>=it && d<=it && it-d<=maxOf(8.0,speed.toDouble()*1.7, it*0.08) }
         if(crossed!=null)return crossed
         return marks.minByOrNull{abs(it-d)}?.takeIf{abs(it-d)<=maxOf(5.0,minOf(25.0,it*0.05))}
@@ -114,6 +114,9 @@ internal object PandaVoiceMapper {
             text.startsWith("take the next right")->"take_next_right"
             text.startsWith("enter the roundabout")->"enter_roundabout"
             text.startsWith("go straight through the roundabout")->"roundabout_straight"
+            text in setOf("take the left lane","use the left lane")->"lane_left"
+            text in setOf("take the right lane","use the right lane")->"lane_right"
+            text=="use the middle lane"->"lane_middle"
             else->null
         }
         val command=if(explicit!=null)listOf(explicit)else direction
@@ -145,30 +148,28 @@ internal object PandaVoiceMapper {
     }
 
 }
-/** At most two advance cues per maneuver plus one immediate cue. A route
- * replacement/voice change resets the gate. No repeated GPS-tick announcements. */
+/** One far, one medium, one near and one immediate cue per actual maneuver.
+ * Reserve a near cue even when the first announcement is many kilometres away. */
 internal class PandaVoiceGate {
     private var step=-1
-    private var advances=0
-    private var lastAdvanceDistance=Double.POSITIVE_INFINITY
-    private var immediate=false
-    private val keys=mutableSetOf<String>()
+    private val stages=mutableSetOf<Int>()
     private var observed:Double?=null
     fun previousDistance(index:Int,distance:Double):Double? {
         if(index!=step){reset();step=index}
         val old=observed;observed=distance;return old
     }
-    fun reset(){step=-1;advances=0;lastAdvanceDistance=Double.POSITIVE_INFINITY;immediate=false;keys.clear();observed=null}
-    fun accept(index:Int,phrase:VoicePhrase,distance:Double,force:Boolean,sdkDue:Boolean):Boolean {
+    fun reset(){step=-1;stages.clear();observed=null}
+    private fun stage(phrase:VoicePhrase,distance:Double):Int =
+        if(phrase.priority==VoicePriority.CRITICAL)0 else if(distance<=250)1 else if(distance<=1500)2 else 3
+    fun eligible(index:Int,phrase:VoicePhrase,distance:Double):Boolean {
         if(index!=step){reset();step=index}
-        if(phrase.parts.isEmpty())return false
-        if(phrase.priority==VoicePriority.CRITICAL){
-            if(immediate)return false
-            immediate=true;return true
-        }
-        if(immediate || advances>=3 || phrase.key in keys || (advances>0 && distance>lastAdvanceDistance*0.65))return false
-        if(!force && distance>50000)return false
-        keys+=phrase.key;advances++;lastAdvanceDistance=distance;return true
+        if(phrase.parts.isEmpty() || distance>50000 || 0 in stages)return false
+        val s=stage(phrase,distance)
+        return s !in stages && stages.none{it<s}
+    }
+    fun mark(index:Int,phrase:VoicePhrase,distance:Double){
+        if(index!=step){reset();step=index}
+        stages+=stage(phrase,distance)
     }
 }
 internal fun deliveryVoiceEvent(before:Plan,after:Plan,action:String):String? {

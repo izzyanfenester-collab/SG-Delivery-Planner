@@ -33,4 +33,16 @@ class PandaVoice857Test {
   assertEquals(listOf("follow_woodlands"),PandaVoiceMapper.composeAtDistance("notification",null,"Follow the signs towards Woodlands Checkpoint",null,NavigationPanelCue(),0))
   assertEquals(listOf("distance_in_3km","turn_right","word_onto","road_pie"),PandaVoiceMapper.composeAtDistance("turn","right","Turn right onto PIE","PIE",NavigationPanelCue(NavigationSign.TURN_RIGHT),3000))
  }
+ @Test fun stagedAnnouncementsReserveNearCue(){
+  val gate=PandaVoiceGate()
+  val cue=NavigationPanelCue(NavigationSign.TURN_RIGHT)
+  fun phrase(m:Double,prev:Double?=null)=PandaVoiceMapper.maneuver("turn","right","Turn right",null,cue,m,25f,previousDistance=prev)
+  val first=phrase(3000.0); assertTrue(gate.eligible(1,first,3000.0)); gate.mark(1,first,3000.0)
+  assertFalse(gate.eligible(1,first,2990.0))
+  val middle=phrase(990.0,1010.0);assertTrue(gate.eligible(1,middle,990.0));gate.mark(1,middle,990.0)
+  val near=phrase(195.0,205.0);assertTrue(gate.eligible(1,near,195.0));gate.mark(1,near,195.0)
+  val now=phrase(15.0,35.0);assertTrue(gate.eligible(1,now,15.0));gate.mark(1,now,15.0)
+  assertFalse(gate.eligible(1,now,12.0))
+  gate.reset();assertTrue(gate.eligible(1,first,3000.0))
+ }
 }
