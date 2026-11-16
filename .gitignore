@@ -9,3 +9,5 @@ local.properties
 signing.properties
 app/src/main/assets/sg_postal_seed.db
 __pycache__/
+
+/app/src/main/assets/voicepacks/panda_warrior_v2/
