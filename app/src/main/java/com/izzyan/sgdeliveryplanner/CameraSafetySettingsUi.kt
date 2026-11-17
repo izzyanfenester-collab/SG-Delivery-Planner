@@ -37,6 +37,12 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Panda Warrior Camera Voice",p.voice) {
             session.updateCameraPreferences(p.copy(voice=it))
         }
+        CameraSafetyToggle("Average Speed Zone Voice",p.averageVoice) {
+            session.updateCameraPreferences(p.copy(averageVoice=it))
+        }
+        CameraSafetyToggle("Verified Overspeed Voice",p.verifiedOverspeedVoice) {
+            session.updateCameraPreferences(p.copy(verifiedOverspeedVoice=it))
+        }
         CameraSafetyToggle("Show Camera Icons",p.icons) {
             session.updateCameraPreferences(p.copy(icons=it))
         }
@@ -57,8 +63,22 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         Text("${session.enforcementCameras.size} verified SPF published records",
             color=SGColors.Silver,fontSize=11.sp)
         if(!session.cameraAudioAvailable) Text(
-            "Authentic Panda Warrior camera audio not provided: visual alerts only. Original navigation voice remains available.",
+            "Camera MP3 package incomplete: voice alerts disabled; original 185-clip navigation unaffected.",
             color=SGColors.Warning,fontSize=11.sp)
+        else Text("Panda Warrior V2 · 209 real MP3 clips available offline",
+            color=SGColors.Silver,fontSize=11.sp)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick={session.previewCameraVoice("speed_camera_ahead")},
+                enabled=session.cameraAudioAvailable && !session.muted,
+                modifier=Modifier.weight(1f)) {
+                Text("Preview Speed",color=SGColors.Gold,fontSize=12.sp)
+            }
+            TextButton(onClick={session.previewCameraVoice("red_light_camera_ahead")},
+                enabled=session.cameraAudioAvailable && !session.muted,
+                modifier=Modifier.weight(1f)) {
+                Text("Preview Red-Light",color=SGColors.Gold,fontSize=12.sp)
+            }
+        }
         session.cameraRefreshMessage?.let { Text(it,color=SGColors.Silver,fontSize=11.sp) }
         TextButton(onClick={scope.launch { session.refreshCameraSnapshot() }},
             enabled=!session.cameraRefreshBusy) {

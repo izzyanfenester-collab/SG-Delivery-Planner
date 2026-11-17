@@ -55,19 +55,19 @@ internal class PandaCameraVoicePack(private val context:Context) {
             val parsed=json["clips"].asJsonArray.map { value ->
                 val obj=value.asJsonObject
                 val id=obj["id"].asString
-                require(id.matches(Regex("camera_[a-z0-9_]+")))
+                require(id.matches(Regex("[a-z0-9_]+")) && id in CameraVoiceAssetIds865.ALL)
                 val file=obj["file"].asString
-                require(file=="audio/$id.mp3")
+                require(file=="audio/camera_alerts/$id.mp3")
                 PandaClip(id,file,obj["text"].asString,obj["duration_seconds"].asDouble)
             }
-            require(parsed.map{it.id}.toSet().size==parsed.size)
-            val mp3=context.assets.list("$PANDA_CAMERA_ROOT/audio")?.toSet().orEmpty()
+            require(parsed.size==24 && parsed.map{it.id}.toSet().size==24)
+            val mp3=context.assets.list("$PANDA_CAMERA_ROOT/audio/camera_alerts")?.toSet().orEmpty()
             val pcm=context.assets.list("$PANDA_CAMERA_ROOT/audio_pcm")?.toSet().orEmpty()
-            require(parsed.all{it.path.substringAfter('/') in mp3 && "${it.id}.pcm" in pcm})
+            require(parsed.all{it.path.substringAfterLast('/') in mp3 && "${it.id}.pcm" in pcm})
             parsed.associateBy{it.id}
         }.getOrDefault(emptyMap())
     }
-    val available get()=clips.isNotEmpty()
+    val available get()=clips.size==24
 }
 
 /** Original MP3s stay intact. Prepared PCM is decoded from those same recordings.
@@ -91,6 +91,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     private val app=context.applicationContext
     val pack=PandaVoicePack(app)
     val cameraPack=PandaCameraVoicePack(app)
+    val available209 get()=pack.available && cameraPack.available && (pack.clips.keys intersect cameraPack.clips.keys).isEmpty()
     private val manager=app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val handler=Handler(Looper.getMainLooper())
     private val executor=Executors.newSingleThreadExecutor()
@@ -114,6 +115,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     fun setVolume(value:Float){volume=value.coerceIn(0f,1f);runCatching{player?.setVolume(volume,volume)};if(volume<=0f)stop()}
     fun play(phrase:VoicePhrase):Boolean {
         if(closed || volume<=0f || phrase.parts.isEmpty())return false
+        if(phrase.key.startsWith("camera-")) Log.d("SGCamera865Voice","request key=${phrase.key} clips=${phrase.parts.map{it.clip}}")
         if(!pack.available || phrase.parts.any{it.clip !in pack.clips && it.clip !in cameraPack.clips}) { Log.w("SGPanda857","missing audio event=${phrase.key}; legacy voice disabled");return false }
         val oldOwner=owner
         val old=oldOwner?.current

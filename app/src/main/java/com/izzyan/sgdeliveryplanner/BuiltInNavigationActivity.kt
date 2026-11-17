@@ -595,7 +595,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var mapMessage by mutableStateOf<String?>(null)
     private val cameraStore=CameraSafetyStore(context)
     private val cameraPrefsStore=CameraSafetyPrefs(context)
-    private val cameraAlertGate=CameraAlertGate()
+    private val cameraVoicePlanner=CameraVoicePlanner865()
     private var lastCameraScanMs=0L
     var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
     var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
@@ -605,7 +605,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraRefreshBusy by mutableStateOf(false); private set
     var upcomingEnforcementCamera by mutableStateOf<CameraApproach?>(null); private set
     var cameraMarkerBucket by mutableStateOf(""); private set
-    val cameraAudioAvailable get()=voiceAudio.cameraPack.available
+    val cameraAudioAvailable get()=voiceAudio.available209
     fun updateCameraPreferences(newPrefs:CameraAlertPreferences){
         cameraPreferences=newPrefs;cameraPrefsStore.save(newPrefs)
         if(!newPrefs.master)upcomingEnforcementCamera=null
@@ -625,7 +625,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         try {
             withContext(Dispatchers.IO) { cameraStore.replace(CameraSafetyRemote.download()) }
             loadCameraStore()
-            cameraAlertGate.reset()
+            cameraVoicePlanner.reset()
             cameraRefreshMessage="Camera snapshot verified and updated."
         }catch(e:Exception){
             cameraRefreshMessage="Camera update not available; retaining previous verified offline snapshot."
@@ -638,30 +638,36 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(!cameraPreferences.master || offRoute || route==null || shape.size<2){
             upcomingEnforcementCamera=null;return
         }
-        val steps=route?.legs?.firstOrNull()?.steps.orEmpty()
-        val upcoming=steps.drop((cameraManeuverIndex-1).coerceAtLeast(0))
+        val upcoming=route?.legs?.firstOrNull()?.steps.orEmpty()
+            .drop((cameraManeuverIndex-1).coerceAtLeast(0))
             .take(5).mapNotNull{it.name}
-        val candidates=CameraApproachLogic.find(
+        val approaches=CameraApproachLogic.find(
             GpsPoint(fix.latitude,fix.longitude),shape,street,upcoming,fix.accuracy,
             enforcementCameras,fix.speed.takeIf{fix.hasSpeed()})
             .filter { cameraPreferences.categoryEnabled(it.camera.category) }
-        upcomingEnforcementCamera=candidates.firstOrNull()
-        val first=candidates.firstOrNull{it.alertAllowed} ?: return
-        if(!cameraPreferences.voice || muted || !cameraAudioAvailable || 
-            (turnMeters?:Double.MAX_VALUE)<160.0)return
-        val clip=when(first.camera.category){
-            "RED_LIGHT_CAMERA"->"camera_red_light_ahead"
-            "MOBILE_ENFORCEMENT_LOCATION"->"camera_mobile_location"
-            "POLICE_LASER_LOCATION"->"camera_police_laser_location"
-            "AVERAGE_SPEED_ZONE"->"camera_average_zone_ahead"
-            else->"camera_speed_ahead"
-        }
-        if(clip !in voiceAudio.cameraPack.clips)return
-        if(cameraAlertGate.shouldPlay(first,true)) {
-            voiceAudio.play(VoicePhrase("camera-${first.camera.id}",VoicePriority.CAMERA,
-                listOf(VoicePart(clip,"Published enforcement camera ahead"))))
+        upcomingEnforcementCamera=approaches.firstOrNull()
+        if(!cameraAudioAvailable || muted || !cameraPreferences.voice) return
+        for(approach in approaches) {
+            val planned=cameraVoicePlanner.due(
+                approach,cameraPreferences,!muted,cameraAudioAvailable,turnMeters,
+                fix.speed.takeIf{fix.hasSpeed()}) ?: continue
+            if(planned.clipId !in voiceAudio.cameraPack.clips) {
+                android.util.Log.w("SGCamera865Voice","missing original MP3 id=${planned.clipId}")
+                continue
+            }
+            // Same offline audio controller as all GPS maneuvers. Higher-priority
+            // ADVANCE and CRITICAL navigation interrupts low-priority CAMERA cues.
+            val accepted=voiceAudio.play(planned.phrase)
+            android.util.Log.d("SGCamera865Voice",
+                "id=${planned.cameraId} category=${planned.category} direction=${approach.directionConfirmed} " +
+                "routeMeters=${planned.metresAhead.toInt()} stage=${planned.stage} clip=${planned.clipId}.mp3 scheduled=$accepted")
+            if(accepted) {
+                cameraVoicePlanner.markScheduled(planned)
+                break
+            }
         }
     }
+
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
 
@@ -742,6 +748,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(!active || muted || !pandaAvailable) return
         voiceAudio.play(VoicePhrase("preview", VoicePriority.PREVIEW,
             PandaVoiceMapper.composeAtDistance("turn","right","Turn right",null,NavigationPanelCue(NavigationSign.TURN_RIGHT),3000).map { VoicePart(it,"Preview") }))
+    }
+    fun previewCameraVoice(clipId:String) {
+        if(!active || muted || !cameraAudioAvailable || clipId !in CameraVoiceAssetIds865.ALL) return
+        if(clipId !in voiceAudio.cameraPack.clips) return
+        voiceAudio.play(VoicePhrase("preview-camera-$clipId",VoicePriority.PREVIEW,
+            listOf(VoicePart(clipId,"Authentic Panda Warrior V2 camera recording"))))
     }
     fun stopVoicePreview()=voiceAudio.stopPreview()
     private var requestJob: Job? = null
@@ -873,7 +885,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         val id=requestGate.begin(fix)
         requestJob?.cancel()
         upcomingEnforcementCamera=null
-        cameraAlertGate.reset()
+        cameraVoicePlanner.reset()
         reroute.requested(now); loading=true
         message=if(decision!=null || offRoute) "Recalculating route…" else null
         val trace=decision?.let { RerouteLatency(id,it.confirmingFixMs,now,SystemClock.elapsedRealtime()) }

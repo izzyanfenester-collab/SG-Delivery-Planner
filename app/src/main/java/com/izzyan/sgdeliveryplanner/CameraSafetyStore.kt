@@ -110,11 +110,13 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
 internal data class CameraAlertPreferences(
     val master:Boolean=true, val speed:Boolean=true, val redLight:Boolean=true,
     val mobile:Boolean=true, val voice:Boolean=true,val icons:Boolean=true,
-    val speedLimitDisplay:Boolean=true,val overspeed:Boolean=false
+    val speedLimitDisplay:Boolean=true,val overspeed:Boolean=false,
+    val averageVoice:Boolean=true, val verifiedOverspeedVoice:Boolean=true
 ) {
     fun categoryEnabled(category:String)=master && when(category) {
         "RED_LIGHT_CAMERA"->redLight
         "MOBILE_ENFORCEMENT_LOCATION","POLICE_LASER_LOCATION"->mobile
+        "AVERAGE_SPEED_ZONE"->speed && averageVoice
         else->speed
     }
 }
@@ -124,13 +126,16 @@ internal class CameraSafetyPrefs(context:Context) {
         prefs.getBoolean("master",true),prefs.getBoolean("speed",true),
         prefs.getBoolean("redLight",true),prefs.getBoolean("mobile",true),
         prefs.getBoolean("voice",true),prefs.getBoolean("icons",true),
-        prefs.getBoolean("speedLimitDisplay",true),prefs.getBoolean("overspeed",false))
+        prefs.getBoolean("speedLimitDisplay",true),prefs.getBoolean("overspeed",false),
+        prefs.getBoolean("averageVoice",true),prefs.getBoolean("verifiedOverspeedVoice",true))
     fun save(value:CameraAlertPreferences){
         prefs.edit().putBoolean("master",value.master).putBoolean("speed",value.speed)
             .putBoolean("redLight",value.redLight).putBoolean("mobile",value.mobile)
             .putBoolean("voice",value.voice).putBoolean("icons",value.icons)
             .putBoolean("speedLimitDisplay",value.speedLimitDisplay)
-            .putBoolean("overspeed",value.overspeed).apply()
+            .putBoolean("overspeed",value.overspeed)
+            .putBoolean("averageVoice",value.averageVoice)
+            .putBoolean("verifiedOverspeedVoice",value.verifiedOverspeedVoice).apply()
     }
 }
 
