@@ -351,6 +351,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             if (session.threeDimensional) "3D" else "2D"
                         ) { session.setDimension(it == "3D") }
                         NavigationVoiceSettings(session)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("Smart Auto Zoom", Modifier.weight(1f), color = SGColors.White)
+                            Switch(checked = session.smartAutoZoomEnabled,
+                                onCheckedChange = { session.setSmartAutoZoomEnabled(it) })
+                        }
                         NavigationSettingsChoices(
                             "Display Mode", listOf("Day", "Night", "Auto Day/Night"),
                             when (mapAppearance) {
@@ -524,6 +530,18 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMode by mutableStateOf("follow")
     var cameraRequest by mutableIntStateOf(0)
     var zoomOverride by mutableStateOf<Double?>(null); private set
+    var cameraDisplayedZoom: Double? = null
+    var smartAutoZoomEnabled by mutableStateOf(gpsModePreferences.isSmartAutoZoomEnabled()); private set
+    fun setSmartAutoZoomEnabled(enabled: Boolean) {
+        smartAutoZoomEnabled = enabled
+        gpsModePreferences.setSmartAutoZoomEnabled(enabled)
+        zoomOverride = null
+        cameraRequest++
+    }
+    var cameraRoadName by mutableStateOf<String?>(null); private set
+    var cameraManeuverType by mutableStateOf<String?>(null); private set
+    var cameraManeuverIndex by mutableIntStateOf(0); private set
+    var followingTurnMeters by mutableStateOf<Double?>(null); private set
     var threeDimensional by mutableStateOf(gpsModePreferences.is3dEnabled()); private set
     var localTrafficVisible by mutableStateOf(false); private set
     var trafficState by mutableStateOf(LocalTrafficState.EMPTY); private set
@@ -559,9 +577,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
 
     fun adjustZoom(step: Double) {
-        val baseline = zoomOverride ?: NavigationDisplayTuning.zoomForSpeed(
-            location?.speed?.takeIf { location?.hasSpeed() == true })
-        zoomOverride = NavigationDisplayTuning.adjustedZoom(baseline, step)
+        val baseline = zoomOverride ?: cameraDisplayedZoom?.takeIf { it.isFinite() }
+            ?: NavigationDisplayTuning.zoomForSpeed(
+                location?.speed?.takeIf { location?.hasSpeed() == true })
+        zoomOverride = (baseline + step).coerceIn(13.8, 19.5)
         cameraMode = "follow"
         cameraRequest++
     }
@@ -775,6 +794,10 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 val current=steps.first()
                 val next=steps.getOrNull(1) ?: current
                 street=current.name
+                cameraRoadName=current.name
+                cameraManeuverIndex=if(steps.size>1) 1 else 0
+                cameraManeuverType=next.maneuver.type?.toString()
+                followingTurnMeters=if(steps.size>2) next.distance.coerceAtLeast(0.0) else null
                 turnMeters=current.distance.coerceAtLeast(0.0)
                 instruction=next.maneuver.instruction?.takeIf { it.isNotBlank() }
                     ?: current.bannerInstructions?.firstOrNull()?.primary?.text
@@ -838,6 +861,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             ?: listOfNotNull(next.maneuver.type?.toString()?.replace('_', ' '), next.maneuver.modifier?.toString()?.replace('_', ' ')).joinToString(" ").ifBlank { "Continue on the route" }
         // The next SDK step, not GPS heading or a road number, drives the panel.
         val nextIndex = p.stepIndex + if (current.nextStep != null) 1 else 0
+        cameraManeuverIndex=nextIndex
+        cameraManeuverType=next.maneuver.type?.toString()
+        cameraRoadName=current.step.name
+        val cameraSteps=p.directionsRoute.legs.single().steps
+        followingTurnMeters=if(nextIndex+1<cameraSteps.size)
+            cameraSteps.getOrNull(nextIndex)?.distance?.takeIf { it.isFinite() && it>=0.0 }
+            else null
         panelCue = NavigationPanelSigns.cue(
             next.maneuver.type?.toString(), next.maneuver.modifier?.toString(), instruction,
             routeSignMetadata.getOrNull(nextIndex),

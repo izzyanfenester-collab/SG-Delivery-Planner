@@ -62,6 +62,7 @@ internal fun NavigationMap(
     // One camera director owns zoom/pitch transitions. MapLibre LocationComponent
     // owns interpolated heading/position, eliminating competing camera animators.
     val cameraDirector = remember { NavigationCameraDirector() }
+    var lastSmartPaddingFraction by remember { mutableDoubleStateOf(0.44) }
     val visualTracker = remember { NavigationVisualTracker() }
     var lastPaintedProgress by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
@@ -71,6 +72,7 @@ internal fun NavigationMap(
         routeProgress.reset(session.shape)
         visualTracker.clearRouteMatch()
         cameraDirector.reset()
+        lastSmartPaddingFraction = 0.44
         lastPaintedProgress = Double.NaN
     }
 
@@ -276,7 +278,7 @@ internal fun NavigationMap(
     // The displayed puck is gently snapped to a compatible route segment. Raw FusedLocation
     // fixes remain untouched in NavigationSession for off-route detection, ETA and arrival.
     // Updating when session.route changes also reprojects the existing fix on a fresh route.
-    LaunchedEffect(styleReady, session.location, session.route, session.offRoute) {
+    LaunchedEffect(styleReady, session.location, session.route, session.offRoute, session.smartAutoZoomEnabled) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val fix = session.location ?: return@LaunchedEffect
@@ -302,6 +304,7 @@ internal fun NavigationMap(
         // geographic heading. Never subtract camera bearing or rotate the
         // drawable again: MapLibre performs the screen transform itself.
         native.locationComponent.forceLocationUpdate(displayed)
+        session.cameraDisplayedZoom = native.cameraPosition.zoom
         // Keep the route split tied to the same trusted puck boundary, but
         // avoid rebuilding a long polyline for sub-meter GPS noise.
         if (frame != null && (lastPaintedProgress.isNaN() ||
@@ -315,7 +318,8 @@ internal fun NavigationMap(
             lastPaintedProgress = frame.progressedMeters
         }
         if (session.cameraMode == "follow" &&
-            native.locationComponent.cameraMode == CameraMode.TRACKING_GPS) {
+            native.locationComponent.cameraMode == CameraMode.TRACKING_GPS &&
+            session.route != null && !session.offRoute) {
             val corner = NavigationCornerForecast.next(session.shape, visual.routeMatch)
             val command = cameraDirector.choose(
                 nowMs = SystemClock.elapsedRealtime(),
@@ -327,34 +331,57 @@ internal fun NavigationMap(
                 remainingMeters = session.remainingMeters,
                 corner = corner,
                 threeDimensional = session.threeDimensional,
-                manualZoom = session.zoomOverride
+                manualZoom = session.zoomOverride,
+                roadName = session.cameraRoadName,
+                maneuverType = session.cameraManeuverType,
+                followingTurnMeters = session.followingTurnMeters,
+                maneuverIndex = session.cameraManeuverIndex,
+                progressedMeters = frame?.progressedMeters,
+                trustedMatch = frame?.trustedMatch == true,
+                gpsAccuracyMeters = fix.accuracy,
+                offRoute = session.offRoute,
+                smartEnabled = session.smartAutoZoomEnabled
             )
             when {
                 command?.zoom != null ->
                     native.locationComponent.zoomWhileTracking(command.zoom, command.durationMs)
                 command?.pitch != null ->
                     native.locationComponent.tiltWhileTracking(command.pitch, command.durationMs)
+                // Padding shifts the vehicle lower so junction geometry is visible ahead.
+                command == null && mapHeightPixels > 0 &&
+                    session.smartAutoZoomEnabled && session.zoomOverride == null &&
+                    abs(cameraDirector.focusFraction - lastSmartPaddingFraction) > 0.025 -> {
+                    native.locationComponent.paddingWhileTracking(
+                        doubleArrayOf(0.0, mapHeightPixels * cameraDirector.focusFraction, 0.0, 0.0), 350)
+                    lastSmartPaddingFraction = cameraDirector.focusFraction
+                }
             }
+        } else if (session.offRoute) {
+            cameraDirector.reset(native.cameraPosition.zoom, native.cameraPosition.tilt)
         }
     }
 
     LaunchedEffect(styleReady, session.cameraMode, session.cameraRequest,
-        session.threeDimensional, session.fuelPreview, mapHeightPixels) {
+        session.threeDimensional, session.fuelPreview, mapHeightPixels, session.smartAutoZoomEnabled) {
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location
-                val zoom = session.zoomOverride ?: NavigationCameraPolicy.targetZoom(
-                    fix?.speed?.takeIf { fix.hasSpeed() }, session.turnMeters,
-                    session.instruction, session.remainingMeters)
+                val zoom = session.zoomOverride ?: if (session.smartAutoZoomEnabled)
+                    NavigationCameraPolicy.targetZoom(
+                        fix?.speed?.takeIf { fix.hasSpeed() }, session.turnMeters,
+                        session.instruction, session.remainingMeters)
+                    else NavigationDisplayTuning.zoomForSpeed(
+                        fix?.speed?.takeIf { fix.hasSpeed() })
                 val desiredPitch = if (session.threeDimensional) 54.0 else 0.0
                 val padding = NavigationDisplayTuning.trackingPadding(mapHeightPixels)
                 val alreadyTracking = component.cameraMode == CameraMode.TRACKING_GPS
                 // Do not restart tracking on every new route or GPS sample:
                 // existing MapLibre native heading-up animations remain active.
                 cameraDirector.reset(native.cameraPosition.zoom, native.cameraPosition.tilt)
+                lastSmartPaddingFraction = 0.44
                 if (!alreadyTracking) {
                     component.setCameraMode(CameraMode.TRACKING_GPS, 750, zoom, null,
                         desiredPitch, object : OnLocationCameraTransitionListener {
