@@ -1,7 +1,7 @@
 name: Build and publish B861 Ultra-Smooth Cinematic GPS Auto Zoom TESTING
 on:
   push:
-    branches: [feature/build-861-smart-auto-zoom]
+    branches: [feature/build-861-cinematic-gps-zoom]
     paths: ['app/**','.github/workflows/build-861-smart-zoom-testing.yml']
   workflow_dispatch:
 permissions:
