@@ -43,6 +43,33 @@ internal class PandaVoicePack(private val context:Context) {
     val available get()=clips.size==185
     fun open(id:String)=clips[id]?.let { context.assets.openFd("$PANDA_ASSET_ROOT/${it.path}") }
 }
+/** Separate optional authentic Panda V2 camera pack. Never synthesize or TTS-fallback.
+ * A manifest is activated only when every actual MP3 and derived PCM exists.
+ */
+internal const val PANDA_CAMERA_ROOT="voicepacks/panda_warrior_camera"
+internal class PandaCameraVoicePack(private val context:Context) {
+    val clips:Map<String,PandaClip> by lazy {
+        runCatching {
+            val json=context.assets.open("$PANDA_CAMERA_ROOT/manifest.json")
+                .bufferedReader().use { JsonParser.parseReader(it).asJsonObject }
+            val parsed=json["clips"].asJsonArray.map { value ->
+                val obj=value.asJsonObject
+                val id=obj["id"].asString
+                require(id.matches(Regex("camera_[a-z0-9_]+")))
+                val file=obj["file"].asString
+                require(file=="audio/$id.mp3")
+                PandaClip(id,file,obj["text"].asString,obj["duration_seconds"].asDouble)
+            }
+            require(parsed.map{it.id}.toSet().size==parsed.size)
+            val mp3=context.assets.list("$PANDA_CAMERA_ROOT/audio")?.toSet().orEmpty()
+            val pcm=context.assets.list("$PANDA_CAMERA_ROOT/audio_pcm")?.toSet().orEmpty()
+            require(parsed.all{it.path.substringAfter('/') in mp3 && "${it.id}.pcm" in pcm})
+            parsed.associateBy{it.id}
+        }.getOrDefault(emptyMap())
+    }
+    val available get()=clips.isNotEmpty()
+}
+
 /** Original MP3s stay intact. Prepared PCM is decoded from those same recordings.
  * Buffer a whole sentence into one WAV before playback, with controlled gaps.
  * Preparation runs off the navigation thread and is cancelled on route change. */
@@ -63,6 +90,7 @@ internal object PandaWav {
 internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     private val app=context.applicationContext
     val pack=PandaVoicePack(app)
+    val cameraPack=PandaCameraVoicePack(app)
     private val manager=app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val handler=Handler(Looper.getMainLooper())
     private val executor=Executors.newSingleThreadExecutor()
@@ -86,7 +114,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     fun setVolume(value:Float){volume=value.coerceIn(0f,1f);runCatching{player?.setVolume(volume,volume)};if(volume<=0f)stop()}
     fun play(phrase:VoicePhrase):Boolean {
         if(closed || volume<=0f || phrase.parts.isEmpty())return false
-        if(!pack.available || phrase.parts.any{it.clip !in pack.clips}) { Log.w("SGPanda857","missing audio event=${phrase.key}; legacy voice disabled");return false }
+        if(!pack.available || phrase.parts.any{it.clip !in pack.clips && it.clip !in cameraPack.clips}) { Log.w("SGPanda857","missing audio event=${phrase.key}; legacy voice disabled");return false }
         val oldOwner=owner
         val old=oldOwner?.current
         if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank))return false
@@ -101,7 +129,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
             try {
                 val parts=phrase.parts.map { part ->
                     if(Thread.currentThread().isInterrupted)throw InterruptedException()
-                    app.assets.open("$PANDA_ASSET_ROOT/audio_pcm/${part.clip}.pcm").use{it.readBytes()}
+                    app.assets.open("${if(part.clip in cameraPack.clips)PANDA_CAMERA_ROOT else PANDA_ASSET_ROOT}/audio_pcm/${part.clip}.pcm").use{it.readBytes()}
                 }
                 val created=File.createTempFile("panda857_",".wav",app.cacheDir)
                 file=created
