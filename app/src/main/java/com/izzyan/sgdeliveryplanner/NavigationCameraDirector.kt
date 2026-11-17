@@ -53,19 +53,26 @@ internal data class NavigationCameraCommand(
 )
 
 internal class NavigationCameraDirector {
+    private val smart = SmartNavigationZoom()
     private var previousZoom: Double? = null
     private var previousPitch: Double? = null
     private var lastChangeMs: Long? = null
+    private var lastDurationMs = 0L
+    var focusFraction: Double = 0.44
+        private set
+    val mode: SmartCameraMode get() = smart.mode
 
     fun reset(zoom: Double? = null, pitch: Double? = null) {
         previousZoom = zoom?.takeIf { it.isFinite() }
         previousPitch = pitch?.takeIf { it.isFinite() }
         lastChangeMs = null
+        lastDurationMs = 0L
+        focusFraction = 0.44
+        smart.reset()
     }
 
-    /** Exactly one native camera property animation at a time; the caller
-     * never starts independent zoom and pitch animations concurrently.
-     * Rate limit longer than the animation prevents cancellation / flicker.
+    /** MapLibre location owns geographical tracking; director only animates one
+     * camera property at a time. Neither voice nor routing waits for it.
      */
     fun choose(
         nowMs: Long,
@@ -77,42 +84,53 @@ internal class NavigationCameraDirector {
         remainingMeters: Double?,
         corner: NavigationCorner?,
         threeDimensional: Boolean,
-        manualZoom: Double?
+        manualZoom: Double?,
+        roadName: String?,
+        maneuverType: String?,
+        followingTurnMeters: Double?,
+        maneuverIndex: Int,
+        progressedMeters: Double?,
+        trustedMatch: Boolean,
+        gpsAccuracyMeters: Float?,
+        offRoute: Boolean,
+        smartEnabled: Boolean
     ): NavigationCameraCommand? {
-        if (!currentZoom.isFinite() || !currentPitch.isFinite()) return null
-        val previousMs = lastChangeMs
-        if (previousMs != null && nowMs - previousMs in 0..749L) return null
+        if (offRoute) { reset(currentZoom, currentPitch); return null }
+        if (!smartEnabled || manualZoom != null || !currentZoom.isFinite() ||
+            !currentPitch.isFinite()) return null
+        val target = smart.target(SmartZoomInput(
+            nowMs=nowMs, speedMps=speedMps, distanceMeters=turnMeters,
+            followingTurnMeters=followingTurnMeters,
+            kind=SmartManeuverClassifier.kind(maneuverType,instruction),
+            expressway=SmartManeuverClassifier.isExpressway(roadName),
+            corner=corner, remainingMeters=remainingMeters,
+            stepIndex=maneuverIndex, progressMeters=progressedMeters,
+            matched=trustedMatch, offRoute=offRoute,
+            threeDimensional=threeDimensional, accuracyMeters=gpsAccuracyMeters
+        )) ?: return null
+        focusFraction=target.forwardPaddingFraction
+        val previousMs=lastChangeMs
+        if (previousMs!=null && nowMs-previousMs in 0..(lastDurationMs+90L)) return null
 
-        val naturalTurn = listOfNotNull(turnMeters?.takeIf { it.isFinite() && it >= 0.0 },
-            corner?.distanceMeters).minOrNull()
-        val targetZoom = if (manualZoom != null)
-            manualZoom.coerceIn(15.5, 19.5)
-        else NavigationCameraPolicy.targetZoom(
-            speedMps, naturalTurn, if (corner != null) "$instruction junction" else instruction,
-            remainingMeters).coerceIn(16.0, 19.2)
-        val approachCurve = threeDimensional && naturalTurn != null &&
-            naturalTurn < 180.0 && (corner?.angleDegrees ?: 45f) >= 28f
-        val targetPitch = if (!threeDimensional) 0.0 else if (approachCurve) 49.0 else 54.0
-        val baseZoom = (previousZoom ?: currentZoom).takeIf { abs(it - currentZoom) < 1.3 } ?: currentZoom
-        val basePitch = (previousPitch ?: currentPitch).takeIf { abs(it - currentPitch) < 13.0 } ?: currentPitch
-        val deltaZoom = targetZoom - baseZoom
-        val deltaPitch = targetPitch - basePitch
-        val command = when {
-            abs(deltaZoom) >= 0.19 -> NavigationCameraCommand(
-                zoom = (baseZoom + deltaZoom.coerceIn(-0.42, 0.42)).coerceIn(
-                    if (manualZoom == null) 16.0 else 15.5,
-                    if (manualZoom == null) 19.2 else 19.5),
-                durationMs = 650
-            )
-            abs(deltaPitch) >= 3.0 -> NavigationCameraCommand(
-                pitch = (basePitch + deltaPitch.coerceIn(-5.0, 5.0)).coerceIn(0.0, 60.0),
-                durationMs = 650
-            )
+        val baseZoom=(previousZoom ?: currentZoom).takeIf { abs(it-currentZoom)<1.75 } ?: currentZoom
+        val basePitch=(previousPitch ?: currentPitch).takeIf { abs(it-currentPitch)<13.0 } ?: currentPitch
+        val deltaZoom=target.zoom-baseZoom
+        val deltaPitch=target.pitch-basePitch
+        val command=when {
+            abs(deltaZoom)>=0.17 -> NavigationCameraCommand(
+                zoom=(baseZoom+deltaZoom.coerceIn(
+                    if(target.urgent) -1.4 else -1.0,
+                    if(target.urgent) 1.4 else 1.0)).coerceIn(13.8,19.2),
+                durationMs=target.durationMs)
+            abs(deltaPitch)>=2.5 -> NavigationCameraCommand(
+                pitch=(basePitch+deltaPitch.coerceIn(-7.0,7.0)).coerceIn(0.0,60.0),
+                durationMs=target.durationMs)
             else -> return null
         }
-        previousZoom = command.zoom ?: baseZoom
-        previousPitch = command.pitch ?: basePitch
-        lastChangeMs = nowMs
+        previousZoom=command.zoom ?: baseZoom
+        previousPitch=command.pitch ?: basePitch
+        lastChangeMs=nowMs
+        lastDurationMs=command.durationMs
         return command
     }
 }
