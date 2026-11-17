@@ -1,6 +1,5 @@
 package com.izzyan.sgdeliveryplanner
 
-import kotlin.math.abs
 import java.util.Locale
 
 internal enum class NavigationVoice(val label:String) { PANDA("Panda Warrior V2 – English") }
@@ -10,7 +9,6 @@ internal data class VoicePhrase(val key:String,val priority:VoicePriority,val pa
 internal data class PandaFollowing(val type:String?,val modifier:String?,val text:String?)
 internal object PandaVoiceMapper {
     private fun norm(s:String?)=s.orEmpty().lowercase(Locale.ROOT).replace('_',' ').replace('-',' ').trim()
-    private val distances= listOf(50 to "50m",100 to "100m",200 to "200m",300 to "300m",500 to "500m",800 to "800m",1000 to "1km",2000 to "2km")
     private fun base(type:String?,modifier:String?,cue:NavigationPanelCue):String? {
         val t=norm(type);val m=norm(modifier)
         // Unknown types are not inferred from the straight-arrow default.
@@ -54,19 +52,32 @@ internal object PandaVoiceMapper {
         n in 21..99 -> numeric(n/10*10)+numeric(n%10)
         else -> emptyList()
     }
+    /** Spoken distances are ALWAYS integer km or integer metres. The exact
+     * route distance is never rounded or changed. No word_point or decimal
+     * kilometre clips are constructed anywhere in navigation.
+     */
     private fun distanceParts(m:Int):List<String> {
-        if(m in standalone) return listOf("distance_in_"+if(m>=1000) "${m/1000}km" else "${m}m")
+        if(m<=0) return emptyList()
         if(m>=1000) {
-            val whole=m/1000;val tenth=(m%1000)/100
-            if(whole>100 || m%100!=0) return emptyList()
-            val nums=numeric(whole);if(nums.isEmpty())return emptyList()
-            return listOf("word_in")+nums+(if(tenth>0)listOf("word_point","number_$tenth")else emptyList())+listOf("unit_kilometres")
+            if(m%1000!=0 || m>100_000) return emptyList()
+            if(m in standalone) return listOf("distance_in_${m/1000}km")
+            val integerKm=m/1000
+            val numbers=numeric(integerKm)
+            return if(numbers.isNotEmpty()) listOf("word_in")+numbers+listOf("unit_kilometres")
+                else emptyList()
         }
-        if(m>=100 && m%10==0 && m!=100) {
-            val digits=m.toString().padStart(3,'0').trimEnd('0').map { "number_$it" }
-            return listOf("word_in","number_0","word_point")+digits+listOf("unit_kilometres")
-        }
-        val nums=numeric(m);return if(nums.isNotEmpty() && m!=1) listOf("word_in")+nums+listOf("unit_metres") else emptyList()
+        if(m in standalone) return listOf("distance_in_${m}m")
+        // Original number_100 recording says "One hundred", NOT "hundred".
+        // Combining "number_8"+"number_100" would wrongly speak
+        // "Eight one hundred metres". Only use exact recordings.
+        // Other hundred-metre marks are provided by combined direction clips
+        // (e.g. turn_right_800m, exit_left_500m) or independent
+        // distance_in_*m recordings already present in the original pack.
+        if(m==100) return listOf("word_in","number_100","unit_metres")
+        if(m in 200..900 && m%100==0) return emptyList()
+        val numbers=numeric(m)
+        return if(numbers.isNotEmpty() && m!=1) listOf("word_in")+numbers+listOf("unit_metres")
+            else emptyList()
     }
     private fun full(base:String,m:Int):String? {
         val suffix=if(m>=1000 && m%1000==0) "${m/1000}km" else "${m}m"
@@ -87,13 +98,6 @@ internal object PandaVoiceMapper {
     private fun roadClip(road:String?):String? {
         val key=norm(road)
         return mapOf("pie" to "pie","pan island expressway" to "pie","bke" to "bke","bukit timah expressway" to "bke","kje" to "kje","kranji expressway" to "kje","sle" to "sle","seletar expressway" to "sle","tpe" to "tpe","tampines expressway" to "tpe","cte" to "cte","central expressway" to "cte","ecp" to "ecp","east coast parkway" to "ecp","aye" to "aye","ayer rajah expressway" to "aye","kpe" to "kpe","kallang paya lebar expressway" to "kpe","mce" to "mce","marina coastal expressway" to "mce")[key]?.let{"road_$it"}
-    }
-    private fun threshold(d:Double,speed:Float,previous:Double?):Int? {
-        val marks=if(speed>=20f) listOf(50000,30000,15000,10000,7000,5000,3000,1000,200)
-                  else listOf(3000,1000,500,200,100,50)
-        val crossed=marks.firstOrNull { previous!=null && previous>=it && d<=it && it-d<=maxOf(8.0,speed.toDouble()*1.7, it*0.08) }
-        if(crossed!=null)return crossed
-        return marks.minByOrNull{abs(it-d)}?.takeIf{abs(it-d)<=maxOf(5.0,minOf(25.0,it*0.05))}
     }
     fun composeAtDistance(type:String?,modifier:String?,instruction:String,road:String?,cue:NavigationPanelCue,metres:Int):List<String> {
         val t=norm(type)
@@ -135,9 +139,8 @@ internal object PandaVoiceMapper {
         val d=meters.coerceAtLeast(0.0)
         val immediate=d<=maxOf(9.0,(speed*1.5).toDouble()).coerceAtMost(30.0)
         val priority=if(immediate)VoicePriority.CRITICAL else VoicePriority.ADVANCE
-        val m=if(immediate)0 else threshold(d,speed,previousDistance) ?: if(force || previousDistance==null) {
-            if(d>=1000) (kotlin.math.round(d/100)*100).toInt() else (kotlin.math.round(d/10)*10).toInt()
-        } else -1
+        val m=if(immediate) 0 else
+            WholeDistanceVoiceScheduler.checkpoint(d,speed,previousDistance,force) ?: -1
         val ids=if(m<0)emptyList()else composeAtDistance(type,modifier,instruction,road,cue,m)
         val parts=ids.map{VoicePart(it,instruction)}.toMutableList()
         if(immediate && parts.isNotEmpty() && following!=null && nextLength in 0.0..60.0){
