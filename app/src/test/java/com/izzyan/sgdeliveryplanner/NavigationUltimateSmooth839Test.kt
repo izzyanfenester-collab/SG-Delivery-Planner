@@ -32,22 +32,24 @@ class NavigationUltimateSmooth839Test {
         assertNull(NavigationCornerForecast.next(straight, matchOnNorth()))
     }
 
-    @Test fun unifiedCameraLimitsZoomStepAndHysteresis() {
+    @Test fun unifiedCameraMovesDirectlyToFullTargetAndDoesNotRestartEachGpsFix() {
         val director = NavigationCameraDirector()
-        val before = requireNotNull(director.choose(
+        val wide = requireNotNull(director.choose(
             1_000L, 17.0, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
             null, true, null, roadName="PIE", maneuverType="off_ramp"))
-        assertNotNull(before.zoom)
-        assertTrue(kotlin.math.abs(requireNotNull(before.zoom) - 17.0) <= 1.0001)
+        assertEquals(14.5, wide.zoom!!, 0.01) // full wide target, not one zoom step
+        assertEquals(2200L, wide.durationMs)
         assertNull(director.choose(
-            1_200L, before.zoom!!, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
+            1_200L, 16.4, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
             null, true, null, roadName="PIE", maneuverType="off_ramp"))
-        val next = requireNotNull(director.choose(
-            1_800L, before.zoom!!, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
+        assertNull(director.choose(
+            1_800L, 15.2, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
             null, true, null, roadName="PIE", maneuverType="off_ramp"))
-        assertTrue(next.durationMs in 250L..650L)
-        assertNotNull(next.zoom)
-        assertNull(next.pitch)
+        val critical = requireNotNull(director.choose(
+            1_900L, 15.0, 54.0, 25f, 100.0, "Take the exit", 9_000.0,
+            null, true, null, roadName="PIE", maneuverType="off_ramp"))
+        assertTrue(critical.zoom!! > 18.0)
+        assertTrue(critical.durationMs in 400L..800L)
     }
 
     @Test fun cameraPreparesTurnAndPreservesManualZoom() {
@@ -89,7 +91,7 @@ class NavigationUltimateSmooth839Test {
             1_000L, 18.05, 54.0, 0f, null, "Continue", 9_000.0,
             null, false, null))
         assertNull(cmd.zoom)
-        assertEquals(47.0, cmd.pitch!!, 0.001)
+        assertEquals(0.0, cmd.pitch!!, 0.001)
     }
 
     @Test fun jumpFilterAcceptsNormalMotionButRejectsUnrealisticTeleport() {

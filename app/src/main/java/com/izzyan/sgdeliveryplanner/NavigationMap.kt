@@ -343,6 +343,9 @@ internal fun NavigationMap(
                 smartEnabled = session.smartAutoZoomEnabled
             )
             when {
+                // Exactly one native, frame-interpolated zoom animation directly
+                // to the FULL target. The coordinator ignores identical GPS updates.
+                // MapLibre continues animating heading/position independently.
                 command?.zoom != null ->
                     native.locationComponent.zoomWhileTracking(command.zoom, command.durationMs)
                 command?.pitch != null ->
