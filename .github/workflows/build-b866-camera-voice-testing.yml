@@ -53,11 +53,17 @@ jobs:
                       out.parent.mkdir(parents=True,exist_ok=True)
                       out.write_bytes(z.read(name))
           PY
-      - name: Install FFmpeg for authentic offline audio conversion
+      - name: Install portable FFmpeg for authentic offline audio conversion
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          ffmpeg -version | head -1
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/panda-ffmpeg-venv"
+          "$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -m pip install --disable-pip-version-check -q imageio-ffmpeg==0.6.0
+          ffmpeg_exe=$("$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          test -x "$ffmpeg_exe"
+          mkdir -p "$RUNNER_TEMP/panda-ffmpeg-bin"
+          ln -s "$ffmpeg_exe" "$RUNNER_TEMP/panda-ffmpeg-bin/ffmpeg"
+          echo "$RUNNER_TEMP/panda-ffmpeg-bin" >> "$GITHUB_PATH"
+          "$ffmpeg_exe" -version | head -1
       - name: Verify old recordings and install 24 original camera MP3 + offline PCM
         run: |
           command -v ffmpeg
