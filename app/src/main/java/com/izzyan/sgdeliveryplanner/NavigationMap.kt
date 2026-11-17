@@ -43,6 +43,7 @@ internal fun NavigationMap(
     appearance: NavigationMapAppearance
 ) {
     val context = LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember { MapView(context).apply { onCreate(null) } }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
@@ -66,6 +67,7 @@ internal fun NavigationMap(
     val visualTracker = remember { NavigationVisualTracker() }
     var lastPaintedProgress by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
+    var mapWidthPixels by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(session.route) {
         // Rerouting starts a fresh travelled/remaining division; map style changes do not.
@@ -339,6 +341,8 @@ internal fun NavigationMap(
                 progressedMeters = frame?.progressedMeters,
                 trustedMatch = frame?.trustedMatch == true,
                 gpsAccuracyMeters = fix.accuracy,
+                screenWidthDp = (mapWidthPixels / density).takeIf { mapWidthPixels > 0 },
+                screenHeightDp = (mapHeightPixels / density).takeIf { mapHeightPixels > 0 },
                 offRoute = session.offRoute,
                 smartEnabled = session.smartAutoZoomEnabled
             )
@@ -425,7 +429,7 @@ internal fun NavigationMap(
 
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.matchParentSize()
-            .onSizeChanged { mapHeightPixels = it.height })
+            .onSizeChanged { mapHeightPixels = it.height; mapWidthPixels = it.width })
         session.mapMessage?.let { error ->
             Surface(Modifier.align(Alignment.Center).padding(12.dp), color = PremiumNavy) {
                 Column(Modifier.padding(12.dp)) {

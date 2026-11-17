@@ -48,7 +48,7 @@ class NavigationUltimateSmooth839Test {
         val critical = requireNotNull(director.choose(
             1_900L, 15.0, 54.0, 25f, 100.0, "Take the exit", 9_000.0,
             null, true, null, roadName="PIE", maneuverType="off_ramp"))
-        assertTrue(critical.zoom!! > 18.0)
+        assertTrue(critical.zoom!! in 17.5..18.05)
         assertTrue(critical.durationMs in 400L..800L)
     }
 
@@ -60,11 +60,15 @@ class NavigationUltimateSmooth839Test {
             corner, true, null, maneuverType="turn"))
         assertTrue(requireNotNull(turnZoom.zoom) > 17.5)
         director.reset(19.0, 54.0)
-        val pitch = requireNotNull(director.choose(
+        val balanced = requireNotNull(director.choose(
             2_000L, 19.0, 54.0, 16f, 65.0, "Turn right", 1_200.0,
             corner, true, null, maneuverType="turn"))
+        assertNotNull(balanced.zoom)
+        assertTrue(requireNotNull(balanced.zoom) < 18.5)
+        val pitch = requireNotNull(director.choose(
+            3_000L, requireNotNull(balanced.zoom), 54.0, 16f, 65.0,
+            "Turn right", 1_200.0, corner, true, null, maneuverType="turn"))
         assertNull(pitch.zoom)
-        assertNotNull(pitch.pitch)
         assertTrue(requireNotNull(pitch.pitch) in 47.0..54.0)
         director.reset(18.3, 54.0)
         assertNull(director.choose(

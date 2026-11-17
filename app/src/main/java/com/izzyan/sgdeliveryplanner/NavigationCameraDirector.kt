@@ -118,6 +118,7 @@ internal class CinematicZoomCoordinator {
 internal class NavigationCameraDirector {
     private val smart = SmartNavigationZoom()
     private val cinematic = CinematicZoomCoordinator()
+    private val balancedJunction = BalancedJunctionZoom()
     private var issuedPitch: Double? = null
     private var pitchIssuedAtMs: Long? = null
     private var pitchDurationMs: Long = 0L
@@ -128,6 +129,7 @@ internal class NavigationCameraDirector {
     @Suppress("UNUSED_PARAMETER")
     fun reset(zoom: Double? = null, pitch: Double? = null) {
         cinematic.reset()
+        balancedJunction.reset()
         issuedPitch = null
         pitchIssuedAtMs = null
         pitchDurationMs = 0L
@@ -156,6 +158,8 @@ internal class NavigationCameraDirector {
         progressedMeters: Double? = null,
         trustedMatch: Boolean = false,
         gpsAccuracyMeters: Float? = null,
+        screenWidthDp: Float? = null,
+        screenHeightDp: Float? = null,
         offRoute: Boolean = false,
         smartEnabled: Boolean = true
     ): NavigationCameraCommand? {
@@ -178,9 +182,23 @@ internal class NavigationCameraDirector {
         )) ?: return null
         focusFraction = target.forwardPaddingFraction
 
-        // Native LocationComponent.zoomWhileTracking performs the single continuous
-        // interpolation, retaining heading-up, puck snapping and route overlays.
-        cinematic.next(nowMs, currentZoom, target)?.let { return it }
+        // B862 caps only automatic junction/exit presentation targets. This keeps
+        // B861's exact maneuver decisions and cinematic retargeting unchanged.
+        val balanced = balancedJunction.apply(
+            target = target,
+            speedMps = speedMps,
+            expressway = SmartManeuverClassifier.isExpressway(roadName),
+            maneuverKind = SmartManeuverClassifier.kind(maneuverType, instruction),
+            corner = corner,
+            nextTurnMeters = followingTurnMeters,
+            gpsAccuracyMeters = gpsAccuracyMeters,
+            screenWidthDp = screenWidthDp,
+            screenHeightDp = screenHeightDp
+        )
+
+        // Native LocationComponent.zoomWhileTracking continues one uninterrupted
+        // frame-interpolated movement towards the medium-close automatic target.
+        cinematic.next(nowMs, currentZoom, balanced)?.let { return it }
         // Tilt should not compete with an active, long-running native zoom.
         if (cinematic.isAnimating(nowMs)) return null
 
