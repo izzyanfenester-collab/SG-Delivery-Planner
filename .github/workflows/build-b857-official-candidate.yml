@@ -2,7 +2,7 @@ name: Build B857 Official identity candidate (private audio packaging)
 on:
   push:
     branches: [main]
-    paths: ['app/**','.github/workflows/build-b857-official-candidate.yml']
+    paths: ['.github/workflows/build-b857-official-candidate.yml']
   workflow_dispatch:
 permissions:
   contents: read

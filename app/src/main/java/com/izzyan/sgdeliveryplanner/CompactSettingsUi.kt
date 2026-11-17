@@ -109,7 +109,8 @@ internal fun CompactGpsPreferences() {
     val store = remember(context) { GpsNavigationModePreferences(context) }
     var mode by remember(store) { mutableStateOf(store.is3dEnabled()) }
     var sound by remember(store) { mutableStateOf(store.isSoundEnabled()) }
-    CompactSettingsSection("GPS Preferences", "${if (mode) "3D" else "2D"} · Sound ${if (sound) "ON" else "OFF"}", Icons.Outlined.Tune) {
+    var smartZoom by remember(store) { mutableStateOf(store.isSmartAutoZoomEnabled()) }
+    CompactSettingsSection("GPS Preferences", "${if (mode) "3D" else "2D"} · Smart Zoom ${if (smartZoom) "ON" else "OFF"}", Icons.Outlined.Tune) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("3D map display", Modifier.weight(1f), fontSize = 15.sp)
             Switch(mode, { store.set3dEnabled(it); mode = it })
@@ -117,6 +118,10 @@ internal fun CompactGpsPreferences() {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Navigation sound", Modifier.weight(1f), fontSize = 15.sp)
             Switch(sound, { store.setSoundEnabled(it); sound = it })
+        }
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Smart Auto Zoom", Modifier.weight(1f), fontSize = 15.sp)
+            Switch(smartZoom, { store.setSmartAutoZoomEnabled(it); smartZoom = it })
         }
     }
 }

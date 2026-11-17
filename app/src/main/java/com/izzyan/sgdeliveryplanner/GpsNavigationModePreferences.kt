@@ -6,6 +6,11 @@ import android.content.Context
 internal class GpsNavigationModePreferences(context: Context) {
     private val store = context.applicationContext
         .getSharedPreferences("sg_delivery_gps_navigation", Context.MODE_PRIVATE)
+    // Persistent default ON; this preference changes only GPS camera behavior.
+    fun isSmartAutoZoomEnabled(): Boolean = store.getBoolean("smart_auto_zoom_enabled", true)
+    fun setSmartAutoZoomEnabled(enabled: Boolean) {
+        store.edit().putBoolean("smart_auto_zoom_enabled", enabled).apply()
+    }
     fun is3dEnabled(): Boolean = store.getBoolean("navigation_mode_3d", true)
     fun set3dEnabled(enabled: Boolean) {
         store.edit().putBoolean("navigation_mode_3d", enabled).apply()
