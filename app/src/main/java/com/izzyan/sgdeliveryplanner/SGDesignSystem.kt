@@ -34,15 +34,15 @@ const val SG_CARD_BACKGROUND_ALPHA = 0.30f
 object SGColors {
     // Compose observes this state, so all existing screens update without rewriting their business logic.
     private val burgundy get() = SGThemePreferences.isBurgundy
-    val Background get() = Color(if (burgundy) 0xFF190D13 else 0xFF081B33)
-    val SecondaryBackground get() = Color(if (burgundy) 0xFF27111D else 0xFF102A4C)
+    val Background get() = Color(if (burgundy) 0xFF190D13.toInt() else 0xFF081B33.toInt())
+    val SecondaryBackground get() = Color(if (burgundy) 0xFF27111D.toInt() else 0xFF102A4C.toInt())
     val Card get() = Background.copy(alpha = SG_CARD_BACKGROUND_ALPHA)
-    val SolidCard get() = Color(if (burgundy) 0xFF3B1425 else 0xFF152F50)
-    val Gold get() = Color(if (burgundy) 0xFF9C294C else 0xFFD4AF37)
-    val SelectedGold get() = Color(if (burgundy) 0xFFF285A6 else 0xFFF1D57A)
-    val White get() = Color(if (burgundy) 0xFFE3E5E8 else 0xFFFFFFFF)
-    val Silver get() = Color(if (burgundy) 0xFFC6BFC5 else 0xFFD6DEE8)
-    val Divider get() = Color(if (burgundy) 0xFF78324A else 0xFF29415D)
+    val SolidCard get() = Color(if (burgundy) 0xFF3B1425.toInt() else 0xFF152F50.toInt())
+    val Gold get() = Color(if (burgundy) 0xFF9C294C.toInt() else 0xFFD4AF37.toInt())
+    val SelectedGold get() = Color(if (burgundy) 0xFFF285A6.toInt() else 0xFFF1D57A.toInt())
+    val White get() = Color(if (burgundy) 0xFFE3E5E8.toInt() else 0xFFFFFFFF.toInt())
+    val Silver get() = Color(if (burgundy) 0xFFC6BFC5.toInt() else 0xFFD6DEE8.toInt())
+    val Divider get() = Color(if (burgundy) 0xFF78324A.toInt() else 0xFF29415D.toInt())
     val Disabled = Color(0xFF728096)
     val Success = Color(0xFF219E74)
     val SuccessText = Color(0xFF80E7BE)
