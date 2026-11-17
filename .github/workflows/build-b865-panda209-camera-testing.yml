@@ -50,6 +50,11 @@ jobs:
                       out.parent.mkdir(parents=True,exist_ok=True)
                       out.write_bytes(z.read(name))
           PY
+      - name: Install FFmpeg for authentic offline audio conversion
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
       - name: Verify old recordings and install 24 original camera MP3 + offline PCM
         run: |
           command -v ffmpeg
