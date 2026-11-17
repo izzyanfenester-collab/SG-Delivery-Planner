@@ -24,7 +24,7 @@ val PremiumGold = SGColors.Gold
 val PremiumEmerald = SGColors.Success
 val PremiumAmber = SGColors.Warning
 
-private val UnifiedPalette = darkColorScheme(
+private fun unifiedPalette() = darkColorScheme(
     primary = SGColors.Gold,
     onPrimary = SGColors.Background,
     primaryContainer = SGColors.SecondaryBackground,
@@ -83,7 +83,7 @@ private val UnifiedTypography = originalTypography.copy(
 @Composable
 fun IzzDeliveryTheme(dark: Boolean, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = UnifiedPalette,
+        colorScheme = unifiedPalette(),
         shapes = Shapes(
             extraSmall = RoundedCornerShape(SGDimensions.RadiusSmall),
             small = RoundedCornerShape(SGDimensions.RadiusSmall),

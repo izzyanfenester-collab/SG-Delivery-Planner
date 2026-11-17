@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
+            SGThemePreferences.initialize(applicationContext)
             IzzDeliveryTheme(dark = true) { App(vm) }
         }
     }
@@ -539,6 +540,7 @@ fun Settings(vm: PlannerViewModel) {
     ) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = SGColors.White)
         Text("Navigation, maps & delivery preferences", fontSize = 13.sp, color = SGColors.Silver)
+        DualThemeSettingsCard()
         NavigationAppearanceSettingsCard()
         OfflineMapSettingsCard(vm)
         val postal = postalStatus

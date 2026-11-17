@@ -32,24 +32,24 @@ import androidx.compose.ui.unit.sp
 const val SG_CARD_BACKGROUND_ALPHA = 0.30f
 
 object SGColors {
-    val Background = Color(0xFF081B33)
-    val SecondaryBackground = Color(0xFF102A4C)
-    // Glass cards show the original MBS artwork through a 30% opaque Navy fill.
-    val Card = Background.copy(alpha = SG_CARD_BACKGROUND_ALPHA)
-    // Dialogs, text-entry controls and other critical surfaces retain stronger contrast.
-    val SolidCard = Color(0xFF152F50)
-    val Gold = Color(0xFFD4AF37)
-    val SelectedGold = Color(0xFFF1D57A)
-    val White = Color(0xFFFFFFFF)
-    val Silver = Color(0xFFD6DEE8)
-    val Divider = Color(0xFF29415D)
+    // Compose observes this state, so all existing screens update without rewriting their business logic.
+    private val burgundy get() = SGThemePreferences.isBurgundy
+    val Background get() = Color(if (burgundy) 0xFF190D13 else 0xFF081B33)
+    val SecondaryBackground get() = Color(if (burgundy) 0xFF27111D else 0xFF102A4C)
+    val Card get() = Background.copy(alpha = SG_CARD_BACKGROUND_ALPHA)
+    val SolidCard get() = Color(if (burgundy) 0xFF3B1425 else 0xFF152F50)
+    val Gold get() = Color(if (burgundy) 0xFF9C294C else 0xFFD4AF37)
+    val SelectedGold get() = Color(if (burgundy) 0xFFF285A6 else 0xFFF1D57A)
+    val White get() = Color(if (burgundy) 0xFFE3E5E8 else 0xFFFFFFFF)
+    val Silver get() = Color(if (burgundy) 0xFFC6BFC5 else 0xFFD6DEE8)
+    val Divider get() = Color(if (burgundy) 0xFF78324A else 0xFF29415D)
     val Disabled = Color(0xFF728096)
     val Success = Color(0xFF219E74)
-    // Brighter text-only variant, maintaining contrast over dark cards.
     val SuccessText = Color(0xFF80E7BE)
     val Warning = Color(0xFFE7B94B)
     val Error = Color(0xFFF16B72)
     val ErrorContainer = Color(0xFF5C2636)
+    // Navigation safety colors are invariant across themes.
     val NavigationBlue = Color(0xFF1685FF)
     val InactiveRoute = Color(0xFF808080)
 }
