@@ -66,6 +66,7 @@ jobs:
           print('hundred-family clips',[(k,v) for k,v in all_ids.items() if 'hundred' in k or 'hundred' in v.lower()])
           assert len(clips)==185
           assert all(k in all_ids for k in required), 'required original Panda V2 audio missing'
+          assert all_ids['number_100'].strip().lower().startswith('one hundred'), 'unexpected original hundred recording'
           PY
       - name: Test, build and lint
         run: |
@@ -105,7 +106,12 @@ jobs:
         run: |
           set -euo pipefail
           tag=v1.4.52-b864-testing
-          gh release create "$tag" dist/SG-Delivery-B864-TESTING.apk --target "$GITHUB_SHA" --prerelease --latest=false --title "SG Delivery #864 TESTING – Smart Whole Number GPS Voice Distance" --notes "Isolated B864 GPS camera TESTING package based exactly on B863 TESTING. Changes spoken Panda Warrior V2 maneuver distance scheduling only: whole kilometre checkpoints (>=1km), integer metres (<1km), zero decimal kilometre clips, crossing detection, no premature rounding. All camera/routing/UI/settings unchanged. No Official merge. Original 185 Panda Warrior V2 clips preserved from B857 FIXED."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/SG-Delivery-B864-TESTING.apk --clobber
+            gh release edit "$tag" --target "$GITHUB_SHA"
+          else
+            gh release create "$tag" dist/SG-Delivery-B864-TESTING.apk --target "$GITHUB_SHA" --prerelease --latest=false --title "SG Delivery #864 TESTING – Smart Whole Number GPS Voice Distance" --notes "Isolated B864 GPS voice TESTING package based exactly on B863 TESTING. Whole-kilometre and integer-metre checkpoint scheduling, original Panda Warrior V2 audio only, accurate non-decimal announcements, no premature rounding. Original app and camera unaffected. No Official merge."
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

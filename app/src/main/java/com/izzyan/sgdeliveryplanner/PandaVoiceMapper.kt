@@ -67,12 +67,14 @@ internal object PandaVoiceMapper {
                 else emptyList()
         }
         if(m in standalone) return listOf("distance_in_${m}m")
-        // Existing Panda V2 number clips combine into an integer metre phrase.
-        // Avoid the old 0.X kilometre decimal fallback, even at 800/500/100m.
-        if(m in 100..900 && m%100==0) {
-            val hundreds=m/100
-            return listOf("word_in","number_$hundreds","number_100","unit_metres")
-        }
+        // Original number_100 recording says "One hundred", NOT "hundred".
+        // Combining "number_8"+"number_100" would wrongly speak
+        // "Eight one hundred metres". Only use exact recordings.
+        // Other hundred-metre marks are provided by combined direction clips
+        // (e.g. turn_right_800m, exit_left_500m) or independent
+        // distance_in_*m recordings already present in the original pack.
+        if(m==100) return listOf("word_in","number_100","unit_metres")
+        if(m in 200..900 && m%100==0) return emptyList()
         val numbers=numeric(m)
         return if(numbers.isNotEmpty() && m!=1) listOf("word_in")+numbers+listOf("unit_metres")
             else emptyList()

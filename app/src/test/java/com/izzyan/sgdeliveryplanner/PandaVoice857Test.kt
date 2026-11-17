@@ -12,8 +12,12 @@ class PandaVoice857Test {
   assertEquals(listOf("distance_in_25km","turn_right"),parts(25000))
   assertEquals(listOf("distance_in_900m","turn_right"),parts(900))
   assertEquals(listOf("turn_right_800m"),parts(800))
-  assertEquals(listOf("word_in","number_8","number_100","unit_metres","keep_left"),
-      parts(800,"keep","left",NavigationPanelCue(NavigationSign.KEEP_LEFT)))
+  // No misleading "eight one hundred metres" from number_100 clip.
+  assertTrue(parts(800,"keep","left",NavigationPanelCue(NavigationSign.KEEP_LEFT)).isEmpty())
+  assertEquals(listOf("word_in","number_100","unit_metres","keep_left"),
+      parts(100,"keep","left",NavigationPanelCue(NavigationSign.KEEP_LEFT)))
+  assertEquals(listOf("distance_in_900m","keep_left"),
+      parts(900,"keep","left",NavigationPanelCue(NavigationSign.KEEP_LEFT)))
   assertEquals(listOf("turn_right_200m"),parts(200))
  }
  @Test fun numberedExits(){
