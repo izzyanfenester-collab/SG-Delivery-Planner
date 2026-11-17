@@ -4,6 +4,9 @@ on:
     branches: [feature/build-865-panda-209-camera-voice-testing]
     paths:
       - 'voice_upload/**'
+      - 'scripts/install_panda209_camera_865.py'
+      - '.github/workflows/build-b865-panda209-camera-testing.yml'
+      - 'app/**'
   workflow_dispatch:
 permissions:
   contents: write
