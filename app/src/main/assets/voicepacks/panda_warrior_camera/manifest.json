@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "voice_identity": "Panda Warrior V2 – original licensed ElevenLabs recordings only",
+  "status": "AUTHENTIC_CAMERA_RECORDINGS_NOT_PROVIDED",
+  "clips": [],
+  "required_recordings": [
+    "camera_speed_ahead",
+    "camera_red_light_ahead",
+    "camera_mobile_location",
+    "camera_police_laser_location",
+    "camera_average_zone_ahead",
+    "camera_verified_speed_limit"
+  ],
+  "policy": "Do not use Android TTS or fabricate new Panda Warrior MP3/PCM assets."
+}
