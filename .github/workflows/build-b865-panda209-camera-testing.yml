@@ -1,7 +1,7 @@
 name: B865 Panda Warrior 209 Camera Voice TESTING
 on:
   push:
-    branches: [feature/build-865-panda-209-camera-voice-testing]
+    branches: [feature/build-865-camera-voice-trigger-fix-testing]
     paths:
       - 'voice_upload/**'
       - 'scripts/install_panda209_camera_865.py'
@@ -11,7 +11,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: b865-panda209-testing
+  group: b865-voice-trigger-fix1-testing
   cancel-in-progress: true
 jobs:
   build:
@@ -71,7 +71,7 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           bt="$ANDROID_HOME/build-tools/36.0.0"
-          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b865voice209test' versionCode='69' versionName='1.4.53-b865-camera209-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b865voicefix1test' versionCode='70' versionName='1.4.53-b865-camera-voice-fix1-testing'"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
           "$bt/apksigner" verify --verbose "$apk"
           python3 - <<'PY'
@@ -90,31 +90,31 @@ jobs:
               print('Verified 209 original MP3 and 24 PCM included; no substituted voice')
           PY
           mkdir -p dist
-          cp "$apk" dist/SG-Delivery-B865-Panda209-TESTING.apk
-          sha256sum dist/SG-Delivery-B865-Panda209-TESTING.apk
+          cp "$apk" dist/SG-Delivery-B865-Panda209-CameraVoice-FIX1-TESTING.apk
+          sha256sum dist/SG-Delivery-B865-Panda209-CameraVoice-FIX1-TESTING.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: B865-Panda209-TESTING-APK
-          path: dist/SG-Delivery-B865-Panda209-TESTING.apk
+          name: B865-CameraVoice-Fix1-TESTING-APK
+          path: dist/SG-Delivery-B865-Panda209-CameraVoice-FIX1-TESTING.apk
           if-no-files-found: error
       - name: Publish TESTING prerelease only
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag=v1.4.53-b865-panda209-testing
+          tag=v1.4.53-b865-camera-voice-fix1-testing
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::error::Existing TESTING tag; refuse overwrite"
             exit 1
           fi
-          gh release create "$tag" dist/SG-Delivery-B865-Panda209-TESTING.apk \
+          gh release create "$tag" dist/SG-Delivery-B865-Panda209-CameraVoice-FIX1-TESTING.apk \
             --target "$GITHUB_SHA" --prerelease --latest=false \
-            --title "SG Delivery #865 TESTING – Panda Warrior 209 Camera Voice" \
-            --notes "209 authentic user-supplied MP3 clips verified; 185 original navigation assets preserved byte-for-byte. 24 real camera warnings play through existing offline GPS audio engine. Conservative road/direction matching; absent verified speed limits or average-zone geometry are never fabricated. On-road/Bluetooth acceptance tests remain mandatory. NO OFFICIAL MERGE."
+            --title "SG Delivery #865 Camera Voice Trigger Fix1 TESTING – Panda Warrior 209" \
+            --notes "Fix1 TESTING: improved SPF road-name aliases and textual destination corroboration, generic safety-only Panda voice for precise matched-route camera locations with direction unverified, plus live in-app diagnostic. Original 209 user-supplied MP3s verified and original GPS features retained. Never claim camera direction or posted speed limit without evidence. On-road Bluetooth and opposite carriageway acceptance tests remain required. No Official merge."
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: B865-Panda209-test-reports
+          name: B865-CameraVoice-Fix1-test-reports
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/lint-results-debug.html

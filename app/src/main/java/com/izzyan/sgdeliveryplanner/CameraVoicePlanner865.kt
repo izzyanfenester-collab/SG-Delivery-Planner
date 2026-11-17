@@ -34,8 +34,7 @@ internal class CameraVoicePlanner865 {
     ): CameraVoiceCue865? {
         val cam=approach.camera
         if(!voiceGuidanceEnabled || !cameraAudioAvailable || !settings.voice ||
-            !settings.categoryEnabled(cam.category) || !approach.directionConfirmed ||
-            !approach.alertAllowed) return null
+            !settings.categoryEnabled(cam.category)) return null
         if(approach.routeMetresAhead < 0.0 || !approach.routeMetresAhead.isFinite()) return null
         // Never interrupt an imminent real navigation maneuver.
         if(turnMetres != null && turnMetres.isFinite() && turnMetres < 160.0) return null
@@ -44,6 +43,20 @@ internal class CameraVoicePlanner865 {
 
         val metres=approach.routeMetresAhead
         val key=cam.id+"|"+cam.category
+        if(!approach.directionConfirmed && approach.genericSafetyEligible) {
+            // Deliberately do not claim a camera is enforcing this direction.
+            // These original supplied recordings say only "watch traffic signal"
+            // or "follow posted speed limit". One safety cue per approach.
+            val token="$routeGeneration|$key|safety"
+            if(token in delivered) return null
+            val safeClip=if(cam.isRedLight) "red_light_camera_near"
+                else if(cam.category=="MOBILE_ENFORCEMENT_LOCATION") "mobile_speed_reminder"
+                else "speed_limit_reminder"
+            return CameraVoiceCue865(cam.id,cam.category,"safety",safeClip,metres,
+                VoicePhrase("camera-$routeGeneration-${cam.id}-safety",VoicePriority.CAMERA,
+                    listOf(VoicePart(safeClip,"General road-safety reminder; camera direction not verified"))))
+        }
+        if(!approach.directionConfirmed || !approach.alertAllowed) return null
         val main=when(cam.category) {
             "RED_LIGHT_CAMERA"->300.0
             "MOBILE_ENFORCEMENT_LOCATION","POLICE_LASER_LOCATION"->500.0

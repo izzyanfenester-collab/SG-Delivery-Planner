@@ -124,7 +124,9 @@ internal object CameraRouteGeometry {
 
 internal data class CameraApproach(
     val camera: EnforcementCamera, val routeMetresAhead: Double,
-    val directionConfirmed: Boolean, val alertAllowed: Boolean
+    val directionConfirmed: Boolean, val alertAllowed: Boolean,
+    // Conservative nearby *general safety reminder*, never a claim of directional enforcement.
+    val genericSafetyEligible: Boolean = false
 )
 
 /** Conservative approach classification: road, route shape AND published travel direction.
@@ -132,33 +134,83 @@ internal data class CameraApproach(
  */
 internal object CameraApproachLogic {
     private fun normalized(s:String)=s.lowercase(Locale.ROOT)
+        .replace(Regex("\\(.*?\\)"),"")
         .replace(Regex("\\b(rd|road)\\b"),"road")
         .replace(Regex("\\b(ave|avenue)\\b"),"avenue")
-        .replace(Regex("\\b(hwy|h'way|highway)\\b"),"highway")
+        .replace(Regex("\\b(expwy|expressway)\\b"),"expressway")
+        .replace(Regex("\\b(jln|jalan)\\b"),"jalan")
+        .replace(Regex("\\b(lor|lorong)\\b"),"lorong")
+        .replace(Regex("\\b(upp|upper)\\b"),"upper")
+        .replace(Regex("\\b(st|street)\\b"),"street")
         .replace(Regex("\\s+")," ").trim()
-    private fun roadMatches(current:String?,camera:String):Boolean {
-        if(current.isNullOrBlank())return false
-        val a=normalized(current)
-        val b=normalized(camera).replace(Regex("\\s*\\(.*?\\)"),"").trim()
-        return a==b || (a.length>=5 && b.length>=5 && (a.startsWith(b)||b.startsWith(a)))
+    private val namedExpressways=mapOf(
+        "pie" to "pan island expressway",
+        "aye" to "ayer rajah expressway",
+        "bke" to "bukit timah expressway",
+        "cte" to "central expressway",
+        "ecp" to "east coast parkway",
+        "kpe" to "kallang paya lebar expressway",
+        "mce" to "marina coastal expressway",
+        "sle" to "seletar expressway",
+        "tpe" to "tampines expressway",
+        "kje" to "kranji expressway"
+    )
+    private fun roadKey(s:String):String {
+        val value=normalized(s)
+        return namedExpressways[value]?:value
     }
-    private fun directionMatches(camera:EnforcementCamera,routeBearing:Double,upcomingRoads:List<String>):Boolean {
+    private fun roadMatches(current:String?,camera:String):Boolean {
+        if(current.isNullOrBlank()) return false
+        val a=roadKey(current)
+        val b=roadKey(camera)
+        return a==b || (a.length>=6 && b.length>=6 && (a.startsWith(b+" ")||b.startsWith(a+" ")))
+    }
+    private fun publishedDestinationBearing(
+        camera:EnforcementCamera, records:List<EnforcementCamera>
+    ):Double? {
+        // Use two independently published SPF coordinates *on the same road*.
+        // A corroborating camera specifically names the destination as its junction.
+        // This is a geometry-based route corroboration, never official camera bearing.
+        val destination=camera.directionText ?: return null
+        if(roadKey(destination).length<5) return null
+        val matches=records.filter { other ->
+            other.id!=camera.id && roadKey(other.road)==roadKey(camera.road) &&
+                other.junction!=null && roadKey(other.junction)==roadKey(destination)
+        }.map { other ->
+            val dx=(other.point.lon-camera.point.lon)*111_195.0*
+                cos(Math.toRadians(camera.point.lat))
+            val dy=(other.point.lat-camera.point.lat)*111_195.0
+            val length=hypot(dx,dy)
+            length to ((Math.toDegrees(atan2(dx,dy))+360)%360)
+        }.filter { (distance,_) -> distance in 120.0..1500.0 }
+            .sortedBy{it.first}
+        if(matches.isEmpty()) return null
+        // Reject conflicting evidence pointing to separate directions.
+        val bearing=matches.first().second
+        if(matches.any { CameraRouteGeometry.angularGap(it.second,bearing)>30.0 }) return null
+        return bearing
+    }
+    private fun directionMatches(
+        camera:EnforcementCamera,routeBearing:Double,upcomingRoads:List<String>,
+        records:List<EnforcementCamera>
+    ):Boolean {
         if(camera.directionVerified && camera.directionBearing!=null)
             return CameraRouteGeometry.angularGap(camera.directionBearing,routeBearing)<=28.0
-        val declared=camera.directionText ?: return false
-        val target=normalized(declared)
-        // Independently corroborate a *textual* destination with upcoming route road names.
-        // Do not guess compass bearings based on the SPF location string.
-        return target.length>=4 && upcomingRoads.any { road ->
-            val named=normalized(road)
-            named==target || (named.length>5 && target.length>5 && named.contains(target))
-        }
+        val destination=camera.directionText ?: return false
+        // Match SPF "twds Farrer Rd" against actual downstream road names first.
+        if(roadKey(destination).length>=4 &&
+            upcomingRoads.any { roadMatches(it,destination) }) return true
+        val independentlyCorroborated=publishedDestinationBearing(camera,records)
+            ?: return false
+        return CameraRouteGeometry.angularGap(independentlyCorroborated,routeBearing)<=25.0
     }
     fun find(
         current:GpsPoint, shape:List<GpsPoint>, currentRoad:String?,
         upcomingRoads:List<String>, accuracyMetres:Float,
         records:List<EnforcementCamera>,
-        speedMps:Float?
+        speedMps:Float?,
+        vehicleBearingDegrees:Double?=null,
+        bearingAccuracyDegrees:Float?=null
     ):List<CameraApproach> {
         if(!current.valid()||shape.size<2||!accuracyMetres.isFinite()||accuracyMetres>25) return emptyList()
         val vehicle=CameraRouteGeometry.project(current,shape) ?: return emptyList()
@@ -172,11 +224,25 @@ internal object CameraApproachLogic {
             if(projected.lateralMetres>16.0)continue
             val ahead=projected.progressedMetres-vehicle.progressedMetres
             if(ahead < -30.0 || ahead > 1600.0)continue
-            val direction=directionMatches(camera,projected.segmentBearing,upcomingRoads)
+            val direction=directionMatches(camera,projected.segmentBearing,upcomingRoads,records)
             val required=if(camera.isRedLight)300.0 else if(camera.isMobile)500.0
                 else if(camera.isAverage)600.0 else if((speedMps?:0f)>=20f)1000.0 else 500.0
+            // If SPF orientation cannot be corroborated, NEVER claim a speed or
+            // red-light enforcement camera is operating in this direction.
+            // An optional *generic* Panda safety reminder is allowed only with
+            // very accurate heading, close route geometry and known same road.
+            val headingReliable=vehicleBearingDegrees?.isFinite()==true &&
+                vehicleBearingDegrees in 0.0..360.0 &&
+                bearingAccuracyDegrees?.isFinite()==true &&
+                bearingAccuracyDegrees<=20f &&
+                CameraRouteGeometry.angularGap(vehicleBearingDegrees,projected.segmentBearing)<=20.0
+            val safetyReminder=!direction && !camera.isAverage &&
+                accuracyMetres<=12f && (speedMps?:0f)>=3f &&
+                vehicle.lateralMetres<=12.0 && projected.lateralMetres<=8.0 &&
+                ahead in 35.0..240.0 && headingReliable
             results += CameraApproach(camera,ahead.coerceAtLeast(0.0),direction,
-                direction && ahead<=required && !camera.isAverage)
+                direction && ahead<=required && !camera.isAverage,
+                genericSafetyEligible=safetyReminder)
         }
         return results.sortedBy{it.routeMetresAhead}
     }

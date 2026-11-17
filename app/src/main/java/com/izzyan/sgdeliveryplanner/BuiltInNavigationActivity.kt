@@ -602,6 +602,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
     var cameraLastUpdated by mutableStateOf("Never"); private set
     var cameraRefreshMessage by mutableStateOf<String?>(null); private set
+    var cameraVoiceDiagnostic by mutableStateOf("No active camera check yet"); private set
     var cameraRefreshBusy by mutableStateOf(false); private set
     var upcomingEnforcementCamera by mutableStateOf<CameraApproach?>(null); private set
     var cameraMarkerBucket by mutableStateOf(""); private set
@@ -635,37 +636,84 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         cameraMarkerBucket="${(fix.latitude*100).toInt()}:${(fix.longitude*100).toInt()}"
         if(now-lastCameraScanMs<2500) return
         lastCameraScanMs=now
-        if(!cameraPreferences.master || offRoute || route==null || shape.size<2){
-            upcomingEnforcementCamera=null;return
+        if(!cameraPreferences.master) {
+            cameraVoiceDiagnostic="Master Camera Alerts is OFF"
+            upcomingEnforcementCamera=null
+            return
         }
+        if(offRoute || route==null || shape.size<2) {
+            cameraVoiceDiagnostic="Waiting for active GPS navigation route (or rerouting)"
+            upcomingEnforcementCamera=null
+            return
+        }
+        val currentRoad=street?.takeIf{it.isNotBlank()}
+            ?:cameraRoadName?.takeIf{it.isNotBlank()}
         val upcoming=route?.legs?.firstOrNull()?.steps.orEmpty()
             .drop((cameraManeuverIndex-1).coerceAtLeast(0))
-            .take(5).mapNotNull{it.name}
+            .take(12).mapNotNull{it.name}
+        val reliableBearing=fix.bearing.takeIf {
+            fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees<=20f)
+        }?.toDouble()
+        val bearingAccuracy=fix.bearingAccuracyDegrees.takeIf {
+            fix.hasBearingAccuracy() && it.isFinite()
+        }
         val approaches=CameraApproachLogic.find(
-            GpsPoint(fix.latitude,fix.longitude),shape,street,upcoming,fix.accuracy,
-            enforcementCameras,fix.speed.takeIf{fix.hasSpeed()})
+            GpsPoint(fix.latitude,fix.longitude),shape,currentRoad,upcoming,fix.accuracy,
+            enforcementCameras,fix.speed.takeIf{fix.hasSpeed()},
+            reliableBearing,bearingAccuracy)
             .filter { cameraPreferences.categoryEnabled(it.camera.category) }
         upcomingEnforcementCamera=approaches.firstOrNull()
-        if(!cameraAudioAvailable || muted || !cameraPreferences.voice) return
+        if(approaches.isEmpty()) {
+            cameraVoiceDiagnostic=if(currentRoad.isNullOrBlank())
+                "Waiting for matched road name from navigation"
+            else "No camera matched current road, route and GPS position"
+            return
+        }
+        if(muted || !cameraPreferences.voice) {
+            cameraVoiceDiagnostic="GPS voice or Camera Voice is OFF"
+            return
+        }
+        if(!cameraAudioAvailable) {
+            cameraVoiceDiagnostic="209-clip Panda Warrior voice assets unavailable"
+            return
+        }
+        var reason="Camera published nearby; direction not confirmed for voice"
         for(approach in approaches) {
             val planned=cameraVoicePlanner.due(
                 approach,cameraPreferences,!muted,cameraAudioAvailable,turnMeters,
-                fix.speed.takeIf{fix.hasSpeed()}) ?: continue
-            if(planned.clipId !in voiceAudio.cameraPack.clips) {
-                android.util.Log.w("SGCamera865Voice","missing original MP3 id=${planned.clipId}")
+                fix.speed.takeIf{fix.hasSpeed()})
+            if(planned==null) {
+                reason=when {
+                    (turnMeters?:Double.MAX_VALUE)<160.0 ->
+                        "Urgent junction instruction has priority over camera voice"
+                    !approach.directionConfirmed && !approach.genericSafetyEligible ->
+                        "Camera direction unverified; need reliable GPS heading/road match"
+                    else -> "Camera warning already played, not yet due, or safety-gated"
+                }
                 continue
             }
-            // Same offline audio controller as all GPS maneuvers. Higher-priority
-            // ADVANCE and CRITICAL navigation interrupts low-priority CAMERA cues.
+            if(planned.clipId !in voiceAudio.cameraPack.clips) {
+                cameraVoiceDiagnostic="Recorded clip missing: ${planned.clipId}"
+                android.util.Log.w("SGCamera865Voice",
+                    "missing id=${planned.cameraId} clip=${planned.clipId}")
+                continue
+            }
             val accepted=voiceAudio.play(planned.phrase)
             android.util.Log.d("SGCamera865Voice",
-                "id=${planned.cameraId} category=${planned.category} direction=${approach.directionConfirmed} " +
-                "routeMeters=${planned.metresAhead.toInt()} stage=${planned.stage} clip=${planned.clipId}.mp3 scheduled=$accepted")
+                "id=${planned.cameraId} category=${planned.category} " +
+                "direction=${approach.directionConfirmed} generic=${approach.genericSafetyEligible} " +
+                "road=$currentRoad routeMetres=${planned.metresAhead.toInt()} " +
+                "stage=${planned.stage} clip=${planned.clipId}.mp3 scheduled=$accepted")
             if(accepted) {
                 cameraVoicePlanner.markScheduled(planned)
-                break
+                cameraVoiceDiagnostic=if(planned.stage=="safety")
+                    "Panda general safety reminder scheduled; camera direction unverified"
+                else "Panda camera voice scheduled: ${planned.clipId}"
+                return
             }
+            reason="Camera alert could not acquire audio (navigation voice priority or focus)"
         }
+        cameraVoiceDiagnostic=reason
     }
 
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set

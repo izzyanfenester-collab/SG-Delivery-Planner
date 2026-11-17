@@ -60,6 +60,8 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
             color=SGColors.Silver,fontSize=11.sp)
         Text("Last successful update: ${session.cameraLastUpdated}",
             color=SGColors.Silver,fontSize=11.sp)
+        Text("Live Voice Diagnosis: ${session.cameraVoiceDiagnostic}",
+            color=SGColors.Gold,fontSize=11.sp)
         Text("${session.enforcementCameras.size} verified SPF published records",
             color=SGColors.Silver,fontSize=11.sp)
         if(!session.cameraAudioAvailable) Text(
