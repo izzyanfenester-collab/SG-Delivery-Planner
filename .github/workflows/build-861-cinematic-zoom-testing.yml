@@ -2,7 +2,7 @@ name: Build and publish B861 Ultra-Smooth Cinematic GPS Auto Zoom TESTING
 on:
   push:
     branches: [feature/build-861-cinematic-gps-zoom]
-    paths: ['app/**','.github/workflows/build-861-smart-zoom-testing.yml']
+    paths: ['app/**','.github/workflows/build-861-cinematic-zoom-testing.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -59,7 +59,7 @@ jobs:
           apk=app/build/outputs/apk/debug/app-debug.apk
           bt="$ANDROID_HOME/build-tools/36.0.0"
           mkdir -p dist
-          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b861test' versionCode='64' versionName='1.4.48-b861-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b861test' versionCode='65' versionName='1.4.49-b861-testing'"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/alignment.txt
           tail -1 dist/alignment.txt
           "$bt/apksigner" verify --verbose "$apk"
@@ -86,7 +86,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag=v1.4.48-b861-testing
+          tag=v1.4.49-b861-testing
           gh release create "$tag" dist/SG-Delivery-B861-TESTING.apk --target "$GITHUB_SHA" --prerelease --latest=false --title "SG Delivery #861 TESTING – Ultra-Smooth Cinematic GPS Auto Zoom" --notes "Isolated B861 GPS camera TESTING package based on B860 TESTING (which builds on B857 Official FIXED). Preserves all six B860 smart zoom modes while animating directly to the full zoom target with cinematic timing, GPS-update deduplication, smooth retargets and critical-junction override. No Official merge. Original 185 Panda Warrior V2 clips preserved from B857 FIXED."
       - uses: actions/upload-artifact@v4
         if: always()
