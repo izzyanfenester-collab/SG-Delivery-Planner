@@ -4,7 +4,7 @@ on:
     branches: [feature/build-865-camera-safety-testing]
     paths: ['scripts/build_spf_camera_seed.py','.github/workflows/validate-spf-865.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -22,3 +22,14 @@ jobs:
           name: SPF-341-Verified-Camera-Snapshot
           path: app/src/main/assets/sg_enforcement_cameras.json
           if-no-files-found: error
+      - name: Persist validated SPF snapshot to TESTING branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/sg_enforcement_cameras.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh validated B865 SPF camera snapshot (testing only)"
+            git push origin HEAD:feature/build-865-camera-safety-testing
+          fi
