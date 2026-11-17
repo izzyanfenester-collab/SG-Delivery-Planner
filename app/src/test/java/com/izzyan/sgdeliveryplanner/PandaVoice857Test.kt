@@ -6,8 +6,14 @@ class PandaVoice857Test {
  @Test fun dynamicDistances(){
   assertEquals(listOf("distance_in_3km","turn_right"),parts(3000))
   assertEquals(listOf("distance_in_5km","turn_left"),parts(5000,"turn","left",NavigationPanelCue(NavigationSign.TURN_LEFT)))
-  assertEquals(listOf("word_in","number_2","word_point","number_5","unit_kilometres","turn_right"),parts(2500))
-  assertEquals(listOf("word_in","number_3","word_point","number_7","unit_kilometres","turn_right"),parts(3700))
+  assertTrue(parts(2500).isEmpty())
+  assertTrue(parts(3700).isEmpty())
+  assertEquals(listOf("word_in","number_19","unit_kilometres","turn_right"),parts(19000))
+  assertEquals(listOf("distance_in_25km","turn_right"),parts(25000))
+  assertEquals(listOf("distance_in_900m","turn_right"),parts(900))
+  assertEquals(listOf("turn_right_800m"),parts(800))
+  assertEquals(listOf("word_in","number_8","number_100","unit_metres","keep_left"),
+      parts(800,"keep","left",NavigationPanelCue(NavigationSign.KEEP_LEFT)))
   assertEquals(listOf("turn_right_200m"),parts(200))
  }
  @Test fun numberedExits(){
