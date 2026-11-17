@@ -1,7 +1,5 @@
 package com.izzyan.sgdeliveryplanner
 
-import kotlin.math.max
-
 /**
  * Build 865: deterministic camera warnings from already validated, route-aware approaches.
  * Never infer activation, light state, camera bearing, speed limits, or average-zone edges.
@@ -79,9 +77,11 @@ internal class CameraVoicePlanner865 {
         }
         val (stage,clip)=stageAndClip
         val priority=VoicePriority.CAMERA
+        val verifiedLimit=if(stage=="main" && !cam.isRedLight)
+            CameraSpeedLimitVoice865.phrase(cam)?.parts.orEmpty() else emptyList()
         return CameraVoiceCue865(cam.id,cam.category,stage,clip,metres,
             VoicePhrase("camera-$routeGeneration-${cam.id}-$stage",priority,
-                listOf(VoicePart(clip,"Published camera warning"))))
+                listOf(VoicePart(clip,"Published camera warning"))+verifiedLimit))
     }
 
     fun markScheduled(cue:CameraVoiceCue865) {
