@@ -20,3 +20,9 @@ for key, url in SOURCES.items():
         nearby=table.find_previous(['h2','h3','h4','h5','h6'])
         print('TABLE',i,'count',len(rows),'heading',nearby.get_text(' ',strip=True) if nearby else None,'sample',repr(sample)[:550])
     print('TEXT_CAMERA',re.findall(r'.{0,60}Camera Locations.{0,60}',soup.get_text(' ',strip=True),flags=re.I)[:10])
+
+    if key=='speed':
+        for idx in (1,3):
+            table=tables[idx]
+            for row in table.find_all('tr'):
+                print('SPECIAL_TABLE_ROW',idx,repr([c.get_text(' ',strip=True) for c in row.find_all(['th','td'])]))
