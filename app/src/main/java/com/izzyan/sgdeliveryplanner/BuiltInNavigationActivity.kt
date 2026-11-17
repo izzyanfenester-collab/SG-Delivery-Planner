@@ -355,7 +355,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("Smart Auto Zoom", Modifier.weight(1f), color = SGColors.White)
                             Switch(checked = session.smartAutoZoomEnabled,
-                                onCheckedChange = { session.setSmartAutoZoomEnabled(it) })
+                                onCheckedChange = { session.updateSmartAutoZoomEnabled(it) })
                         }
                         NavigationSettingsChoices(
                             "Display Mode", listOf("Day", "Night", "Auto Day/Night"),
@@ -532,7 +532,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var zoomOverride by mutableStateOf<Double?>(null); private set
     var cameraDisplayedZoom: Double? = null
     var smartAutoZoomEnabled by mutableStateOf(gpsModePreferences.isSmartAutoZoomEnabled()); private set
-    fun setSmartAutoZoomEnabled(enabled: Boolean) {
+    fun updateSmartAutoZoomEnabled(enabled: Boolean) {
         smartAutoZoomEnabled = enabled
         gpsModePreferences.setSmartAutoZoomEnabled(enabled)
         zoomOverride = null
