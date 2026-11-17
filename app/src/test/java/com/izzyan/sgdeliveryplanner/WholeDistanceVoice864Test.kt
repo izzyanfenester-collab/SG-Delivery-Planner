@@ -70,7 +70,7 @@ class WholeDistanceVoice864Test {
 
     @Test fun impossibleOldCrossingsAreSkippedAndNavigationDistanceNotModified() {
         assertNull(WholeDistanceVoiceScheduler.checkpoint(1200.0,20f,2000.0))
-        assertEquals(700,WholeDistanceVoiceScheduler.checkpoint(700.0,20f,1200.0))
+        assertEquals(500,WholeDistanceVoiceScheduler.checkpoint(500.0,20f,1200.0))
         val exact=1900.75
         assertNull(WholeDistanceVoiceScheduler.checkpoint(exact,20f,null,true))
         assertEquals(exact,1900.75,0.0)

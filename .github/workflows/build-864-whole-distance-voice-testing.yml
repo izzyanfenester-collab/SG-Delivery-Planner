@@ -49,6 +49,24 @@ jobs:
                       dest.parent.mkdir(parents=True,exist_ok=True)
                       dest.write_bytes(z.read(n))
           PY
+      - name: Verify whole-number Panda V2 audio clip coverage before building
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('app/src/main/assets/voicepacks/panda_warrior_v2')
+          clips=json.loads((root/'manifest.json').read_text())['clips']
+          all_ids={c['id']:c['text'] for c in clips}
+          required=['word_in','number_8','number_19','number_100',
+                    'unit_metres','unit_kilometres','distance_in_900m',
+                    'distance_in_25km','distance_in_3km','turn_right_800m']
+          print('Verified original Panda V2 clips:',len(clips))
+          for key in required:
+              print('required',key,repr(all_ids.get(key)))
+          print('hundred-family clips',[(k,v) for k,v in all_ids.items() if 'hundred' in k or 'hundred' in v.lower()])
+          assert len(clips)==185
+          assert all(k in all_ids for k in required), 'required original Panda V2 audio missing'
+          PY
       - name: Test, build and lint
         run: |
           chmod +x gradlew
