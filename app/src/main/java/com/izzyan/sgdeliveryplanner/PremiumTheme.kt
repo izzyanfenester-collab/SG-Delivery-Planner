@@ -18,11 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Backwards-compatible aliases so approved delivery logic and badges are not replaced. */
-val PremiumNavy = SGColors.Background
-val PremiumRoyal = SGColors.SecondaryBackground
-val PremiumGold = SGColors.Gold
-val PremiumEmerald = SGColors.Success
-val PremiumAmber = SGColors.Warning
+val PremiumNavy get() = SGColors.Background
+val PremiumRoyal get() = SGColors.SecondaryBackground
+val PremiumGold get() = SGColors.Gold
+val PremiumEmerald get() = SGColors.Success
+val PremiumAmber get() = SGColors.Warning
 
 private fun unifiedPalette() = darkColorScheme(
     primary = SGColors.Gold,

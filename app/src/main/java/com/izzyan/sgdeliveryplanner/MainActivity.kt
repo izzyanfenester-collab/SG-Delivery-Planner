@@ -96,10 +96,10 @@ class MainActivity : ComponentActivity() {
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
         runCatching { OfflineMapUpdateScheduler.schedule(applicationContext) }
+        SGThemePreferences.initialize(applicationContext)
         setContent {
             val vm: PlannerViewModel = viewModel()
             // Dark mode is permanent, regardless of Android's system theme or old saved preferences.
-            SGThemePreferences.initialize(applicationContext)
             IzzDeliveryTheme(dark = true) { App(vm) }
         }
     }
