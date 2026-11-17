@@ -43,6 +43,33 @@ internal class PandaVoicePack(private val context:Context) {
     val available get()=clips.size==185
     fun open(id:String)=clips[id]?.let { context.assets.openFd("$PANDA_ASSET_ROOT/${it.path}") }
 }
+/** Separate optional authentic Panda V2 camera pack. Never synthesize or TTS-fallback.
+ * A manifest is activated only when every actual MP3 and derived PCM exists.
+ */
+internal const val PANDA_CAMERA_ROOT="voicepacks/panda_warrior_camera"
+internal class PandaCameraVoicePack(private val context:Context) {
+    val clips:Map<String,PandaClip> by lazy {
+        runCatching {
+            val json=context.assets.open("$PANDA_CAMERA_ROOT/manifest.json")
+                .bufferedReader().use { JsonParser.parseReader(it).asJsonObject }
+            val parsed=json["clips"].asJsonArray.map { value ->
+                val obj=value.asJsonObject
+                val id=obj["id"].asString
+                require(id.matches(Regex("[a-z0-9_]+")) && id in CameraVoiceAssetIds865.ALL)
+                val file=obj["file"].asString
+                require(file=="audio/camera_alerts/$id.mp3")
+                PandaClip(id,file,obj["text"].asString,obj["duration_seconds"].asDouble)
+            }
+            require(parsed.size==24 && parsed.map{it.id}.toSet().size==24)
+            val mp3=context.assets.list("$PANDA_CAMERA_ROOT/audio/camera_alerts")?.toSet().orEmpty()
+            val pcm=context.assets.list("$PANDA_CAMERA_ROOT/audio_pcm")?.toSet().orEmpty()
+            require(parsed.all{it.path.substringAfterLast('/') in mp3 && "${it.id}.pcm" in pcm})
+            parsed.associateBy{it.id}
+        }.getOrDefault(emptyMap())
+    }
+    val available get()=clips.size==24
+}
+
 /** Original MP3s stay intact. Prepared PCM is decoded from those same recordings.
  * Buffer a whole sentence into one WAV before playback, with controlled gaps.
  * Preparation runs off the navigation thread and is cancelled on route change. */
@@ -60,9 +87,19 @@ internal object PandaWav {
         parts.forEachIndexed{i,bytes->if(i>0)out.write(gap);out.write(bytes)}
     }
 }
+/** Delivered on main thread; ACCEPTED is NOT proof of audible playback. */
+internal enum class PandaPlaybackState866 { STARTED, COMPLETED, INTERRUPTED, CANCELLED, FAILED }
+internal data class PandaPlaybackEvent866(
+    val phraseKey:String,
+    val state:PandaPlaybackState866,
+    val reason:String,
+    val elapsedMs:Long
+)
 internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     private val app=context.applicationContext
     val pack=PandaVoicePack(app)
+    val cameraPack=PandaCameraVoicePack(app)
+    val available209 get()=pack.available && cameraPack.available && (pack.clips.keys intersect cameraPack.clips.keys).isEmpty()
     private val manager=app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val handler=Handler(Looper.getMainLooper())
     private val executor=Executors.newSingleThreadExecutor()
@@ -80,20 +117,50 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     private var closed=false
     private var generation=0L
     private var current:VoicePhrase?=null
+    private var playbackObserver:((PandaPlaybackEvent866)->Unit)?=null
+    private var playbackStarted=false
+    val activePriority get()=current?.priority
+    val activePhraseKey get()=current?.key
+    val isPlaybackStarted get()=playbackStarted
+    private fun notifyCurrent(state:PandaPlaybackState866,reason:String){
+        val key=current?.key ?: return
+        val receiver=playbackObserver ?: return
+        // All existing callers run on the main thread; MP3 worker posts callbacks to it.
+        runCatching { receiver(PandaPlaybackEvent866(key,state,reason,SystemClock.elapsedRealtime())) }
+            .onFailure { Log.e("SGPanda866","playback observer threw",it) }
+    }
+
     private var volume=1f
     var previewing by mutableStateOf(false);private set
     companion object { private var owner:NavigationVoiceAudio?=null }
     fun setVolume(value:Float){volume=value.coerceIn(0f,1f);runCatching{player?.setVolume(volume,volume)};if(volume<=0f)stop()}
-    fun play(phrase:VoicePhrase):Boolean {
-        if(closed || volume<=0f || phrase.parts.isEmpty())return false
-        if(!pack.available || phrase.parts.any{it.clip !in pack.clips}) { Log.w("SGPanda857","missing audio event=${phrase.key}; legacy voice disabled");return false }
+    fun play(
+        phrase:VoicePhrase,
+        observer:((PandaPlaybackEvent866)->Unit)?=null
+    ):Boolean {
+        if(closed || volume<=0f || phrase.parts.isEmpty()) {
+            Log.w("SGPanda866","REJECTED key=${phrase.key} reason=closed-muted-or-empty")
+            return false
+        }
+        if(!pack.available || phrase.parts.any{it.clip !in pack.clips && it.clip !in cameraPack.clips}) {
+            Log.w("SGPanda866","REJECTED key=${phrase.key} reason=missing-authentic-audio")
+            return false
+        }
         val oldOwner=owner
         val old=oldOwner?.current
-        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank))return false
-        oldOwner?.stop()
-        if(oldOwner!==this)stop()
-        if(manager.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED)return false
-        focusHeld=true;owner=this;current=phrase;previewing=phrase.priority==VoicePriority.PREVIEW
+        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank)) {
+            Log.d("SGPanda866","REJECTED key=${phrase.key} reason=busy priority=${old.priority}")
+            return false
+        }
+        oldOwner?.stop("preempted_by_${phrase.priority}")
+        if(oldOwner!==this) stop("new_owner")
+        if(manager.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            Log.w("SGPanda866","REJECTED key=${phrase.key} reason=audio-focus-denied")
+            return false
+        }
+        focusHeld=true;owner=this;current=phrase
+        playbackObserver=observer;playbackStarted=false
+        previewing=phrase.priority==VoicePriority.PREVIEW
         val token=generation
         val requested=SystemClock.elapsedRealtime()
         preparation=executor.submit {
@@ -101,9 +168,10 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
             try {
                 val parts=phrase.parts.map { part ->
                     if(Thread.currentThread().isInterrupted)throw InterruptedException()
-                    app.assets.open("$PANDA_ASSET_ROOT/audio_pcm/${part.clip}.pcm").use{it.readBytes()}
+                    app.assets.open("${if(part.clip in cameraPack.clips)PANDA_CAMERA_ROOT else PANDA_ASSET_ROOT}/audio_pcm/${part.clip}.pcm")
+                        .use{it.readBytes()}
                 }
-                val created=File.createTempFile("panda857_",".wav",app.cacheDir)
+                val created=File.createTempFile("panda866_",".wav",app.cacheDir)
                 file=created
                 created.outputStream().use{PandaWav.write(it,parts)}
                 if(Thread.currentThread().isInterrupted)throw InterruptedException()
@@ -117,36 +185,77 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                         media.setVolume(volume,volume)
                         media.setOnPreparedListener {
                             if(token==generation && player===media) {
-                                try {media.start();Log.d("SGPanda857","event=${phrase.key} parts=${phrase.parts.size} startCallMs=${SystemClock.elapsedRealtime()-requested}")}
-                                catch(e:Exception){Log.e("SGPanda857","start failed",e);stop()}
+                                try {
+                                    media.start()
+                                    playbackStarted=true
+                                    Log.i("SGPanda866","PLAYBACK_STARTED key=${phrase.key} clips=${phrase.parts.map{it.clip}} latencyMs=${SystemClock.elapsedRealtime()-requested}")
+                                    notifyCurrent(PandaPlaybackState866.STARTED,"mediaplayer-started")
+                                }catch(e:Exception){
+                                    Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} start",e)
+                                    stop("start-failed")
+                                }
                             }
                         }
-                        media.setOnCompletionListener {if(token==generation&&player===media)stop()}
-                        media.setOnErrorListener{_,what,extra->if(token==generation&&player===media){Log.e("SGPanda857","audio error $what/$extra");stop()};true}
+                        media.setOnCompletionListener {
+                            if(token==generation&&player===media)stop("completed")
+                        }
+                        media.setOnErrorListener { _,what,extra ->
+                            if(token==generation&&player===media) {
+                                Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} media=$what/$extra")
+                                stop("media-error-$what-$extra")
+                            }
+                            true
+                        }
                         media.prepareAsync()
-                    }catch(e:Exception){Log.e("SGPanda857","prepare failed; no TTS",e);stop()}
+                    }catch(e:Exception){
+                        Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} prepare",e)
+                        stop("prepare-failed")
+                    }
                 }
             }catch(e:Exception){
                 file?.delete()
-                if(e !is InterruptedException)handler.post {if(token==generation){Log.e("SGPanda857","phrase build failed; no TTS",e);stop()}}
+                if(e !is InterruptedException)handler.post {
+                    if(token==generation){
+                        Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} asset/pcm",e)
+                        stop("asset-prepare-failed")
+                    }
+                }
             }
         }
+        Log.d("SGPanda866","PLAYBACK_ACCEPTED key=${phrase.key}; waiting for real STARTED")
         return true
     }
-    fun stopPreview(){if(previewing)stop()}
+    fun stopPreview(){if(previewing)stop("preview-stopped")}
+    /** Invalidate old-route camera speech; do not cancel unrelated urgent guidance. */
+    fun stopObsoleteCameraForRouteChange(){
+        if(current?.priority==VoicePriority.CAMERA)stop("route-changed")
+    }
     fun stopObsoleteManeuver(index:Int) {
         val key=current?.key ?: return
-        if(key.startsWith("step-") && !key.startsWith("step-$index-")) stop()
+        if(key.startsWith("step-") && !key.startsWith("step-$index-")) stop("obsolete-maneuver")
     }
-    fun stop(){
+    fun stop(reason:String="stopped"){
+        if(current!=null) {
+            val state=when {
+                reason=="completed" -> PandaPlaybackState866.COMPLETED
+                reason.contains("fail") || reason.startsWith("media-error") ->
+                    PandaPlaybackState866.FAILED
+                playbackStarted -> PandaPlaybackState866.INTERRUPTED
+                else -> PandaPlaybackState866.CANCELLED
+            }
+            Log.i("SGPanda866","PLAYBACK_${state.name} key=${current?.key} reason=$reason wasStarted=$playbackStarted")
+            notifyCurrent(state,reason)
+        }
+        // Invalidate async PCM/MediaPlayer callbacks before releasing resources.
         generation++;current=null;previewing=false
+        playbackObserver=null;playbackStarted=false
         preparation?.cancel(true);preparation=null
         val old=player;player=null;runCatching{old?.release()}
         waveFile?.delete();waveFile=null
         if(owner===this)owner=null
         if(focusHeld){focusHeld=false;runCatching{manager.abandonAudioFocusRequest(focus)}}
     }
-    override fun close(){stop();closed=true;executor.shutdownNow()}
+    override fun close(){stop("session-closed");closed=true;executor.shutdownNow()}
 }
 /** Delivery events use the same controller, scoped to MainActivity's foreground
  * lifetime. The navigation activity has its own controller and MainActivity

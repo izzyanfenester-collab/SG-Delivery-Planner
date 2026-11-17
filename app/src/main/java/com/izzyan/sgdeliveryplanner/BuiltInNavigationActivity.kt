@@ -277,6 +277,38 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
                                     color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                                 Text("km/h", color = SGColors.Silver, fontSize = 11.sp)
+                                if(session.cameraPreferences.master &&
+                                    session.cameraPreferences.speedLimitDisplay){
+                                    Text("LIMIT: NOT VERIFIED",color=SGColors.Silver,
+                                        fontSize=9.sp,maxLines=1)
+                                }
+                            }
+                        }
+                    }
+                    session.upcomingEnforcementCamera?.let { camera ->
+                        if(session.cameraPreferences.master) {
+                            Surface(color=PremiumNavy.copy(alpha=0.90f),
+                                shape=RoundedCornerShape(8.dp),
+                                border=BorderStroke(1.dp,SGColors.Gold.copy(alpha=0.7f))) {
+                                Column(Modifier.widthIn(max=190.dp)
+                                    .padding(horizontal=8.dp,vertical=6.dp)) {
+                                    Text(when(camera.camera.category){
+                                        "RED_LIGHT_CAMERA"->"RED-LIGHT CAMERA"
+                                        "MOBILE_ENFORCEMENT_LOCATION"->"MOBILE CAMERA LOCATION"
+                                        "POLICE_LASER_LOCATION"->"POLICE LASER LOCATION"
+                                        "AVERAGE_SPEED_ZONE"->"AVERAGE SPEED ZONE"
+                                        else->"SPEED CAMERA"
+                                    },color=SGColors.Gold,fontSize=10.sp,
+                                        fontWeight=FontWeight.Bold,maxLines=1)
+                                    Text(if(camera.directionConfirmed)
+                                        "${camera.routeMetresAhead.toInt()}m along route"
+                                        else "Direction not verified",
+                                        color=Color.White,fontSize=10.sp,maxLines=1)
+                                    if(!camera.directionConfirmed){
+                                        Text("Map location only · no voice alert",
+                                            color=SGColors.Silver,fontSize=9.sp,maxLines=1)
+                                    }
+                                }
                             }
                         }
                     }
@@ -351,6 +383,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             if (session.threeDimensional) "3D" else "2D"
                         ) { session.setDimension(it == "3D") }
                         NavigationVoiceSettings(session)
+                        CameraSafetySettingsPanel(session)
                         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("Smart Auto Zoom", Modifier.weight(1f), color = SGColors.White)
@@ -560,6 +593,161 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         trafficState = LocalTrafficState.EMPTY
     }
     var mapMessage by mutableStateOf<String?>(null)
+    private val cameraStore=CameraSafetyStore(context)
+    private val cameraPrefsStore=CameraSafetyPrefs(context)
+    private val cameraVoicePlanner=CameraVoicePlanner865()
+    // Short-lived session token only; never persist raw location history.
+    private val cameraAudioSession866=java.lang.Long.toHexString(SystemClock.elapsedRealtimeNanos())
+
+    private var lastCameraScanMs=0L
+    var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
+    var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
+    var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
+    var cameraLastUpdated by mutableStateOf("Never"); private set
+    var cameraRefreshMessage by mutableStateOf<String?>(null); private set
+    var cameraVoiceDiagnostic by mutableStateOf("No active camera check yet"); private set
+    var cameraRefreshBusy by mutableStateOf(false); private set
+    var upcomingEnforcementCamera by mutableStateOf<CameraApproach?>(null); private set
+    var cameraMarkerBucket by mutableStateOf(""); private set
+    val cameraAudioAvailable get()=voiceAudio.available209
+    fun updateCameraPreferences(newPrefs:CameraAlertPreferences){
+        cameraPreferences=newPrefs;cameraPrefsStore.save(newPrefs)
+        if(!newPrefs.master)upcomingEnforcementCamera=null
+    }
+    private suspend fun loadCameraStore() {
+        val pair=withContext(Dispatchers.IO) {
+            cameraStore.ensureBundled()
+            cameraStore.cameras() to cameraStore.metadata()
+        }
+        enforcementCameras=pair.first
+        cameraDatabaseVersion=pair.second.first
+        cameraLastUpdated=pair.second.second
+    }
+    suspend fun refreshCameraSnapshot(){
+        if(cameraRefreshBusy)return
+        cameraRefreshBusy=true
+        try {
+            withContext(Dispatchers.IO) { cameraStore.replace(CameraSafetyRemote.download()) }
+            loadCameraStore()
+            voiceAudio.stopObsoleteCameraForRouteChange()
+            cameraVoicePlanner.reset()
+            cameraRefreshMessage="Camera snapshot verified and updated."
+        }catch(e:Exception){
+            cameraRefreshMessage="Camera update not available; retaining previous verified offline snapshot."
+        }finally{cameraRefreshBusy=false}
+    }
+    private fun scanCameraSafety(fix:Location,now:Long) {
+        cameraMarkerBucket="${(fix.latitude*100).toInt()}:${(fix.longitude*100).toInt()}"
+        if(now-lastCameraScanMs<1000) return
+        lastCameraScanMs=now
+        if(!cameraPreferences.master) {
+            cameraVoiceDiagnostic="Master Camera Alerts is OFF"
+            upcomingEnforcementCamera=null
+            return
+        }
+        if(offRoute || route==null || shape.size<2) {
+            cameraVoiceDiagnostic="Waiting for active GPS navigation route (or rerouting)"
+            upcomingEnforcementCamera=null
+            return
+        }
+        val currentRoad=street?.takeIf{it.isNotBlank()}
+            ?:cameraRoadName?.takeIf{it.isNotBlank()}
+        val upcoming=route?.legs?.firstOrNull()?.steps.orEmpty()
+            .drop((cameraManeuverIndex-1).coerceAtLeast(0))
+            .take(12).mapNotNull{it.name}
+        val reliableBearing=fix.bearing.takeIf {
+            fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees<=20f)
+        }?.toDouble()
+        val bearingAccuracy=fix.bearingAccuracyDegrees.takeIf {
+            fix.hasBearingAccuracy() && it.isFinite()
+        }
+        val approaches=CameraApproachLogic.find(
+            GpsPoint(fix.latitude,fix.longitude),shape,currentRoad,upcoming,fix.accuracy,
+            enforcementCameras,fix.speed.takeIf{fix.hasSpeed()},
+            reliableBearing,bearingAccuracy)
+            .filter { cameraPreferences.categoryEnabled(it.camera.category) }
+        upcomingEnforcementCamera=approaches.firstOrNull()
+        cameraVoicePlanner.observeVisible(approaches,now)
+        if(approaches.isEmpty()) {
+            cameraVoiceDiagnostic=if(currentRoad.isNullOrBlank())
+                "Waiting for matched road name from navigation"
+            else "No camera matched current road, route and GPS position"
+            return
+        }
+        if(muted || !cameraPreferences.voice) {
+            cameraVoiceDiagnostic="GPS voice or Camera Voice is OFF"
+            return
+        }
+        if(!cameraAudioAvailable) {
+            cameraVoiceDiagnostic="209-clip Panda Warrior voice assets unavailable"
+            return
+        }
+        var reason="Camera published nearby; direction not confirmed for voice"
+        for(approach in approaches) {
+            val planned=cameraVoicePlanner.due(
+                approach,cameraPreferences,!muted,cameraAudioAvailable,turnMeters,
+                fix.speed.takeIf{fix.hasSpeed()})
+            if(planned==null) {
+                reason=when {
+                    (turnMeters?:Double.MAX_VALUE)<160.0 ->
+                        "Urgent junction instruction has priority over camera voice"
+                    !approach.directionConfirmed && !approach.genericSafetyEligible ->
+                        "Camera direction unverified; need reliable GPS heading/road match"
+                    else -> "Camera warning already played, not yet due, or safety-gated"
+                }
+                continue
+            }
+            if(planned.clipId !in voiceAudio.cameraPack.clips) {
+                cameraVoiceDiagnostic="Recorded clip missing: ${planned.clipId}"
+                android.util.Log.w("SGCamera865Voice",
+                    "missing id=${planned.cameraId} clip=${planned.clipId}")
+                continue
+            }
+            val candidateId=planned.cameraId
+            val accepted=voiceAudio.play(planned.phrase) { playback ->
+                cameraVoicePlanner.playbackEvent(planned,playback)
+                val status=playback.state.name
+                android.util.Log.i("SGCamera866",
+                    "session=$cameraAudioSession866 camera=$candidateId " +
+                    "category=${planned.category} stage=${planned.stage} " +
+                    "clip=${planned.clipId}.mp3 playback=$status " +
+                    "reason=${playback.reason} timestamp=${playback.elapsedMs}")
+                cameraVoiceDiagnostic=when(playback.state) {
+                    PandaPlaybackState866.STARTED ->
+                        "STARTED: ${planned.clipId}.mp3 on Android MediaPlayer"
+                    PandaPlaybackState866.COMPLETED ->
+                        "COMPLETED: ${planned.clipId}.mp3"
+                    PandaPlaybackState866.FAILED ->
+                        "FAILED: ${planned.clipId}.mp3 (${playback.reason}); will retry if still ahead"
+                    PandaPlaybackState866.CANCELLED,
+                    PandaPlaybackState866.INTERRUPTED ->
+                        "INTERRUPTED: ${planned.clipId}.mp3 (${playback.reason}); will retry when safe"
+                }
+            }
+            android.util.Log.d("SGCamera866",
+                "session=$cameraAudioSession866 camera=${planned.cameraId} " +
+                "category=${planned.category} publishedRoad=${approach.camera.road} " +
+                "publishedDirection=${approach.camera.directionText} currentRoad=$currentRoad " +
+                "directionConfirmed=${approach.directionConfirmed} " +
+                "genericSafety=${approach.genericSafetyEligible} " +
+                "previousDistance=${planned.previousMetresAhead?.toInt()}m " +
+                "cameraRouteDistance=${planned.metresAhead.toInt()}m " +
+                "threshold=${planned.warningThresholdMetres?.toInt()}m " +
+                "crossed=${planned.crossedThreshold} " +
+                "event=GENERATED clip=${planned.clipId}.mp3 accepted=$accepted " +
+                "audioPriority=${voiceAudio.activePriority} " +
+                "controllerStarted=${voiceAudio.isPlaybackStarted}")
+            if(accepted) {
+                // Only a pending request until MediaPlayer.start() confirms real playback.
+                cameraVoicePlanner.markRequested(planned)
+                cameraVoiceDiagnostic="PENDING: ${planned.clipId}.mp3; waiting for Android playback STARTED"
+                return
+            }
+            reason="DEFERRED: camera audio busy/priority/focus; rechecking next GPS fix"
+        }
+        cameraVoiceDiagnostic=reason
+    }
+
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
 
@@ -641,18 +829,28 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         voiceAudio.play(VoicePhrase("preview", VoicePriority.PREVIEW,
             PandaVoiceMapper.composeAtDistance("turn","right","Turn right",null,NavigationPanelCue(NavigationSign.TURN_RIGHT),3000).map { VoicePart(it,"Preview") }))
     }
+    fun previewCameraVoice(clipId:String) {
+        if(!active || muted || !cameraAudioAvailable || clipId !in CameraVoiceAssetIds865.ALL) return
+        if(clipId !in voiceAudio.cameraPack.clips) return
+        voiceAudio.play(VoicePhrase("preview-camera-$clipId",VoicePriority.PREVIEW,
+            listOf(VoicePart(clipId,"Authentic Panda Warrior V2 camera recording"))))
+    }
     fun stopVoicePreview()=voiceAudio.stopPreview()
     private var requestJob: Job? = null
     private var lastFix = 0L
     private var scope: CoroutineScope? = null
 
     init {
+        CameraSafetyUpdateScheduler.schedule(context)
         sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute == route) updateProgress(p) } }
         voiceAudio.setVolume(voiceVolume)
     }
 
     suspend fun run(): Unit = coroutineScope {
         gpsModePreferences.voice(); voiceVolume = gpsModePreferences.voiceVolume(); voiceAudio.setVolume(voiceVolume)
+        try { loadCameraStore() } catch (_:Exception) {
+            cameraRefreshMessage="No validated camera snapshot available."
+        }
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
@@ -690,6 +888,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     return@collect
                 }
                 lastFix = now; location = fix
+                scanCameraSafety(fix,now)
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
@@ -765,6 +964,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         // clear the newer request's loading state or apply its route/signs.
         val id=requestGate.begin(fix)
         requestJob?.cancel()
+        upcomingEnforcementCamera=null
+        voiceAudio.stopObsoleteCameraForRouteChange()
+        cameraVoicePlanner.reset()
         reroute.requested(now); loading=true
         message=if(decision!=null || offRoute) "Recalculating route…" else null
         val trace=decision?.let { RerouteLatency(id,it.confirmingFixMs,now,SystemClock.elapsedRealtime()) }
@@ -919,7 +1121,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))) pandaGate.mark(index,phrase,distance)
         }
     }
-    override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }
+    override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close();cameraStore.close() }
 }
 
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.

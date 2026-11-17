@@ -3,7 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import java.util.Locale
 
 internal enum class NavigationVoice(val label:String) { PANDA("Panda Warrior V2 – English") }
-internal enum class VoicePriority(val rank:Int) { PREVIEW(0), CHARACTER(1), STATUS(2), ADVANCE(3), CRITICAL(4) }
+internal enum class VoicePriority(val rank:Int) { PREVIEW(0), CHARACTER(1), STATUS(2), CAMERA(3), ADVANCE(4), CRITICAL(5) }
 internal data class VoicePart(val clip:String,val description:String)
 internal data class VoicePhrase(val key:String,val priority:VoicePriority,val parts:List<VoicePart>)
 internal data class PandaFollowing(val type:String?,val modifier:String?,val text:String?)

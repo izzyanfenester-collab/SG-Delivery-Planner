@@ -1,0 +1,131 @@
+name: Build and publish B865 Singapore Enforcement Camera Safety Alerts TESTING
+on:
+  push:
+    branches: [feature/build-865-camera-safety-testing]
+    paths: ['app/**','.github/workflows/build-865-camera-safety-testing.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b865-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: python3 scripts/build_postal_seed.py
+      - name: Verify validated SPF offline camera snapshot
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          data=json.loads(pathlib.Path('app/src/main/assets/sg_enforcement_cameras.json').read_text())
+          assert data['schema_version']==1 and data['record_count']==341
+          assert data['published_record_counts']=={
+              'RED_LIGHT_CAMERA':241,'FIXED_SPEED_CAMERA':20,
+              'LTA_SPEED_CAMERA':13,'MOBILE_ENFORCEMENT_LOCATION':5,
+              'AVERAGE_SPEED_ZONE':12,'POLICE_LASER_LOCATION':50}
+          assert all(x['speed_limit_kmh'] is None and x['direction_bearing'] is None
+                     for x in data['cameras'])
+          print('Verified B865 offline SPF camera snapshot: 341 location records, no fabricated limits')
+          PY
+
+      - name: Import approved voice assets from verified B857 FIXED APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/b857"
+          gh release download v1.4.45-b857 --pattern SG-Delivery-B857-Official.apk --dir "$RUNNER_TEMP/b857"
+          echo "f5d215ef9ca67f603c45da61f553254953fd2248a5a0a16c449c479f47467819  $RUNNER_TEMP/b857/SG-Delivery-B857-Official.apk" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile,os,pathlib,json
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'b857/SG-Delivery-B857-Official.apk'
+          root='assets/voicepacks/panda_warrior_v2/'
+          with zipfile.ZipFile(p) as z:
+              m=json.loads(z.read(root+'manifest.json'))
+              assert len(m['clips'])==185
+              for n in z.namelist():
+                  if n.startswith(root) and not n.endswith('/'):
+                      dest=pathlib.Path('app/src/main')/n
+                      dest.parent.mkdir(parents=True,exist_ok=True)
+                      dest.write_bytes(z.read(n))
+          PY
+      - name: Confirm original 185 Panda V2 clips and honest camera pack status
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          path=pathlib.Path('app/src/main/assets/voicepacks/panda_warrior_v2/manifest.json')
+          originals=json.loads(path.read_text())['clips']
+          assert len(originals)==185
+          other=json.loads(pathlib.Path('app/src/main/assets/voicepacks/panda_warrior_camera/manifest.json').read_text())
+          assert other['status']=='AUTHENTIC_CAMERA_RECORDINGS_NOT_PROVIDED'
+          print('Original 185 Panda V2 recordings intact. Camera voice recordings not available; NO TTS substitute.')
+          PY
+      - name: Test, build and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug lintDebug
+      - name: Verify isolated testing package and native alignment
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          mkdir -p dist
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b865test' versionCode='69' versionName='1.4.53-b865-testing'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/alignment.txt
+          tail -1 dist/alignment.txt
+          "$bt/apksigner" verify --verbose "$apk"
+          python3 - <<'PY'
+          import os,zipfile,json,hashlib,pathlib
+          root='assets/voicepacks/panda_warrior_v2/'
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as a, zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP'])/'b857/SG-Delivery-B857-Official.apk') as b:
+              assert a.testzip() is None
+              files=[n for n in b.namelist() if n.startswith(root) and not n.endswith('/')]
+              assert len(json.loads(a.read(root+'manifest.json'))['clips'])==185
+              assert json.loads(a.read('assets/sg_enforcement_cameras.json'))['record_count']==341
+              assert all(a.read(n)==b.read(n) for n in files)
+              assert any(n.startswith('lib/arm64-v8a/') for n in a.namelist())
+              assert any(n.startswith('lib/armeabi-v7a/') for n in a.namelist())
+          PY
+          cp "$apk" dist/SG-Delivery-B865-TESTING.apk
+          sha256sum dist/SG-Delivery-B865-TESTING.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B865-TESTING-APK
+          path: dist/SG-Delivery-B865-TESTING.apk
+          if-no-files-found: error
+      - name: Publish isolated camera-safety TESTING prerelease only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.53-b865-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::B865 testing tag already exists; do not overwrite silently"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B865-TESTING.apk \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "SG Delivery #865 TESTING – SPF Camera Safety" \
+            --notes "TESTING ONLY; NOT OFFICIAL. Bundles validated SPF 341 published camera location records (241 red-light +100 other speed categories) with provenance, offline SQLite storage, distinct camera icons, safety settings and conservative direction/route matching. Camera-specific posted speed limits remain NULL until independently verified. Authentic Panda Warrior camera-warning recordings are NOT supplied, so camera voice warnings are NOT enabled; existing 185 Panda V2 navigation clips preserved. No fake TTS. The package .b865test is isolated; B864 Official remains untouched. Road and device acceptance tests are still required."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B865-verification-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
