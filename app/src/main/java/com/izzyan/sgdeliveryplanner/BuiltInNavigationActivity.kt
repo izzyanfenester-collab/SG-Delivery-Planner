@@ -351,6 +351,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             if (session.threeDimensional) "3D" else "2D"
                         ) { session.setDimension(it == "3D") }
                         NavigationVoiceSettings(session)
+                        CameraSafetySettingsPanel(session)
                         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("Smart Auto Zoom", Modifier.weight(1f), color = SGColors.White)
@@ -560,6 +561,75 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         trafficState = LocalTrafficState.EMPTY
     }
     var mapMessage by mutableStateOf<String?>(null)
+    private val cameraStore=CameraSafetyStore(context)
+    private val cameraPrefsStore=CameraSafetyPrefs(context)
+    private val cameraAlertGate=CameraAlertGate()
+    private var lastCameraScanMs=0L
+    var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
+    var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
+    var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
+    var cameraLastUpdated by mutableStateOf("Never"); private set
+    var cameraRefreshMessage by mutableStateOf<String?>(null); private set
+    var cameraRefreshBusy by mutableStateOf(false); private set
+    var upcomingEnforcementCamera by mutableStateOf<CameraApproach?>(null); private set
+    var cameraMarkerBucket by mutableStateOf(""); private set
+    val cameraAudioAvailable get()=voiceAudio.cameraPack.available
+    fun updateCameraPreferences(newPrefs:CameraAlertPreferences){
+        cameraPreferences=newPrefs;cameraPrefsStore.save(newPrefs)
+        if(!newPrefs.master)upcomingEnforcementCamera=null
+    }
+    private suspend fun loadCameraStore() {
+        val pair=withContext(Dispatchers.IO) {
+            cameraStore.ensureBundled()
+            cameraStore.cameras() to cameraStore.metadata()
+        }
+        enforcementCameras=pair.first
+        cameraDatabaseVersion=pair.second.first
+        cameraLastUpdated=pair.second.second
+    }
+    suspend fun refreshCameraSnapshot(){
+        if(cameraRefreshBusy)return
+        cameraRefreshBusy=true
+        try {
+            withContext(Dispatchers.IO) { cameraStore.replace(CameraSafetyRemote.download()) }
+            loadCameraStore()
+            cameraAlertGate.reset()
+            cameraRefreshMessage="Camera snapshot verified and updated."
+        }catch(e:Exception){
+            cameraRefreshMessage="Camera update not available; retaining previous verified offline snapshot."
+        }finally{cameraRefreshBusy=false}
+    }
+    private fun scanCameraSafety(fix:Location,now:Long) {
+        cameraMarkerBucket="${(fix.latitude*100).toInt()}:${(fix.longitude*100).toInt()}"
+        if(now-lastCameraScanMs<2500) return
+        lastCameraScanMs=now
+        if(!cameraPreferences.master || offRoute || route==null || shape.size<2){
+            upcomingEnforcementCamera=null;return
+        }
+        val steps=route?.legs?.firstOrNull()?.steps.orEmpty()
+        val upcoming=steps.drop((cameraManeuverIndex-1).coerceAtLeast(0))
+            .take(5).mapNotNull{it.name}
+        val candidates=CameraApproachLogic.find(
+            GpsPoint(fix.latitude,fix.longitude),shape,street,upcoming,fix.accuracy,
+            enforcementCameras,fix.speed.takeIf{fix.hasSpeed()})
+            .filter { cameraPreferences.categoryEnabled(it.camera.category) }
+        upcomingEnforcementCamera=candidates.firstOrNull()
+        val first=candidates.firstOrNull{it.alertAllowed} ?: return
+        if(!cameraPreferences.voice || muted || !cameraAudioAvailable || 
+            (turnMeters?:Double.MAX_VALUE)<160.0)return
+        val clip=when(first.camera.category){
+            "RED_LIGHT_CAMERA"->"camera_red_light_ahead"
+            "MOBILE_ENFORCEMENT_LOCATION"->"camera_mobile_location"
+            "POLICE_LASER_LOCATION"->"camera_police_laser_location"
+            "AVERAGE_SPEED_ZONE"->"camera_average_zone_ahead"
+            else->"camera_speed_ahead"
+        }
+        if(clip !in voiceAudio.cameraPack.clips)return
+        if(cameraAlertGate.shouldPlay(first,true)) {
+            voiceAudio.play(VoicePhrase("camera-${first.camera.id}",VoicePriority.CAMERA,
+                listOf(VoicePart(clip,"Published enforcement camera ahead"))))
+        }
+    }
     var fuelPreview by mutableStateOf<FuelStation?>(null); private set
     val fuelStations = FuelStationClient()
 
@@ -647,12 +717,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var scope: CoroutineScope? = null
 
     init {
+        CameraSafetyUpdateScheduler.schedule(context)
         sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute == route) updateProgress(p) } }
         voiceAudio.setVolume(voiceVolume)
     }
 
     suspend fun run(): Unit = coroutineScope {
         gpsModePreferences.voice(); voiceVolume = gpsModePreferences.voiceVolume(); voiceAudio.setVolume(voiceVolume)
+        try { loadCameraStore() } catch (_:Exception) {
+            cameraRefreshMessage="No validated camera snapshot available."
+        }
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
@@ -690,6 +764,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     return@collect
                 }
                 lastFix = now; location = fix
+                scanCameraSafety(fix,now)
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
@@ -765,6 +840,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         // clear the newer request's loading state or apply its route/signs.
         val id=requestGate.begin(fix)
         requestJob?.cancel()
+        upcomingEnforcementCamera=null
+        cameraAlertGate.reset()
         reroute.requested(now); loading=true
         message=if(decision!=null || offRoute) "Recalculating route…" else null
         val trace=decision?.let { RerouteLatency(id,it.confirmingFixMs,now,SystemClock.elapsedRealtime()) }
@@ -919,7 +996,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))) pandaGate.mark(index,phrase,distance)
         }
     }
-    override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close() }
+    override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close();cameraStore.close() }
 }
 
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
