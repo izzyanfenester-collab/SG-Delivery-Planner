@@ -277,6 +277,38 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
                                     color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                                 Text("km/h", color = SGColors.Silver, fontSize = 11.sp)
+                                if(session.cameraPreferences.master &&
+                                    session.cameraPreferences.speedLimitDisplay){
+                                    Text("LIMIT: NOT VERIFIED",color=SGColors.Silver,
+                                        fontSize=9.sp,maxLines=1)
+                                }
+                            }
+                        }
+                    }
+                    session.upcomingEnforcementCamera?.let { camera ->
+                        if(session.cameraPreferences.master) {
+                            Surface(color=PremiumNavy.copy(alpha=0.90f),
+                                shape=RoundedCornerShape(8.dp),
+                                border=BorderStroke(1.dp,SGColors.Gold.copy(alpha=0.7f))) {
+                                Column(Modifier.widthIn(max=190.dp)
+                                    .padding(horizontal=8.dp,vertical=6.dp)) {
+                                    Text(when(camera.camera.category){
+                                        "RED_LIGHT_CAMERA"->"RED-LIGHT CAMERA"
+                                        "MOBILE_ENFORCEMENT_LOCATION"->"MOBILE CAMERA LOCATION"
+                                        "POLICE_LASER_LOCATION"->"POLICE LASER LOCATION"
+                                        "AVERAGE_SPEED_ZONE"->"AVERAGE SPEED ZONE"
+                                        else->"SPEED CAMERA"
+                                    },color=SGColors.Gold,fontSize=10.sp,
+                                        fontWeight=FontWeight.Bold,maxLines=1)
+                                    Text(if(camera.directionConfirmed)
+                                        "${camera.routeMetresAhead.toInt()}m along route"
+                                        else "Direction not verified",
+                                        color=Color.White,fontSize=10.sp,maxLines=1)
+                                    if(!camera.directionConfirmed){
+                                        Text("Map location only · no voice alert",
+                                            color=SGColors.Silver,fontSize=9.sp,maxLines=1)
+                                    }
+                                }
                             }
                         }
                     }
