@@ -1,0 +1,16 @@
+name: B865 SPF source inspection TESTING
+on:
+  push:
+    branches: [feature/build-865-spf-camera-alerts-testing]
+    paths: ['scripts/inspect_spf865.py','.github/workflows/inspect-spf865-testing.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check requests beautifulsoup4 lxml
+      - run: python3 scripts/inspect_spf865.py
