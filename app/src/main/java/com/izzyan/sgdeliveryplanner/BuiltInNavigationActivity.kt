@@ -596,6 +596,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val cameraStore=CameraSafetyStore(context)
     private val cameraPrefsStore=CameraSafetyPrefs(context)
     private val cameraVoicePlanner=CameraVoicePlanner865()
+    // Short-lived session token only; never persist raw location history.
+    private val cameraAudioSession866=java.lang.Long.toHexString(SystemClock.elapsedRealtimeNanos())
+
     private var lastCameraScanMs=0L
     var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
     var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
@@ -626,6 +629,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         try {
             withContext(Dispatchers.IO) { cameraStore.replace(CameraSafetyRemote.download()) }
             loadCameraStore()
+            voiceAudio.stopObsoleteCameraForRouteChange()
             cameraVoicePlanner.reset()
             cameraRefreshMessage="Camera snapshot verified and updated."
         }catch(e:Exception){
@@ -634,7 +638,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
     private fun scanCameraSafety(fix:Location,now:Long) {
         cameraMarkerBucket="${(fix.latitude*100).toInt()}:${(fix.longitude*100).toInt()}"
-        if(now-lastCameraScanMs<2500) return
+        if(now-lastCameraScanMs<1000) return
         lastCameraScanMs=now
         if(!cameraPreferences.master) {
             cameraVoiceDiagnostic="Master Camera Alerts is OFF"
@@ -663,6 +667,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             reliableBearing,bearingAccuracy)
             .filter { cameraPreferences.categoryEnabled(it.camera.category) }
         upcomingEnforcementCamera=approaches.firstOrNull()
+        cameraVoicePlanner.observeVisible(approaches,now)
         if(approaches.isEmpty()) {
             cameraVoiceDiagnostic=if(currentRoad.isNullOrBlank())
                 "Waiting for matched road name from navigation"
@@ -698,20 +703,47 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     "missing id=${planned.cameraId} clip=${planned.clipId}")
                 continue
             }
-            val accepted=voiceAudio.play(planned.phrase)
-            android.util.Log.d("SGCamera865Voice",
-                "id=${planned.cameraId} category=${planned.category} " +
-                "direction=${approach.directionConfirmed} generic=${approach.genericSafetyEligible} " +
-                "road=$currentRoad routeMetres=${planned.metresAhead.toInt()} " +
-                "stage=${planned.stage} clip=${planned.clipId}.mp3 scheduled=$accepted")
+            val candidateId=planned.cameraId
+            val accepted=voiceAudio.play(planned.phrase) { playback ->
+                cameraVoicePlanner.playbackEvent(planned,playback)
+                val status=playback.state.name
+                android.util.Log.i("SGCamera866",
+                    "session=$cameraAudioSession866 camera=$candidateId " +
+                    "category=${planned.category} stage=${planned.stage} " +
+                    "clip=${planned.clipId}.mp3 playback=$status " +
+                    "reason=${playback.reason} timestamp=${playback.elapsedMs}")
+                cameraVoiceDiagnostic=when(playback.state) {
+                    PandaPlaybackState866.STARTED ->
+                        "STARTED: ${planned.clipId}.mp3 on Android MediaPlayer"
+                    PandaPlaybackState866.COMPLETED ->
+                        "COMPLETED: ${planned.clipId}.mp3"
+                    PandaPlaybackState866.FAILED ->
+                        "FAILED: ${planned.clipId}.mp3 (${playback.reason}); will retry if still ahead"
+                    PandaPlaybackState866.CANCELLED,
+                    PandaPlaybackState866.INTERRUPTED ->
+                        "INTERRUPTED: ${planned.clipId}.mp3 (${playback.reason}); will retry when safe"
+                }
+            }
+            android.util.Log.d("SGCamera866",
+                "session=$cameraAudioSession866 camera=${planned.cameraId} " +
+                "category=${planned.category} publishedRoad=${approach.camera.road} " +
+                "publishedDirection=${approach.camera.directionText} currentRoad=$currentRoad " +
+                "directionConfirmed=${approach.directionConfirmed} " +
+                "genericSafety=${approach.genericSafetyEligible} " +
+                "previousDistance=${planned.previousMetresAhead?.toInt()}m " +
+                "cameraRouteDistance=${planned.metresAhead.toInt()}m " +
+                "threshold=${planned.warningThresholdMetres?.toInt()}m " +
+                "crossed=${planned.crossedThreshold} " +
+                "event=GENERATED clip=${planned.clipId}.mp3 accepted=$accepted " +
+                "audioPriority=${voiceAudio.activePriority} " +
+                "controllerStarted=${voiceAudio.isPlaybackStarted}")
             if(accepted) {
-                cameraVoicePlanner.markScheduled(planned)
-                cameraVoiceDiagnostic=if(planned.stage=="safety")
-                    "Panda general safety reminder scheduled; camera direction unverified"
-                else "Panda camera voice scheduled: ${planned.clipId}"
+                // Only a pending request until MediaPlayer.start() confirms real playback.
+                cameraVoicePlanner.markRequested(planned)
+                cameraVoiceDiagnostic="PENDING: ${planned.clipId}.mp3; waiting for Android playback STARTED"
                 return
             }
-            reason="Camera alert could not acquire audio (navigation voice priority or focus)"
+            reason="DEFERRED: camera audio busy/priority/focus; rechecking next GPS fix"
         }
         cameraVoiceDiagnostic=reason
     }
@@ -933,6 +965,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         val id=requestGate.begin(fix)
         requestJob?.cancel()
         upcomingEnforcementCamera=null
+        voiceAudio.stopObsoleteCameraForRouteChange()
         cameraVoicePlanner.reset()
         reroute.requested(now); loading=true
         message=if(decision!=null || offRoute) "Recalculating route…" else null

@@ -223,7 +223,7 @@ internal object CameraApproachLogic {
             val projected=CameraRouteGeometry.project(camera.point,shape) ?: continue
             if(projected.lateralMetres>16.0)continue
             val ahead=projected.progressedMetres-vehicle.progressedMetres
-            if(ahead < -30.0 || ahead > 1600.0)continue
+            // No post-camera warning: never convert a behind-camera (-30m) into 0m ahead.\n            if(ahead < 25.0 || ahead > 1600.0)continue
             val direction=directionMatches(camera,projected.segmentBearing,upcomingRoads,records)
             val required=if(camera.isRedLight)300.0 else if(camera.isMobile)500.0
                 else if(camera.isAverage)600.0 else if((speedMps?:0f)>=20f)1000.0 else 500.0
