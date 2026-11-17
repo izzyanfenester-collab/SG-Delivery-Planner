@@ -351,7 +351,16 @@ internal fun NavigationMap(
                 // to the FULL target. The coordinator ignores identical GPS updates.
                 // MapLibre continues animating heading/position independently.
                 command?.zoom != null ->
-                    native.locationComponent.zoomWhileTracking(command.zoom, command.durationMs)
+                    native.locationComponent.zoomWhileTracking(
+                        command.zoom, command.durationMs,
+                        object : MapLibreMap.CancelableCallback {
+                            override fun onFinish() {
+                                cameraDirector.onNativeZoomResult(command.token, false)
+                            }
+                            override fun onCancel() {
+                                cameraDirector.onNativeZoomResult(command.token, true)
+                            }
+                        })
                 command?.pitch != null ->
                     native.locationComponent.tiltWhileTracking(command.pitch, command.durationMs)
                 // Padding shifts the vehicle lower so junction geometry is visible ahead.
@@ -373,6 +382,13 @@ internal fun NavigationMap(
         val native = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val component = native.locationComponent
+        // Manual Zoom / Route Overview / Smart Zoom OFF explicitly relinquish
+        // the previous native auto zoom, preventing any outstanding animation
+        // from fighting user camera controls. No change to route or GPS state.
+        if (session.zoomOverride != null || session.cameraMode != "follow" ||
+            !session.smartAutoZoomEnabled) {
+            component.cancelZoomWhileTrackingAnimation()
+        }
         when (session.cameraMode) {
             "follow" -> {
                 val fix = session.location

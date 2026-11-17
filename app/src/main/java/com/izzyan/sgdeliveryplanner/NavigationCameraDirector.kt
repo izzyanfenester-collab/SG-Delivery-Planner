@@ -3,6 +3,8 @@ package com.izzyan.sgdeliveryplanner
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sign
+import kotlin.math.roundToLong
 
 /** Route geometry preview: never inferred from an unverified street name.
  * Detects the first meaningful change of road bearing ahead of a matched
@@ -49,66 +51,137 @@ internal object NavigationCornerForecast {
 internal data class NavigationCameraCommand(
     val zoom: Double? = null,
     val pitch: Double? = null,
-    val durationMs: Long = 650L
+    val durationMs: Long = 650L,
+    val token: Long = 0L
 )
 
-/** B861: issue a single native, frame-interpolated MapLibre zoom animation to the
- * FULL target, never a series of incremental zoom commands. While running,
- * location/heading continue to be owned by the LocationComponent.
+/** B863 only: coordinate MapLibre's ONE native frame-interpolated zoom
+ * animation. The B860 six-state decision engine and B862 cap are untouched.
  *
- * A changed target retargets MapLibre from its actual current camera zoom,
- * without queueing zoom commands. Stable targets cannot restart on each GPS fix.
+ * Each GPS fix reports the ACTUAL camera position; equal targets are ignored
+ * while the SDK is animating. A small co-directional target change is deferred
+ * until the current animation ends to avoid unnecessary ease restarts.
+ *
+ * For real changes, duration is adapted to remaining distance and sampled
+ * camera velocity. Native MapLibre tracking retains location, bearing and
+ * puck animation ownership; no competing custom frame loop is introduced.
  */
 internal class CinematicZoomCoordinator {
     private var issuedTarget: Double? = null
     private var issuedAtMs: Long? = null
     private var issuedDurationMs: Long = 0L
+    private var lastSampleTimeMs: Long? = null
+    private var lastActualZoom: Double? = null
+    private var cameraVelocityLevelsPerSec = 0.0
+    private var sequence = 0L
+    private var nativeCompleted = false
+    private var nativeCancelled = false
 
     fun reset() {
         issuedTarget = null
         issuedAtMs = null
         issuedDurationMs = 0L
+        lastSampleTimeMs = null
+        lastActualZoom = null
+        cameraVelocityLevelsPerSec = 0.0
+        // Ignore callbacks from animations that were canceled by manual mode.
+        sequence++
+        nativeCompleted = false
+        nativeCancelled = false
+    }
+
+    /** Callbacks are bookkeeping only; never issue camera commands from them. */
+    fun onNativeResult(token: Long, cancelled: Boolean) {
+        if (token != sequence) return // stale callback from an earlier retarget
+        nativeCompleted = true
+        nativeCancelled = cancelled
     }
 
     fun isAnimating(nowMs: Long): Boolean {
         val start = issuedAtMs ?: return false
-        return nowMs >= start && nowMs - start < issuedDurationMs
+        return !nativeCompleted && nowMs >= start &&
+            nowMs - start < issuedDurationMs
+    }
+
+    private fun observeCamera(nowMs: Long, actualZoom: Double) {
+        val beforeMs = lastSampleTimeMs
+        val beforeZoom = lastActualZoom
+        if (beforeMs != null && beforeZoom != null) {
+            val elapsed = nowMs - beforeMs
+            if (elapsed in 70L..4_000L) {
+                val raw = ((actualZoom - beforeZoom) * 1000.0 / elapsed)
+                    .coerceIn(-6.0, 6.0)
+                cameraVelocityLevelsPerSec =
+                    (0.45 * cameraVelocityLevelsPerSec + 0.55 * raw)
+            } else if (elapsed > 4_000L || elapsed < 0L) {
+                cameraVelocityLevelsPerSec = 0.0
+            }
+        }
+        lastSampleTimeMs = nowMs
+        lastActualZoom = actualZoom
     }
 
     fun next(nowMs: Long, actualZoom: Double, target: SmartZoomTarget): NavigationCameraCommand? {
         if (!actualZoom.isFinite() || !target.zoom.isFinite()) return null
-        val deadZone = if (target.urgent) 0.10 else 0.20
-        val last = issuedTarget
-        val start = issuedAtMs
-        val differenceFromActual = abs(target.zoom - actualZoom)
+        observeCamera(nowMs, actualZoom)
+        val threshold = if (target.urgent) 0.10 else 0.20
+        val distance = abs(target.zoom - actualZoom)
+        val prior = issuedTarget
+        val started = issuedAtMs
+        val elapsed = if (started != null && nowMs >= started) nowMs - started else Long.MAX_VALUE
 
-        if (last != null && abs(last - target.zoom) < deadZone) {
-            // GPS updates during an existing native animation do NOT restart it.
-            // After completion, tolerate small residuals and avoid flickering.
-            if (isAnimating(nowMs) || differenceFromActual < 0.28) return null
-            // Recover if the SDK/system interrupted an animation unexpectedly.
-            if (start != null && nowMs >= start &&
-                nowMs - start < issuedDurationMs + 400L) return null
+        if (prior != null && abs(prior - target.zoom) < threshold) {
+            // Never restart an identical animation for each 1 Hz GPS fix.
+            if (isAnimating(nowMs) || distance < 0.28) return null
+            if (!nativeCancelled && elapsed < issuedDurationMs + 400L) return null
+            // Native transition was interrupted or ended short: recover once.
         } else {
-            if (differenceFromActual < deadZone) return null
-            // Normal changes are rate-limited, critical exit/junction targets are not.
-            if (!target.urgent && start != null && nowMs >= start &&
-                nowMs - start < 400L) return null
+            if (distance < threshold) return null
+            if (!target.urgent && elapsed < 400L) return null
+
+            // Tiny target drift in the SAME direction should never reset the
+            // SDK ease curve while it is moving. Finish, then correct residual.
+            if (!target.urgent && prior != null && isAnimating(nowMs) &&
+                abs(target.zoom - prior) <= 0.32 &&
+                (prior - actualZoom) * (target.zoom - actualZoom) > 0.0) return null
         }
 
-        val duration = when (target.mode) {
+        val base = when (target.mode) {
             SmartCameraMode.EXPRESSWAY_WIDE -> 2200L
             SmartCameraMode.POST_MANEUVER_WIDE -> 2200L
             SmartCameraMode.NORMAL_FOLLOW -> if (target.zoom < actualZoom) 1850L else 1500L
             SmartCameraMode.APPROACHING_MANEUVER -> if (target.urgent) 900L else 1350L
-            SmartCameraMode.CRITICAL_JUNCTION_FOCUS ->
-                if (differenceFromActual > 2.0) 700L else 550L
+            SmartCameraMode.CRITICAL_JUNCTION_FOCUS -> if (distance > 2.0) 700L else 550L
             SmartCameraMode.MANEUVER_TRANSITION -> 600L
         }
+        // Keep B862's full-range timing. Small corrections need less time:
+        // stretching 0.2 levels over 2.2s feels like a frozen camera.
+        val minDuration = if (target.urgent) 400L else 550L
+        var duration = if (distance >= 0.75) base else
+            (base * (0.50 + 0.50 * distance / 0.75)).roundToLong()
+                .coerceIn(minDuration, base)
+
+        // When target changes mid-flight in the SAME direction, use measured
+        // zoom speed as a duration reference so the transition doesn't suddenly
+        // become much faster/slower. Native SDK still controls easing frames.
+        val velocity = cameraVelocityLevelsPerSec
+        if (prior != null && isAnimating(nowMs) && distance >= 0.40 &&
+            velocity * (target.zoom - actualZoom) > 0.0 &&
+            abs(velocity) >= 0.22) {
+            val continuityMs = (distance / abs(velocity) * 1000.0)
+                .roundToLong().coerceAtLeast(minDuration)
+            duration = min(duration, continuityMs.coerceAtMost(base))
+        }
+        duration = duration.coerceIn(minDuration, 2500L)
+
         issuedTarget = target.zoom
         issuedAtMs = nowMs
         issuedDurationMs = duration
-        return NavigationCameraCommand(zoom = target.zoom, durationMs = duration)
+        nativeCompleted = false
+        nativeCancelled = false
+        sequence++
+        return NavigationCameraCommand(zoom = target.zoom, durationMs = duration,
+            token = sequence)
     }
 }
 
@@ -125,6 +198,11 @@ internal class NavigationCameraDirector {
     var focusFraction: Double = 0.44
         private set
     val mode: SmartCameraMode get() = smart.mode
+
+    /** MapLibre callback lifecycle, scoped to the latest native zoom only. */
+    fun onNativeZoomResult(token: Long, cancelled: Boolean) {
+        cinematic.onNativeResult(token, cancelled)
+    }
 
     @Suppress("UNUSED_PARAMETER")
     fun reset(zoom: Double? = null, pitch: Double? = null) {
