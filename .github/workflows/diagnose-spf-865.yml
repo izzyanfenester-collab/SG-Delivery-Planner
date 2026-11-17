@@ -1,0 +1,18 @@
+name: Diagnose SPF B865 data table format (testing only)
+on:
+  push:
+    branches: [feature/build-865-camera-safety-testing]
+    paths: ['scripts/diagnose_spf_html.py','.github/workflows/diagnose-spf-865.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install beautifulsoup4
+      - run: python3 scripts/diagnose_spf_html.py
