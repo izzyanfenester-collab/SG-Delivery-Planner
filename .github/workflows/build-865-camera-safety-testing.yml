@@ -85,7 +85,7 @@ jobs:
           apk=app/build/outputs/apk/debug/app-debug.apk
           bt="$ANDROID_HOME/build-tools/36.0.0"
           mkdir -p dist
-          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b865test' versionCode='68' versionName='1.4.53-b865-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b865test' versionCode='69' versionName='1.4.53-b865-testing'"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/alignment.txt
           tail -1 dist/alignment.txt
           "$bt/apksigner" verify --verbose "$apk"
