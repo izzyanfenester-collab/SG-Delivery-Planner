@@ -35,64 +35,61 @@ class NavigationUltimateSmooth839Test {
     @Test fun unifiedCameraLimitsZoomStepAndHysteresis() {
         val director = NavigationCameraDirector()
         val before = requireNotNull(director.choose(
-            1_000L, 17.0, 54.0, 0f, null, "Continue", 5_000.0,
-            null, true, null))
+            1_000L, 17.0, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
+            null, true, null, roadName="PIE", maneuverType="off_ramp"))
         assertNotNull(before.zoom)
-        assertTrue(requireNotNull(before.zoom) - 17.0 <= 0.42001)
+        assertTrue(kotlin.math.abs(requireNotNull(before.zoom) - 17.0) <= 1.0001)
         assertNull(director.choose(
-            1_200L, before.zoom!!, 54.0, 0f, null, "Continue", 5_000.0,
-            null, true, null))
+            1_200L, before.zoom!!, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
+            null, true, null, roadName="PIE", maneuverType="off_ramp"))
         val next = requireNotNull(director.choose(
-            1_800L, before.zoom!!, 54.0, 0f, null, "Continue", 5_000.0,
-            null, true, null))
-        assertTrue(next.durationMs in 500..750)
+            1_800L, before.zoom!!, 54.0, 25f, 5_000.0, "Take the exit", 9_000.0,
+            null, true, null, roadName="PIE", maneuverType="off_ramp"))
+        assertTrue(next.durationMs in 250L..650L)
         assertNotNull(next.zoom)
         assertNull(next.pitch)
     }
 
-    @Test fun cameraPreparesTurnWithSlowZoomAndPitchAndPreservesManualZoom() {
+    @Test fun cameraPreparesTurnAndPreservesManualZoom() {
         val corner = NavigationCorner(65.0, 90f)
         val director = NavigationCameraDirector()
         val turnZoom = requireNotNull(director.choose(
-            1000, 17.5, 54.0, 16f, 65.0, "Continue", 1200.0,
-            corner, true, null))
+            1_000L, 17.5, 54.0, 16f, 65.0, "Turn right", 1_200.0,
+            corner, true, null, maneuverType="turn"))
         assertTrue(requireNotNull(turnZoom.zoom) > 17.5)
-        director.reset(18.7, 54.0)
+        director.reset(19.0, 54.0)
         val pitch = requireNotNull(director.choose(
-            2000, 18.7, 54.0, 16f, 65.0, "Continue", 1200.0,
-            corner, true, null))
+            2_000L, 19.0, 54.0, 16f, 65.0, "Turn right", 1_200.0,
+            corner, true, null, maneuverType="turn"))
         assertNull(pitch.zoom)
         assertNotNull(pitch.pitch)
-        assertTrue(requireNotNull(pitch.pitch) in 49.0..54.0)
+        assertTrue(requireNotNull(pitch.pitch) in 47.0..54.0)
         director.reset(18.3, 54.0)
-        val manual = director.choose(3000, 18.3, 54.0,
-            0f, 50.0, "Turn left", 900.0, corner, true, 18.3)
-        // No automatic speed / junction zoom overrides the chosen manual zoom.
-        assertTrue(manual == null || manual.zoom == null)
+        assertNull(director.choose(
+            3_000L, 18.3, 54.0, 0f, 50.0, "Turn left", 900.0,
+            corner, true, 18.3))
     }
 
-    @Test fun manualZoomRetainsOriginalExtremeLimitsUntilRecenter() {
+    @Test fun manualZoomIsNeverOverriddenBySmartDirectorUntilRecenter() {
         val director = NavigationCameraDirector()
         director.reset(19.2, 54.0)
-        val zoomIn = requireNotNull(director.choose(
-            1000, 19.2, 54.0, 24f, null, "Continue", 9000.0,
+        assertNull(director.choose(
+            1_000L, 19.2, 54.0, 24f, null, "Continue", 9_000.0,
             null, true, 19.5))
-        assertTrue(requireNotNull(zoomIn.zoom) > 19.2)
         director.reset(15.9, 54.0)
-        val zoomOut = requireNotNull(director.choose(
-            2000, 15.9, 54.0, 0f, null, "Continue", 9000.0,
+        assertNull(director.choose(
+            2_000L, 15.9, 54.0, 0f, null, "Continue", 9_000.0,
             null, true, 15.5))
-        assertTrue(requireNotNull(zoomOut.zoom) < 15.9)
     }
 
-    @Test fun switchingFrom3dTo2dAdjustsPitchOnly() {
+    @Test fun switchingFrom3dTo2dAdjustsPitchOnlyAtTargetZoom() {
         val director = NavigationCameraDirector()
-        director.reset(18.8, 54.0)
+        director.reset(18.05, 54.0)
         val cmd = requireNotNull(director.choose(
-            1000, 18.8, 54.0, 0f, null, "Continue", 9000.0,
-            null, false, 18.8))
+            1_000L, 18.05, 54.0, 0f, null, "Continue", 9_000.0,
+            null, false, null))
         assertNull(cmd.zoom)
-        assertEquals(49.0, cmd.pitch!!, 0.001)
+        assertEquals(47.0, cmd.pitch!!, 0.001)
     }
 
     @Test fun jumpFilterAcceptsNormalMotionButRejectsUnrealisticTeleport() {

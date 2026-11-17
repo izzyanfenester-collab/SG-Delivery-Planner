@@ -85,15 +85,15 @@ internal class NavigationCameraDirector {
         corner: NavigationCorner?,
         threeDimensional: Boolean,
         manualZoom: Double?,
-        roadName: String?,
-        maneuverType: String?,
-        followingTurnMeters: Double?,
-        maneuverIndex: Int,
-        progressedMeters: Double?,
-        trustedMatch: Boolean,
-        gpsAccuracyMeters: Float?,
-        offRoute: Boolean,
-        smartEnabled: Boolean
+        roadName: String? = null,
+        maneuverType: String? = null,
+        followingTurnMeters: Double? = null,
+        maneuverIndex: Int = 0,
+        progressedMeters: Double? = null,
+        trustedMatch: Boolean = false,
+        gpsAccuracyMeters: Float? = null,
+        offRoute: Boolean = false,
+        smartEnabled: Boolean = true
     ): NavigationCameraCommand? {
         if (offRoute) { reset(currentZoom, currentPitch); return null }
         if (!smartEnabled || manualZoom != null || !currentZoom.isFinite() ||
