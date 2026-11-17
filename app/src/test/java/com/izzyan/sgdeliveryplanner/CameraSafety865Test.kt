@@ -3,8 +3,11 @@ package com.izzyan.sgdeliveryplanner
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /** B865 synthetic route-replay tests. Not a substitute for road/device verification. */
+@RunWith(RobolectricTestRunner::class)
 class CameraSafety865Test {
     private val p=GpsPoint(1.3000,103.8050)
     private val path=listOf(GpsPoint(1.3000,103.8000),GpsPoint(1.3000,103.8100))
