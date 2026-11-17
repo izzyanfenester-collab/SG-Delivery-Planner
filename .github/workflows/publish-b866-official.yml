@@ -1,0 +1,209 @@
+name: Publish verified SG Delivery B866 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b866-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b866-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Verify exact owner-approved B866 app source scope
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          expected={
+              'app/src/main/assets/sg_enforcement_cameras.json',
+              'app/src/main/assets/voicepacks/panda_warrior_camera/manifest.json',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/BuiltInNavigationActivity.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraSafetyCore.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraSafetyMapIcons.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraSafetySettingsUi.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraSafetyStore.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraVoiceAssetIds865.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraVoicePlanner865.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationMap.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationVoiceAudio.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/PandaVoiceMapper.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/CameraSafety865Test.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/CameraVoiceCritical866Test.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/CameraVoicePlanner865Test.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/CameraVoiceTriggerFix865Test.kt',
+          }
+          changed=set(subprocess.check_output(['git','diff','--name-only','52e5d6f39cc338f9b16f493e0d77637d7e34ad7f','HEAD','--','app/src'],text=True).splitlines())
+          assert changed==expected, f'B866 Official source scope mismatch: {changed ^ expected}'
+          print('B864-to-B866 owner-approved app source scope verified.')
+          PY
+          grep -F 'applicationId = "com.izzyan.sgdeliveryplanner"' app/build.gradle.kts
+          grep -F 'versionCode = 69; versionName = "1.4.54-b866"' app/build.gradle.kts
+          grep -F 'applicationIdSuffix = ".testing"' app/build.gradle.kts
+      - run: python3 scripts/build_postal_seed.py
+      - name: Import verified original Panda Warrior V2 from B857 Official FIXED
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/b857"
+          gh release download v1.4.45-b857 --pattern SG-Delivery-B857-Official.apk --dir "$RUNNER_TEMP/b857"
+          echo "f5d215ef9ca67f603c45da61f553254953fd2248a5a0a16c449c479f47467819  $RUNNER_TEMP/b857/SG-Delivery-B857-Official.apk" | sha256sum -c -
+          python3 - <<'PY'
+          import json, os, pathlib, zipfile
+          apk = pathlib.Path(os.environ['RUNNER_TEMP']) / 'b857/SG-Delivery-B857-Official.apk'
+          prefix = 'assets/voicepacks/panda_warrior_v2/'
+          with zipfile.ZipFile(apk) as z:
+              m = json.loads(z.read(prefix + 'manifest.json'))
+              assert len(m['clips']) == 185
+              assert z.testzip() is None
+              for name in z.namelist():
+                  if name.startswith(prefix) and not name.endswith('/'):
+                      path = pathlib.Path('app/src/main') / name
+                      path.parent.mkdir(parents=True, exist_ok=True)
+                      path.write_bytes(z.read(name))
+          PY
+      - name: Verify authentic user-supplied 209 clip ZIP
+        run: |
+          set -euo pipefail
+          file=voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+          test -s "$file"
+          echo "e8e3b56d9b0a9adc1d8b541134af8ac97905ba66e65e48336783f06e1a355c24  $file" | sha256sum -c -
+      - name: Install portable FFmpeg to convert original recorded camera MP3
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/panda-ffmpeg-venv"
+          "$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -m pip install --disable-pip-version-check -q imageio-ffmpeg==0.6.0
+          ffmpeg_exe=$("$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          test -x "$ffmpeg_exe"
+          mkdir -p "$RUNNER_TEMP/panda-ffmpeg-bin"
+          ln -s "$ffmpeg_exe" "$RUNNER_TEMP/panda-ffmpeg-bin/ffmpeg"
+          echo "$RUNNER_TEMP/panda-ffmpeg-bin" >> "$GITHUB_PATH"
+          "$ffmpeg_exe" -version | head -1
+      - name: Import authentic 24 camera MP3 and offline PCM with 185 clip identity check
+        run: |
+          set -euo pipefail
+          python3 scripts/install_panda209_camera_865.py voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+      - name: Full unit tests, lint and unsigned release compilation
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Restore original official JKS signing key securely
+        shell: bash
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SG_DELIVERY_KEYSTORE_BASE64 SG_DELIVERY_KEYSTORE_PASSWORD SG_DELIVERY_KEY_ALIAS SG_DELIVERY_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing protected signing secret: $key"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b866.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b866.jks"
+      - name: Align native libraries to 16 KB and sign with original Official identity
+        shell: bash
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$unsigned"
+          mkdir -p dist
+          "$bt/zipalign" -P 16 -f -v 4 "$unsigned" dist/b866-aligned-unsigned.apk >/dev/null
+          "$bt/apksigner" sign \
+            --ks "$RUNNER_TEMP/sg-delivery-b866.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" \
+            --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B866-Official.apk dist/b866-aligned-unsigned.apk
+          rm -f dist/b866-aligned-unsigned.apk
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B866-Official.apk | tee dist/signing-verification.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B866-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='69' versionName='1.4.54-b866'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B866-Official.apk | tail -1 | grep -F 'Verification successful'
+          python3 - <<'PY'
+          import zipfile, pathlib, json, os
+          nav='assets/voicepacks/panda_warrior_v2/'
+          cam='assets/voicepacks/panda_warrior_camera/'
+          apk=pathlib.Path('dist/SG-Delivery-B866-Official.apk')
+          b857=pathlib.Path(os.environ['RUNNER_TEMP'])/'b857/SG-Delivery-B857-Official.apk'
+          user=pathlib.Path('voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip')
+          with zipfile.ZipFile(apk) as a, zipfile.ZipFile(b857) as official, zipfile.ZipFile(user) as z:
+              assert a.testzip() is None and z.testzip() is None
+              navigation=json.loads(a.read(nav+'manifest.json'))['clips']
+              camera=json.loads(a.read(cam+'manifest.json'))['clips']
+              assert len(navigation)==185 and len(camera)==24
+              assert len({v['id'] for v in navigation+camera})==209
+              assert json.loads(a.read('assets/sg_enforcement_cameras.json'))['record_count']==341
+              for clip in navigation:
+                  assert a.read(nav+clip['file'])==official.read(nav+clip['file'])==z.read(clip['file']), clip['id']
+              for clip in camera:
+                  assert a.read(cam+clip['file'])==z.read(clip['file']), clip['id']
+                  pcm=a.read(cam+'audio_pcm/'+clip['id']+'.pcm')
+                  assert len(pcm)>10000 and len(pcm)%2==0, clip['id']
+              assert any(p.startswith('lib/arm64-v8a/') for p in a.namelist())
+              assert any(p.startswith('lib/armeabi-v7a/') for p in a.namelist())
+          print('B866 Official: 209 original Panda MP3, 24 offline camera PCM and 341 SPF published records confirmed.')
+          PY
+          sha256sum dist/SG-Delivery-B866-Official.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B866-Official-Verified-APK
+          path: dist/SG-Delivery-B866-Official.apk
+          if-no-files-found: error
+      - name: Publish approved stable release, never change B857 or testing releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.54-b866
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Official B866 release already exists: do not overwrite."
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B866-Official.apk \
+            --target "$GITHUB_SHA" --latest \
+            --title "SG Delivery Build #866 Official – Panda Warrior Camera Voice Critical Fix" \
+            --notes "Owner explicitly approved Build #866 TESTING merge to Official. Includes 341 SPF published camera records and 209 original ElevenLabs Panda Warrior MP3s (185 navigation plus 24 camera), offline PCM, route/direction-aware camera cues, MediaPlayer STARTED-vs-pending fix, retry after short interruptions and real GPS diagnostics. All existing premium GPS cinematic zoom, aggressive rerouting, route, delivery, payment and saved data preserved. The original Official Android app package and signing certificate are retained, versionCode 69. In-app Check for Update uses stable v1.4.54-b866 tag and SG-Delivery-B866-Official.apk. Camera speed-limit claims remain unverified unless sourced. Live in-car speaker/Bluetooth and on-road acceptance tests have NOT been completed."
+          gh release view "$tag" --json tagName,isPrerelease,isDraft,assets
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b866.jks"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B866-Official-CI-Verification
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/signing-verification.txt
