@@ -1,0 +1,114 @@
+name: Diagnose and repair B857 Android install
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-b857-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: repair-b857-install
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "build-tools;36.0.0"
+      - name: Download and diagnose original published APK and working B856
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p old previous fixed
+          gh release download v1.4.45-b857 --pattern SG-Delivery-B857-Official.apk --dir old
+          gh release download v1.4.44-b856 --pattern SG-Delivery-B856-Official.apk --dir previous
+          echo 'a961d7be6156b701c7da52508098a0247bf3dcbe8da897c13feac9832505b9da  old/SG-Delivery-B857-Official.apk' | sha256sum -c -
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          for f in old/*.apk previous/*.apk; do
+            echo "DIAGNOSIS: $f"
+            "$bt/apksigner" verify --verbose --print-certs "$f"
+            "$bt/aapt" dump badging "$f" | head -n 4
+            "$bt/aapt2" dump xmltree --file AndroidManifest.xml "$f" | grep -E 'extractNativeLibs|targetSdkVersion|debuggable|isSplitRequired' || true
+            "$bt/zipalign" -c -P 16 -v 4 "$f" > "$f.alignment" || true
+            grep -E 'BAD|Verification' "$f.alignment" | head -n 20 || true
+          done
+          python3 - <<'PY'
+          import zipfile,struct,glob
+          for p in glob.glob('old/*.apk')+glob.glob('previous/*.apk'):
+              with zipfile.ZipFile(p) as z, open(p,'rb') as f:
+                  print(p, 'CRC', z.testzip(), 'entries',len(z.infolist()))
+                  names=z.namelist(); assert len(names)==len(set(names))
+                  for i in z.infolist():
+                      if i.filename=='resources.arsc' or (i.filename.startswith('lib/') and i.filename.endswith('.so')):
+                          f.seek(i.header_offset); h=f.read(30)
+                          n,x=struct.unpack_from('<HH',h,26)
+                          off=i.header_offset+30+n+x
+                          print(i.filename,'compression',i.compress_type,'data offset',off,'4-byte',off%4,'16K',off%16384)
+          PY
+      - name: Repackage exact app payload, align all stored entries, and sign
+        env:
+          KS_STORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          KS_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+          KS_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export KS_PATH="$RUNNER_TEMP/b857-repair.jks"
+          trap 'rm -f "$KS_PATH"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS_PATH"
+          python3 - <<'PY'
+          import zipfile,copy,re,hashlib
+          src='old/SG-Delivery-B857-Official.apk'
+          def signature(n):
+              return bool(re.fullmatch(r'META-INF/(?:MANIFEST\.MF|[^/]+\.(?:SF|RSA|DSA|EC)|SIG-[^/]+)',n,re.I))
+          with zipfile.ZipFile(src) as a, zipfile.ZipFile('fixed/unsigned.apk','w',allowZip64=False) as b:
+              for i in a.infolist():
+                  if signature(i.filename): continue
+                  j=copy.copy(i); j.extra=b''; j.flag_bits=0
+                  if j.filename=='resources.arsc' or (j.filename.startswith('lib/') and j.filename.endswith('.so')):
+                      j.compress_type=zipfile.ZIP_STORED
+                  b.writestr(j,a.read(i))
+          PY
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/zipalign" -P 16 -f 4 fixed/unsigned.apk fixed/aligned.apk
+          "$bt/apksigner" sign --ks "$KS_PATH" --ks-key-alias "$KS_ALIAS" --ks-pass env:KS_STORE_PASSWORD --key-pass env:KS_KEY_PASSWORD --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out fixed/SG-Delivery-B857-Official.apk fixed/aligned.apk
+          f=fixed/SG-Delivery-B857-Official.apk
+          "$bt/zipalign" -c -P 16 -v 4 "$f" > fixed/alignment.txt
+          tail -n 1 fixed/alignment.txt
+          "$bt/apksigner" verify --verbose --print-certs "$f" | tee fixed/signer.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' fixed/signer.txt
+          "$bt/aapt" dump badging "$f" | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='61' versionName='1.4.45-b857'"
+          python3 - <<'PY'
+          import zipfile,hashlib,re,json
+          def hashes(p):
+              with zipfile.ZipFile(p) as z:
+                  assert z.testzip() is None
+                  return {n:hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if not re.fullmatch(r'META-INF/(?:MANIFEST\.MF|[^/]+\.(?:SF|RSA|DSA|EC)|SIG-[^/]+)',n,re.I)}
+          assert hashes('old/SG-Delivery-B857-Official.apk')==hashes('fixed/SG-Delivery-B857-Official.apk'), 'APK payload changed'
+          with zipfile.ZipFile('fixed/SG-Delivery-B857-Official.apk') as z:
+              assert len(json.loads(z.read('assets/voicepacks/panda_warrior_v2/manifest.json'))['clips'])==185
+          print('Every non-signature entry byte-identical; 185 voice clips preserved')
+          PY
+          sha256sum "$f"
+      - name: Replace invalid official APK with verified aligned and signed APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload v1.4.45-b857 fixed/SG-Delivery-B857-Official.apk --clobber
+          gh release view v1.4.45-b857 --json tagName,isDraft,isPrerelease,assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B857-Repaired-Official
+          path: fixed/SG-Delivery-B857-Official.apk
