@@ -14,9 +14,9 @@ from bs4 import BeautifulSoup
 SPEED_URL="https://www.police.gov.sg/Knowledge-Hub/Traffic/Traffic-Matters/Speed-Enforcement-Camera-Locations"
 RED_URL="https://www.police.gov.sg/knowledge-hub/traffic/traffic-matters/red-light-camera-locations"
 LTA_URL="https://www.lta.gov.sg/content/ltagov/en/getting_around/driving_in_singapore/driving_rules_and_regulations.html"
-COORD=re.compile(r'^\\s*(1\\.[0-9]+)\\s*,\\s*(10[34]\\.[0-9]+)\\s*$')
-DIRECTION=re.compile(r'\\s+(?:towards|twds|->)\\s+',re.IGNORECASE)
-JUNCTION=re.compile(r'\\s+by\\s+',re.IGNORECASE)
+COORD=re.compile(r'^\s*(1\.[0-9]+)\s*,\s*(10[34]\.[0-9]+)\s*$')
+DIRECTION=re.compile(r'\s+(?:towards|twds|->)\s+',re.IGNORECASE)
+JUNCTION=re.compile(r'\s+by\s+',re.IGNORECASE)
 DATES={'RED_LIGHT_CAMERA':'2026-07-01','FIXED_SPEED_CAMERA':None,'LTA_SPEED_CAMERA':'2025-07-07',
        'MOBILE_ENFORCEMENT_LOCATION':'2026-07-01','AVERAGE_SPEED_ZONE':'2025-07-07',
        'POLICE_LASER_LOCATION':'2026-07-29'}
@@ -143,7 +143,7 @@ if __name__=='__main__':
     out=pathlib.Path(args.output)
     data=build()
     out.parent.mkdir(parents=True,exist_ok=True)
-    out.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':'))+'\\n',encoding='utf-8')
+    out.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
     print('B865 validated',data['record_count'],'official SPF camera rows; by type:',data['published_record_counts'])
     print('SPF snapshot',data['database_version'],'refreshed',data['last_successful_refresh'])
     print('No numeric speed limits or unverified direction bearings assigned.')
