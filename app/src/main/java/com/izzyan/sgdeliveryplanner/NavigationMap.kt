@@ -60,6 +60,12 @@ internal fun NavigationMap(
     var traveledLine by remember { mutableStateOf<Polyline?>(null) }
     val routeProgress = remember { NavigationRouteProgressTracker() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
+    val enforcementMarkers=remember { mutableListOf<Marker>() }
+    val cameraIcons=remember(context) {
+        CameraSafetySnapshotParser.categories.associateWith {
+            CameraSafetyMapIcons.icon(context,it)
+        }
+    }
     // One camera director owns zoom/pitch transitions. MapLibre LocationComponent
     // owns interpolated heading/position, eliminating competing camera animators.
     val cameraDirector = remember { NavigationCameraDirector() }
@@ -262,6 +268,42 @@ internal fun NavigationMap(
                     .addAll(routePoints.map { LatLng(it.lat, it.lon) })
                     .color(color).width(15f))
             }
+        }
+    }
+
+    // B865 camera markers are a separate annotation layer, independent of the
+    // road line, traveled-line split and native cinematic camera animation.
+    // Refresh only on style change, new validated snapshot, icon toggle or ~1km tile change.
+    LaunchedEffect(styleReady,session.enforcementCameras,
+        session.cameraMarkerBucket,session.cameraPreferences.icons,session.cameraPreferences.master) {
+        val native=map ?: return@LaunchedEffect
+        if(!styleReady)return@LaunchedEffect
+        enforcementMarkers.forEach { runCatching { native.removeMarker(it) } }
+        enforcementMarkers.clear()
+        if(!session.cameraPreferences.master || !session.cameraPreferences.icons)return@LaunchedEffect
+        val center=session.location?.let { GpsPoint(it.latitude,it.longitude) }
+            ?: GpsPoint(session.destination.lat,session.destination.lon)
+        if(!center.valid())return@LaunchedEffect
+        for(camera in session.enforcementCameras) {
+            // A small nearby spatial window; never place hundreds of annotations
+            // during a GPS frame. Opposite-direction SPF records remain separate.
+            if(abs(camera.point.lat-center.lat)>0.035 ||
+                abs(camera.point.lon-center.lon)>0.04)continue
+            if(!session.cameraPreferences.categoryEnabled(camera.category))continue
+            val subtext=buildString {
+                append(camera.category.replace('_',' '))
+                append(" • ")
+                append(camera.directionText ?: "direction not verified")
+                append(" • ")
+                append(camera.speedLimitKmh?.let { "Verified ${it} km/h" }
+                    ?: "Speed limit not verified")
+                if(camera.isRedLight)append(" • speed capability unverified")
+            }
+            enforcementMarkers += native.addMarker(MarkerOptions()
+                .position(LatLng(camera.point.lat,camera.point.lon))
+                .icon(cameraIcons.getValue(camera.category))
+                .title(camera.name)
+                .snippet(subtext))
         }
     }
 
