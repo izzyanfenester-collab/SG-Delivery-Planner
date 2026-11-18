@@ -84,8 +84,8 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
 internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
-        .putExtra("block", stop.block)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
+        .apply { destinationHeading870(stop).block?.let { putExtra("block", it) } }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
 class BuiltInNavigationActivity : ComponentActivity() {
