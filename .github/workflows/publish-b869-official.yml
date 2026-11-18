@@ -200,9 +200,9 @@ jobs:
                   else:
                       assert ident.startswith('A-')
                       camera_id=f"AVERAGE_SPEED_ZONE-{int(number[2]):03d}-D{number[1]}"
-                  camera=by_id[camera_id]
-                  assert abs(camera['latitude']-float(row['Latitude']))<1e-8
-                  assert abs(camera['longitude']-float(row['Longitude']))<1e-8
+                  published_camera=by_id[camera_id]
+                  assert abs(published_camera['latitude']-float(row['Latitude']))<1e-8
+                  assert abs(published_camera['longitude']-float(row['Longitude']))<1e-8
                   assert row['Status'] and row['GPS Precision'] and row['Source']
 
               for clip in navigation:
