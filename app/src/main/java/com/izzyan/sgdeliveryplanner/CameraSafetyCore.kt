@@ -126,7 +126,8 @@ internal data class CameraApproach(
     val camera: EnforcementCamera, val routeMetresAhead: Double,
     val directionConfirmed: Boolean, val alertAllowed: Boolean,
     // Conservative nearby *general safety reminder*, never a claim of directional enforcement.
-    val genericSafetyEligible: Boolean = false
+    val genericSafetyEligible: Boolean = false,
+    val coordinateFallbackUsed: Boolean = false
 )
 
 /** Conservative approach classification: road, route shape AND published travel direction.
@@ -156,8 +157,34 @@ internal object CameraApproachLogic {
         "kje" to "kranji expressway"
     )
     private fun roadKey(s:String):String {
+        // SPF KPE/MCE data has a kilometre marker; it is not the road name.
+        // Mobile enforcement names may additionally describe a lamp post/exit.
         val value=normalized(s)
+            .replace(Regex("\\s+\\d+(?:\\.\\d+)?\\s*km\\b"),"")
+            .substringBefore(" at ")
+            .replace("-", " ")
+            .replace(Regex("\\s+")," ").trim()
         return namedExpressways[value]?:value
+    }
+    private fun nearPublishedBidirectionalSite(
+        camera:EnforcementCamera, records:List<EnforcementCamera>
+    ):Boolean {
+        // Paired SPF entries with different stated directions document BOTH travel
+        // directions at one physical site; do NOT manufacture a numeric bearing.
+        if(camera.category !in setOf("FIXED_SPEED_CAMERA","POLICE_LASER_LOCATION"))
+            return false
+        val direction=camera.directionText ?: return false
+        val road=roadKey(camera.road)
+        return records.any { other ->
+            other.id!=camera.id && other.category==camera.category &&
+                roadKey(other.road)==road && !other.directionText.isNullOrBlank() &&
+                roadKey(other.directionText)!=roadKey(direction) &&
+                abs(other.point.lat-camera.point.lat)<0.00065 &&
+                abs(other.point.lon-camera.point.lon)<0.00065 &&
+                hypot((other.point.lat-camera.point.lat)*111_195.0,
+                    (other.point.lon-camera.point.lon)*111_195.0*
+                    cos(Math.toRadians(camera.point.lat)))<=65.0
+        }
     }
     private fun roadMatches(current:String?,camera:String):Boolean {
         if(current.isNullOrBlank()) return false
@@ -219,28 +246,39 @@ internal object CameraApproachLogic {
         for(camera in records) {
             if(!roadMatches(currentRoad,camera.road))continue
             // Bound the expensive polyline projection with a cheap spherical box.
-            if(abs(camera.point.lat-current.lat)>0.03 || abs(camera.point.lon-current.lon)>0.035)continue
+            if(abs(camera.point.lat-current.lat)>0.045 || abs(camera.point.lon-current.lon)>0.045)continue
             val projected=CameraRouteGeometry.project(camera.point,shape) ?: continue
             if(projected.lateralMetres>16.0)continue
             val ahead=projected.progressedMetres-vehicle.progressedMetres
             // No post-camera warning: never convert a behind-camera (-30m) into 0m ahead.
-            if(ahead < 25.0 || ahead > 1600.0)continue
-            val direction=directionMatches(camera,projected.segmentBearing,upcomingRoads,records)
-            val required=if(camera.isRedLight)300.0 else if(camera.isMobile)500.0
-                else if(camera.isAverage)600.0 else if((speedMps?:0f)>=20f)1000.0 else 500.0
+            if(ahead < 25.0 || ahead > 2600.0)continue
+            val routeHeading=projected.segmentBearing
+            val directionalTextMatches=directionMatches(camera,routeHeading,upcomingRoads,records)
+            val bothDirectionsDocumented=nearPublishedBidirectionalSite(camera,records) &&
+                projected.lateralMetres<=10.0 && vehicle.lateralMetres<=12.0 &&
+                accuracyMetres<=12f && (speedMps?:0f)>=3f &&
+                vehicleBearingDegrees?.isFinite()==true &&
+                CameraRouteGeometry.angularGap(vehicleBearingDegrees,routeHeading)<=20.0
+            val direction=directionalTextMatches || bothDirectionsDocumented
+            val required=when {
+                camera.isRedLight -> 300.0
+                camera.isAverage -> 0.0 // Never infer an average-zone entrance from a point.
+                else -> CameraCoordinateCatalog867.PRIMARY_METRES
+            }
             // If SPF orientation cannot be corroborated, NEVER claim a speed or
             // red-light enforcement camera is operating in this direction.
             // An optional *generic* Panda safety reminder is allowed only with
             // very accurate heading, close route geometry and known same road.
             val headingReliable=vehicleBearingDegrees?.isFinite()==true &&
                 vehicleBearingDegrees in 0.0..360.0 &&
-                bearingAccuracyDegrees?.isFinite()==true &&
-                bearingAccuracyDegrees<=20f &&
-                CameraRouteGeometry.angularGap(vehicleBearingDegrees,projected.segmentBearing)<=20.0
+                CameraRouteGeometry.angularGap(vehicleBearingDegrees,projected.segmentBearing)<=15.0 &&
+                ((bearingAccuracyDegrees?.isFinite()==true && bearingAccuracyDegrees<=20f) ||
+                    (bearingAccuracyDegrees==null && (speedMps?:0f)>=7f &&
+                        accuracyMetres<=8f))
             val safetyReminder=!direction && !camera.isAverage &&
                 accuracyMetres<=12f && (speedMps?:0f)>=3f &&
                 vehicle.lateralMetres<=12.0 && projected.lateralMetres<=8.0 &&
-                ahead in 35.0..240.0 && headingReliable
+                ahead in 35.0..CameraCoordinateCatalog867.PRIMARY_METRES && headingReliable
             results += CameraApproach(camera,ahead.coerceAtLeast(0.0),direction,
                 direction && ahead<=required && !camera.isAverage,
                 genericSafetyEligible=safetyReminder)
