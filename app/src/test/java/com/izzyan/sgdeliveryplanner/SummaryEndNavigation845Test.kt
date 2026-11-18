@@ -52,7 +52,8 @@ class SummaryEndNavigation845Test {
         assertEquals(custom.postalCode, intent.getStringExtra("postal"))
         assertEquals(custom.latitude, intent.getDoubleExtra("lat", 0.0), 0.0)
         assertEquals(custom.longitude, intent.getDoubleExtra("lon", 0.0), 0.0)
-        assertEquals(setOf("postal","address","lat","lon"), intent.extras!!.keySet())
+        assertEquals(setOf("postal","address","block","lat","lon"), intent.extras!!.keySet())
+        assertEquals(custom.asPlace().block, intent.getStringExtra("block"))
         assertEquals(before, PlanJson.encode(p))
         assertEquals(3, p.current)
     }
