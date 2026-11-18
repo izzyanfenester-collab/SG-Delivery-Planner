@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -275,12 +276,36 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                                Text("km/h", color = SGColors.Silver, fontSize = 11.sp)
-                                if(session.cameraPreferences.master &&
-                                    session.cameraPreferences.speedLimitDisplay){
-                                    Text("LIMIT: NOT VERIFIED",color=SGColors.Silver,
-                                        fontSize=9.sp,maxLines=1)
+                                    color=if(session.speedLimitState868.overspeedVisual)
+                                        Color(0xFFE53935) else Color.White,
+                                    fontSize=27.sp,fontWeight=FontWeight.Bold)
+                                Text("km/h",color=SGColors.Silver,fontSize=11.sp)
+                                if(session.cameraPreferences.speedLimitDisplay){
+                                    val limit=session.speedLimitState868
+                                    Spacer(Modifier.height(3.dp))
+                                    Text("SPEED LIMIT",color=SGColors.Gold,
+                                        fontSize=9.sp,fontWeight=FontWeight.Bold)
+                                    Surface(
+                                        color=Color.White,
+                                        shape=CircleShape,
+                                        border=BorderStroke(if(limit.verifiedKmh!=null)3.dp else 1.dp,
+                                            if(limit.verifiedKmh!=null)Color(0xFFD52C2C) else Color.Gray),
+                                        modifier=Modifier.size(53.dp)
+                                    ){
+                                        Box(contentAlignment=Alignment.Center){
+                                            Text(limit.verifiedKmh?.toString() ?: "—",
+                                                color=if(limit.verifiedKmh!=null)Color.Black else Color.Gray,
+                                                fontSize=if(limit.verifiedKmh!=null)21.sp else 24.sp,
+                                                fontWeight=FontWeight.Bold)
+                                        }
+                                    }
+                                    if(limit.isReferenceOnly){
+                                        Text("REF ${limit.referenceKmh} km/h",
+                                            color=SGColors.Gold,fontSize=10.sp,
+                                            fontWeight=FontWeight.SemiBold,maxLines=1)
+                                        Text("UNVERIFIED",color=SGColors.Silver,
+                                            fontSize=8.sp,maxLines=1)
+                                    }
                                 }
                             }
                         }
@@ -594,6 +619,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     }
     var mapMessage by mutableStateOf<String?>(null)
     private val cameraStore=CameraSafetyStore(context)
+    private val speedReferenceStore868=SpeedLimitReferenceStore868(context)
+    private val speedLimitTracker868=SpeedLimitTracker868()
     private val cameraPrefsStore=CameraSafetyPrefs(context)
     private val cameraVoicePlanner=CameraVoicePlanner865()
     private val cameraGpsFallback867=CameraGpsFallback867()
@@ -603,6 +630,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var lastCameraScanMs=0L
     var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
     var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
+    private var speedRows868:List<SpeedLimitRow868> = emptyList()
+    var speedLimitSourceCount868 by mutableIntStateOf(0); private set
+    var speedLimitState868 by mutableStateOf(SpeedLimitState868()); private set
     private var coordinateReferenceIds867:Set<String> = emptySet()
     var coordinateCatalogMatchCount by mutableIntStateOf(0); private set
     var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
@@ -632,6 +662,54 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         coordinateReferenceIds867=reference?.eligibleSpeedIds.orEmpty()
         coordinateCatalogMatchCount=reference?.size?:0
     }
+    private suspend fun loadSpeedReference868(){
+        try {
+            val loaded=withContext(Dispatchers.IO){
+                val rows=speedReferenceStore868.all()
+                speedReferenceStore868.verifyCoordinates(rows,enforcementCameras)
+                rows
+            }
+            speedRows868=loaded
+            speedLimitSourceCount868=loaded.size
+            android.util.Log.i("SGSpeed868","100 source rows loaded locally; 91 provisional, 9 unknown")
+        }catch(e:Exception){
+            speedRows868=emptyList()
+            speedLimitSourceCount868=0
+            speedLimitState868=SpeedLimitState868(diagnostics="Speed reference database unavailable")
+            android.util.Log.e("SGSpeed868","Failed to validate speed reference SQLite",e)
+        }
+    }
+
+    /** Uses route-matched SPF cameras ONLY as proximity references, not whole-road legal limits. */
+    private fun updateSpeedLimit868(fix:Location){
+        if(!active || offRoute || route==null || shape.size<2 ||
+            speedRows868.size!=100 || enforcementCameras.isEmpty()){
+            speedLimitTracker868.reset()
+            speedLimitState868=SpeedLimitState868(
+                diagnostics="No verified road segment / route unavailable")
+            return
+        }
+        val road=street?.takeIf{it.isNotBlank()} ?: cameraRoadName
+        val upcoming=route?.legs?.firstOrNull()?.steps.orEmpty()
+            .drop((cameraManeuverIndex-1).coerceAtLeast(0))
+            .take(12).mapNotNull{it.name}
+        val speedIds=speedRows868.map{it.cameraId}.toHashSet()
+        val matched=CameraApproachLogic.find(
+            GpsPoint(fix.latitude,fix.longitude),shape,road,upcoming,fix.accuracy,
+            enforcementCameras.filter{it.id in speedIds},
+            fix.speed.takeIf{fix.hasSpeed()},
+            fix.bearing.takeIf{fix.hasBearing()}?.toDouble(),
+            fix.bearingAccuracyDegrees.takeIf{fix.hasBearingAccuracy()})
+        // None of the 91 numeric workbook entries proves a direction-specific road
+        // segment's legally posted limit. They may only be shown as provisional REF.
+        speedLimitState868=speedLimitTracker868.observe(
+            matched,speedRows868,fix.accuracy,
+            fix.speed.takeIf{fix.hasSpeed()},
+            fix.speedAccuracyMetersPerSecond.takeIf{fix.hasSpeedAccuracy()},
+            authoritativeSegmentMatch=false
+        )
+    }
+
     suspend fun refreshCameraSnapshot(){
         if(cameraRefreshBusy)return
         cameraRefreshBusy=true
@@ -640,6 +718,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             loadCameraStore()
             voiceAudio.stopObsoleteCameraForRouteChange()
             cameraVoicePlanner.reset(); cameraGpsFallback867.reset()
+        speedLimitTracker868.reset(); speedLimitState868=SpeedLimitState868()
             cameraRefreshMessage="Camera snapshot verified and updated."
         }catch(e:Exception){
             cameraRefreshMessage="Camera update not available; retaining previous verified offline snapshot."
@@ -876,6 +955,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         try { loadCameraStore() } catch (_:Exception) {
             cameraRefreshMessage="No validated camera snapshot available."
         }
+        loadSpeedReference868()
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
@@ -914,6 +994,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 }
                 lastFix = now; location = fix
                 scanCameraSafety(fix,now)
+                updateSpeedLimit868(fix)
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
