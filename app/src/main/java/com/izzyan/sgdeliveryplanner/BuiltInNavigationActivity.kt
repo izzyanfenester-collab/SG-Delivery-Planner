@@ -521,7 +521,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
      * on narrow displays or accessibility settings; never hide the duration. */
     @Composable
     private fun NavigationRemainingSummary(summary: String) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth()) {
             // Preserve 17sp readability even on small displays; wrap instead of
             // shrinking the GPS distance and duration to a tiny font.
             Text(summary, color = SGColors.Silver, fontSize = 17.sp,
