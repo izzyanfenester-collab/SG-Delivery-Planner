@@ -125,6 +125,7 @@ private fun HistoryReportImageDialog(plan:Plan,stopIndex:Int?,onClose:()->Unit) 
     var report by remember(plan.id,stopIndex) { mutableStateOf<File?>(null) }
     var bitmap by remember(plan.id,stopIndex) { mutableStateOf<Bitmap?>(null) }
     var error by remember(plan.id,stopIndex) { mutableStateOf(false) }
+    var shareFallback by remember(plan.id,stopIndex) { mutableStateOf<WhatsAppImageShareFallbackRequest?>(null) }
     LaunchedEffect(plan.id,stopIndex) {
         try {
             val result=withContext(Dispatchers.IO) {
@@ -148,13 +149,31 @@ private fun HistoryReportImageDialog(plan:Plan,stopIndex:Int?,onClose:()->Unit) 
                 OutlinedButton(onClick=onClose,modifier=Modifier.weight(1f)){Text("Close")}
                 Button(onClick={
                     report?.let { file ->
-                        runCatching {
-                            context.startActivity(Intent.createChooser(
-                                singleDeliveryShareIntent(context,file),"Share Historical Report"))
+                        try {
+                            require(file.isFile && file.canRead() && file.length()>0L) {
+                                "Historical report image is unavailable."
+                            }
+                            val send=singleDeliveryShareIntent(context,file)
+                            if(stopIndex==null) {
+                                // The saved historical summary's PNG is reused as displayed:
+                                // do not re-open or mutate the completed delivery route.
+                                shareFallback=openDefaultWhatsAppImageShare(
+                                    context,send,"Share Historical Summary Report")
+                            } else {
+                                // Existing individual historical Delivery Report flow untouched.
+                                context.startActivity(Intent.createChooser(send,"Share Historical Report"))
+                            }
+                        } catch(_:Exception) {
+                            android.widget.Toast.makeText(context,
+                                "The saved report could not be shared. Please try again.",
+                                android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                 },enabled=report!=null,modifier=Modifier.weight(1f)){Text("Share Report")}
             }
         }
+    }
+    shareFallback?.let { request ->
+        WhatsAppImageShareFallbackDialog(request) { shareFallback=null }
     }
 }

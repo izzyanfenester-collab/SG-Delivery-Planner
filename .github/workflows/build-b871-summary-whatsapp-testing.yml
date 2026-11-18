@@ -1,0 +1,163 @@
+name: B871 Delivery Summary Direct Default WhatsApp TESTING
+on:
+  push:
+    branches: [feature/build-871-summary-direct-whatsapp-testing]
+    paths:
+      - 'voice_upload/**'
+      - 'scripts/install_panda209_camera_865.py'
+      - '.github/workflows/build-b871-summary-whatsapp-testing.yml'
+      - 'app/**'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b871-summary-whatsapp-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact uploaded ZIP
+        run: |
+          set -euo pipefail
+          file=voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+          test -s "$file" || { echo "::error::209 real MP3 ZIP missing; do not release synthetic voice APK"; exit 1; }
+          echo "e8e3b56d9b0a9adc1d8b541134af8ac97905ba66e65e48336783f06e1a355c24  $file" | sha256sum -c -
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - run: python3 scripts/build_postal_seed.py
+      - name: Restore byte-verified original 185 Panda Warrior recordings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/b857"
+          gh release download v1.4.45-b857 --pattern SG-Delivery-B857-Official.apk --dir "$RUNNER_TEMP/b857"
+          echo "f5d215ef9ca67f603c45da61f553254953fd2248a5a0a16c449c479f47467819  $RUNNER_TEMP/b857/SG-Delivery-B857-Official.apk" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile,pathlib,os,json
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'b857/SG-Delivery-B857-Official.apk'
+          root='assets/voicepacks/panda_warrior_v2/'
+          with zipfile.ZipFile(p) as z:
+              assert len(json.loads(z.read(root+'manifest.json'))['clips'])==185
+              for name in z.namelist():
+                  if name.startswith(root) and not name.endswith('/'):
+                      out=pathlib.Path('app/src/main')/name
+                      out.parent.mkdir(parents=True,exist_ok=True)
+                      out.write_bytes(z.read(name))
+          PY
+      - name: Install portable FFmpeg for authentic offline audio conversion
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/panda-ffmpeg-venv"
+          "$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -m pip install --disable-pip-version-check -q imageio-ffmpeg==0.6.0
+          ffmpeg_exe=$("$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          test -x "$ffmpeg_exe"
+          mkdir -p "$RUNNER_TEMP/panda-ffmpeg-bin"
+          ln -s "$ffmpeg_exe" "$RUNNER_TEMP/panda-ffmpeg-bin/ffmpeg"
+          echo "$RUNNER_TEMP/panda-ffmpeg-bin" >> "$GITHUB_PATH"
+          "$ffmpeg_exe" -version | head -1
+      - name: Verify old recordings and install 24 original camera MP3 + offline PCM
+        run: |
+          command -v ffmpeg
+          python3 scripts/install_panda209_camera_865.py voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+      - name: Confirm exactly B871 summary share changes vs verified B870 TESTING
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          allowed={
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/SummaryReport.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/HistoryViewer.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/SummaryReportAndroidTest.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/SummaryDefaultWhatsApp871Test.kt'
+          }
+          touched=set(subprocess.check_output(
+              ['git','diff','--name-only','f5a806172f365e4a668d56c2e38e1505ca3f78d3','HEAD','--','app/src'],
+              text=True).splitlines())
+          assert touched==allowed, f'Unexpected app source changes: {touched ^ allowed}'
+          print('B871 modifies Delivery Summary share and its Historical Summary action only.')
+          PY
+          grep -F 'openDefaultWhatsAppImageShare(context,send,"Share Report")' app/src/main/java/com/izzyan/sgdeliveryplanner/SummaryReport.kt
+          grep -F 'shareFallback=openDefaultWhatsAppImageShare(' app/src/main/java/com/izzyan/sgdeliveryplanner/HistoryViewer.kt
+          grep -F 'WhatsAppImageShareFallbackDialog(request)' app/src/main/java/com/izzyan/sgdeliveryplanner/SummaryReport.kt
+          grep -F 'shareFallback=openSummaryReportShare(context,send)' app/src/main/java/com/izzyan/sgdeliveryplanner/SummaryReport.kt
+          grep -F 'Intent(send).setPackage(choice.packageName)' app/src/main/java/com/izzyan/sgdeliveryplanner/WhatsAppImageSharing.kt
+      - name: Unit tests, lint and isolated Android testing APK
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Verify actual 209 MP3 in APK with original byte identity
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b871test' versionCode='75' versionName='1.4.59-b871-testing'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          "$bt/apksigner" verify --verbose "$apk"
+          python3 - <<'PY'
+          import zipfile,json
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as a, zipfile.ZipFile('voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip') as z:
+              assert a.testzip() is None
+              nav=json.loads(a.read('assets/voicepacks/panda_warrior_v2/manifest.json'))['clips']
+              cam=json.loads(a.read('assets/voicepacks/panda_warrior_camera/manifest.json'))['clips']
+              assert len(nav)==185 and len(cam)==24 and len({v['id'] for v in nav+cam})==209
+              for v in nav:
+                  assert a.read('assets/voicepacks/panda_warrior_v2/'+v['file'])==z.read(v['file'])
+              for v in cam:
+                  assert a.read('assets/voicepacks/panda_warrior_camera/'+v['file'])==z.read(v['file'])
+                  assert len(a.read('assets/voicepacks/panda_warrior_camera/audio_pcm/'+v['id']+'.pcm'))>10000
+              original=json.loads(a.read('assets/sg_enforcement_cameras.json'))
+              configured=json.loads(a.read('assets/sg_speed_camera_reference_867.json'))
+              assert original['record_count']==341 and configured['record_count']==100
+              by_id={row['camera_id']:row for row in original['cameras']}
+              counts={}
+              for ref in configured['cameras']:
+                  base=by_id[ref['camera_id']]
+                  assert base['category']==ref['category']
+                  assert base['latitude']==ref['latitude'] and base['longitude']==ref['longitude']
+                  assert base['official_name']==ref['official_name']
+                  counts[ref['category']]=counts.get(ref['category'],0)+1
+              assert counts=={'FIXED_SPEED_CAMERA':20,'LTA_SPEED_CAMERA':13,
+                  'MOBILE_ENFORCEMENT_LOCATION':5,'AVERAGE_SPEED_ZONE':12,
+                  'POLICE_LASER_LOCATION':50},counts
+              print('Verified 100 exact screenshot coordinates, 241 red lights, 209 original Panda MP3 and offline PCM')
+          PY
+          mkdir -p dist
+          cp "$apk" dist/SG-Delivery-B871-SummaryWhatsApp-TESTING.apk
+          sha256sum dist/SG-Delivery-B871-SummaryWhatsApp-TESTING.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B871-SummaryWhatsApp-TESTING-APK
+          path: dist/SG-Delivery-B871-SummaryWhatsApp-TESTING.apk
+          if-no-files-found: error
+      - name: Publish TESTING prerelease only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.59-b871-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Existing TESTING tag; refuse overwrite"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B871-SummaryWhatsApp-TESTING.apk \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "SG Delivery #871 TESTING – Delivery Summary Direct WhatsApp Sharing" \
+            --notes "B871 isolated TESTING based exactly on verified B870 TESTING (commit f5a806172f365e4a668d56c2e38e1505ca3f78d3). Delivery Summary Report Share now uses the existing Settings default WhatsApp preference and the same central secure FileProvider image share helper as Delivery Share Report Photo. WhatsApp Messenger or Business opens directly with the freshly generated PNG attached, no generic chooser when selected app is available. Missing selected WhatsApp displays the existing consent dialog for available alternative or manual Share menu; no automatic sending. Historical Summary Report Share reuses the already rendered saved-plan PNG without reopening or mutating the trip. Individual Delivery Report sharing code and all GPS/Panda Warrior 209 original voice files, camera alerts, taxes/payment, Home/History, backup and saved data are untouched. Robolectric tests, lint and APK asset-integrity checks run in CI; actual installed WhatsApp/Bluetooth/device acceptance remains for runner testing. Separate .b871test APK, NO OFFICIAL MERGE."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B871-SummaryWhatsApp-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
