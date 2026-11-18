@@ -57,6 +57,12 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Verified Speed Limit Display",p.speedLimitDisplay) {
             session.updateCameraPreferences(p.copy(speedLimitDisplay=it))
         }
+        Text("Speed Reference DB: ${session.speedLimitSourceCount868}/100 imported offline",
+            color=SGColors.Silver,fontSize=11.sp)
+        Text("91 provisional references · 9 unknown · 12 low-precision points",
+            color=SGColors.Silver,fontSize=10.sp)
+        Text("Live Speed Limit: ${session.speedLimitState868.diagnostics}",
+            color=SGColors.Gold,fontSize=10.sp)
         CameraSafetyToggle("Verified Overspeed Warning",p.overspeed) {
             session.updateCameraPreferences(p.copy(overspeed=it))
         }
