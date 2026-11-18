@@ -121,7 +121,7 @@ jobs:
                   elif cid.startswith('M-'): spf_id=f"MOBILE_ENFORCEMENT_LOCATION-{int(code):03d}"
                   elif cid.startswith('L-'): spf_id=f"POLICE_LASER_LOCATION-{int(code):03d}"
                   elif cid.startswith('KM-'):
-                      spf_id=f"LTA_SPEED_CAMERA-{int(code[:2]):03d}" + (f"-{code[2:]}" if len(code)>2 else "")
+                      spf_id=f"LTA_SPEED_CAMERA-{int(code[:2]):03d}" + (f"-{code[2:]}" if len(code)>2 and cid!='KM-10A' else "")
                   else:
                       assert cid.startswith('A-')
                       spf_id=f"AVERAGE_SPEED_ZONE-{int(code[2]):03d}-D{code[1]}"

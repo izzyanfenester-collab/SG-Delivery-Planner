@@ -54,6 +54,7 @@ class SpeedLimitReference868Test {
             assertEquals(1.298237,all.first{it.excelId=="F-01"}.latitude,1e-10)
             assertEquals(103.781679,all.first{it.excelId=="F-01"}.longitude,1e-10)
             assertEquals("LTA_SPEED_CAMERA-007-A",all.first{it.excelId=="KM-07A"}.cameraId)
+            assertEquals("LTA_SPEED_CAMERA-010",all.first{it.excelId=="KM-10A"}.cameraId)
             assertEquals("AVERAGE_SPEED_ZONE-001-D2",all.first{it.excelId=="A-021"}.cameraId)
             assertEquals(12,all.count{it.reducedPrecision})
             assertEquals(0,all.count{it.isOfficialSegmentVerified})

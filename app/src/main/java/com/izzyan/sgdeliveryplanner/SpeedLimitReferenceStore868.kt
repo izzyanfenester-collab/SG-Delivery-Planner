@@ -31,7 +31,7 @@ internal object SpeedLimitSourceId868 {
             id.startsWith("M-")->"MOBILE_ENFORCEMENT_LOCATION-"+pad(num)
             id.startsWith("L-")->"POLICE_LASER_LOCATION-"+pad(num)
             id.startsWith("KM-")->"LTA_SPEED_CAMERA-"+pad(num.take(2))+
-                num.drop(2).takeIf{it.isNotBlank()}?.let{"-"+it}.orEmpty()
+                (if(num=="10A") "" else num.drop(2).takeIf{it.isNotBlank()}?.let{"-"+it}.orEmpty())
             id.startsWith("A-")->{
                 require(num.length==3 && num[0]=='0' && num[1] in '1'..'2')
                 "AVERAGE_SPEED_ZONE-"+pad(num[2].toString())+"-"+
