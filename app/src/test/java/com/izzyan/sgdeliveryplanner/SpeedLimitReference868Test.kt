@@ -45,7 +45,8 @@ class SpeedLimitReference868Test {
 
     @Test fun all100CsvPointsMatchPublishedCameraSnapshotExactly(){
         val context=ApplicationProvider.getApplicationContext<Context>()
-        SpeedLimitReferenceStore868(context).use{db->
+        val db=SpeedLimitReferenceStore868(context)
+        try {
             val all=db.all()
             val spf=CameraSafetySnapshotParser.parse(File(originalPath).readText())
             assertEquals(100,all.size)
@@ -59,6 +60,8 @@ class SpeedLimitReference868Test {
             assertEquals(12,all.count{it.reducedPrecision})
             assertEquals(0,all.count{it.isOfficialSegmentVerified})
             assertEquals(91,all.count{it.referenceKmh!=null})
+        } finally {
+            db.close()
         }
     }
 

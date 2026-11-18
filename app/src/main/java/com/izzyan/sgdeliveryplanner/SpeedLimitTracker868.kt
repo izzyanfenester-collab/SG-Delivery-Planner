@@ -77,7 +77,7 @@ internal class SpeedLimitTracker868 {
             speedAccuracyMetresPerSecond!=null &&
             speedAccuracyMetresPerSecond.isFinite() &&
             speedAccuracyMetresPerSecond<=1.5f
-        val actualSpeedKmh=if(reliableSpeed) speedMetresPerSecond!!*3.6 else null
+        val actualSpeedKmh=if(reliableSpeed) speedMetresPerSecond!!.toDouble()*3.6 else null
         if(verified==null || actualSpeedKmh==null){
             overspeedSamples=0;withinSamples=0;wasOverspeed=false
         } else {
