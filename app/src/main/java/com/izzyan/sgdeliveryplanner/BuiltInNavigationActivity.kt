@@ -84,6 +84,7 @@ internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
 internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
+        .putExtra("block", stop.block)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
@@ -92,7 +93,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val postal = intent.getStringExtra("postal") ?: run { finish(); return }
-        val stop = Place(postal, intent.getDoubleExtra("lat", Double.NaN), intent.getDoubleExtra("lon", Double.NaN), "", "", intent.getStringExtra("address").orEmpty())
+        val stop = Place(postal, intent.getDoubleExtra("lat", Double.NaN), intent.getDoubleExtra("lon", Double.NaN), intent.getStringExtra("block").orEmpty(), "", intent.getStringExtra("address").orEmpty())
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
@@ -366,46 +367,55 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             val remaining = session.remainingSeconds
                             val eta = if (remaining != null) Instant.ofEpochMilli(
                                 navigationEta(System.currentTimeMillis(), remaining))
                                 .atZone(ZoneId.of("Asia/Singapore"))
                                 .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
-                            Column(Modifier.weight(1f)) {
-                                Text("ARRIVAL", color = SGColors.Silver, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                                Text(eta, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 29.sp)
-                                NavigationRemainingSummary("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}")
-                                if (session.localTrafficVisible) {
-                                    val level = session.trafficState.ahead
-                                    val label = when (level) {
-                                        LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
-                                        LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
-                                        LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
-                                        LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
-                                    }
-                                    Text(label, color = SGColors.Silver, fontSize = 11.sp)
+                            val destination = NavigationDestinationLabel870.format(stop)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("ARRIVAL", color = SGColors.Silver, fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 6.dp))
+                                Text(destination, modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.ExtraBold, fontSize = 26.sp,
+                                    lineHeight = 30.sp, maxLines = Int.MAX_VALUE,
+                                    softWrap = true, overflow = TextOverflow.Clip,
+                                    textAlign = TextAlign.End)
+                            }
+                            Text(eta, color = Color.White, fontWeight = FontWeight.ExtraBold,
+                                fontSize = 29.sp, lineHeight = 33.sp)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween) {
+                                Box(Modifier.weight(1f)) {
+                                    NavigationRemainingSummary(
+                                        "${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}")
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                FilledTonalButton(onClick = { finish() },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = SGColors.SecondaryBackground,
+                                        contentColor = Color.White),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("Delivery", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
-                            Column(horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(stop.postal, color = SGColors.SelectedGold,
-                                    fontWeight = FontWeight.Bold, fontSize = 26.sp,
-                                    letterSpacing = 0.8.sp, maxLines = 1, softWrap = false,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(min = if (compactNavHeader) 100.dp else 114.dp)
-                                        .align(Alignment.CenterHorizontally))
-                                FilledTonalButton(onClick = { finish() },
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = SGColors.SecondaryBackground, contentColor = Color.White),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            if (session.localTrafficVisible) {
+                                val label = when (session.trafficState.ahead) {
+                                    LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
+                                    LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
+                                    LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
+                                    LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
                                 }
+                                Text(label, color = SGColors.Silver, fontSize = 11.sp)
                             }
                         }
                     }
