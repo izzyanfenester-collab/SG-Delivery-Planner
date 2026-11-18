@@ -99,6 +99,7 @@ internal class CameraVoicePlanner865 {
         val cam=approach.camera
         if(!voiceGuidanceEnabled || !cameraAudioAvailable || !settings.voice ||
             !settings.categoryEnabled(cam.category)) return null
+        if(!cam.isRedLight && !settings.coordinateCameraAlerts) return null
         if(approach.routeMetresAhead < 25.0 || !approach.routeMetresAhead.isFinite()) return null
         // Never interrupt an imminent real navigation maneuver.
         if(turnMetres != null && turnMetres.isFinite() && turnMetres < 160.0) return null
@@ -120,16 +121,15 @@ internal class CameraVoicePlanner865 {
             return CameraVoiceCue865(cam.id,cam.category,"safety",safeClip,metres,
                 VoicePhrase("camera-$routeGeneration-${cam.id}-safety",VoicePriority.CAMERA,
                     listOf(VoicePart(safeClip,"General road-safety reminder; camera direction not verified"))),
-                previousMetresAhead=previous,warningThresholdMetres=240.0,
-                crossedThreshold=previous!=null && previous>240.0 && metres<=240.0)
+                previousMetresAhead=previous,
+                warningThresholdMetres=CameraCoordinateCatalog867.PRIMARY_METRES,
+                crossedThreshold=previous!=null &&
+                    previous>CameraCoordinateCatalog867.PRIMARY_METRES &&
+                    metres<=CameraCoordinateCatalog867.PRIMARY_METRES)
         }
         if(!approach.directionConfirmed || !approach.alertAllowed) return null
-        val main=when(cam.category) {
-            "RED_LIGHT_CAMERA"->300.0
-            "MOBILE_ENFORCEMENT_LOCATION","POLICE_LASER_LOCATION"->500.0
-            else->if((speedMps?:0f)>=20f)1000.0 else 500.0
-        }
-        val near=if(cam.isRedLight)100.0 else if(main>=1000)300.0 else 200.0
+        val main=if(cam.isRedLight)300.0 else CameraCoordinateCatalog867.PRIMARY_METRES
+        val near=if(cam.isRedLight)100.0 else CameraCoordinateCatalog867.REMINDER_METRES
         // First eligible observation is the primary cue even when started within the threshold.
         // Never synthesize exact 'in 500m / in 300m': those distance-only assets
         // are absent from this user's 185 original recordings.
@@ -150,10 +150,16 @@ internal class CameraVoicePlanner865 {
         val nearToken="$routeGeneration|$key|near"
         // Threshold is inclusive and stateful; 650 -> 470 m triggers without exact 500 m.
         // A deferred attempt is allowed to retry later while still ahead.
+        val crossedReminder=prior!=null && prior>near && metres<=near
+        // If navigation began within 500 m, prioritize primary audio first; give
+        // an optional secondary reminder only after advancing into the near-zone.
+        val shortLateReminder=prior!=null && prior>minOf(near*0.4,200.0) &&
+            metres<=minOf(near*0.4,200.0)
         val stageAndClip=when {
             metres<=main && mainToken !in delivered && mainToken !in requested -> "main" to mainClip
-            metres<=near && mainToken in delivered && nearToken !in delivered &&
-                nearToken !in requested -> "near" to nearClip
+            settings.coordinateReminder && metres<=near && mainToken in delivered &&
+                nearToken !in delivered && nearToken !in requested &&
+                (crossedReminder || shortLateReminder) -> "near" to nearClip
             else->return null
         }
         val (stage,clip)=stageAndClip

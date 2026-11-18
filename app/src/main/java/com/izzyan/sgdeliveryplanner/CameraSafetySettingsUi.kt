@@ -34,8 +34,16 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Mobile / Laser Location Alerts",p.mobile) {
             session.updateCameraPreferences(p.copy(mobile=it))
         }
+        CameraSafetyToggle("GPS Coordinate Camera Alerts (2KM)",p.coordinateCameraAlerts) {
+            session.updateCameraPreferences(p.copy(coordinateCameraAlerts=it))
+        }
         CameraSafetyToggle("Panda Warrior Camera Voice",p.voice) {
             session.updateCameraPreferences(p.copy(voice=it))
+        }
+        Text("Primary GPS camera warning: 2.0 KM ahead (route distance)",
+            color=SGColors.Silver,fontSize=11.sp)
+        CameraSafetyToggle("Secondary 500M Camera Reminder",p.coordinateReminder) {
+            session.updateCameraPreferences(p.copy(coordinateReminder=it))
         }
         CameraSafetyToggle("Average Speed Zone Voice",p.averageVoice) {
             session.updateCameraPreferences(p.copy(averageVoice=it))
@@ -63,6 +71,8 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         Text("Live Voice Diagnosis: ${session.cameraVoiceDiagnostic}",
             color=SGColors.Gold,fontSize=11.sp)
         Text("${session.enforcementCameras.size} verified SPF published records",
+            color=SGColors.Silver,fontSize=11.sp)
+        Text("${session.coordinateCatalogMatchCount} matched speed enforcement reference points (100 expected)",
             color=SGColors.Silver,fontSize=11.sp)
         if(!session.cameraAudioAvailable) Text(
             "Camera MP3 package incomplete: voice alerts disabled; original 185-clip navigation unaffected.",

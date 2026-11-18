@@ -596,12 +596,15 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val cameraStore=CameraSafetyStore(context)
     private val cameraPrefsStore=CameraSafetyPrefs(context)
     private val cameraVoicePlanner=CameraVoicePlanner865()
+    private val cameraGpsFallback867=CameraGpsFallback867()
     // Short-lived session token only; never persist raw location history.
     private val cameraAudioSession866=java.lang.Long.toHexString(SystemClock.elapsedRealtimeNanos())
 
     private var lastCameraScanMs=0L
     var cameraPreferences by mutableStateOf(cameraPrefsStore.get()); private set
     var enforcementCameras by mutableStateOf<List<EnforcementCamera>>(emptyList()); private set
+    private var coordinateReferenceIds867:Set<String> = emptySet()
+    var coordinateCatalogMatchCount by mutableIntStateOf(0); private set
     var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
     var cameraLastUpdated by mutableStateOf("Never"); private set
     var cameraRefreshMessage by mutableStateOf<String?>(null); private set
@@ -615,13 +618,19 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(!newPrefs.master)upcomingEnforcementCamera=null
     }
     private suspend fun loadCameraStore() {
-        val pair=withContext(Dispatchers.IO) {
+        val (cameras,meta,reference)=withContext(Dispatchers.IO) {
             cameraStore.ensureBundled()
-            cameraStore.cameras() to cameraStore.metadata()
+            val list=cameraStore.cameras()
+            Triple(list,cameraStore.metadata(),
+                runCatching{CameraCoordinateCatalog867.load(context,list)}
+                    .onFailure{android.util.Log.e("SGCamera867","Screenshot coordinate catalog validation failed; disabling new 2KM voice",it)}
+                    .getOrNull())
         }
-        enforcementCameras=pair.first
-        cameraDatabaseVersion=pair.second.first
-        cameraLastUpdated=pair.second.second
+        enforcementCameras=cameras
+        cameraDatabaseVersion=meta.first
+        cameraLastUpdated=meta.second
+        coordinateReferenceIds867=reference?.eligibleSpeedIds.orEmpty()
+        coordinateCatalogMatchCount=reference?.size?:0
     }
     suspend fun refreshCameraSnapshot(){
         if(cameraRefreshBusy)return
@@ -630,7 +639,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             withContext(Dispatchers.IO) { cameraStore.replace(CameraSafetyRemote.download()) }
             loadCameraStore()
             voiceAudio.stopObsoleteCameraForRouteChange()
-            cameraVoicePlanner.reset()
+            cameraVoicePlanner.reset(); cameraGpsFallback867.reset()
             cameraRefreshMessage="Camera snapshot verified and updated."
         }catch(e:Exception){
             cameraRefreshMessage="Camera update not available; retaining previous verified offline snapshot."
@@ -645,7 +654,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             upcomingEnforcementCamera=null
             return
         }
-        if(offRoute || route==null || shape.size<2) {
+        if(offRoute || route==null) {
             cameraVoiceDiagnostic="Waiting for active GPS navigation route (or rerouting)"
             upcomingEnforcementCamera=null
             return
@@ -661,17 +670,30 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         val bearingAccuracy=fix.bearingAccuracyDegrees.takeIf {
             fix.hasBearingAccuracy() && it.isFinite()
         }
-        val approaches=CameraApproachLogic.find(
-            GpsPoint(fix.latitude,fix.longitude),shape,currentRoad,upcoming,fix.accuracy,
-            enforcementCameras,fix.speed.takeIf{fix.hasSpeed()},
-            reliableBearing,bearingAccuracy)
-            .filter { cameraPreferences.categoryEnabled(it.camera.category) }
+        val rawApproaches=(if(shape.size>=2) {
+            CameraApproachLogic.find(
+                GpsPoint(fix.latitude,fix.longitude),shape,currentRoad,upcoming,fix.accuracy,
+                enforcementCameras,fix.speed.takeIf{fix.hasSpeed()},
+                reliableBearing,bearingAccuracy)
+        } else {
+            // GPS coordinate fallback only after repeat accurate readings on same named
+            // road with consistent heading, not a claimed road-route distance.
+            cameraGpsFallback867.scan(
+                GpsPoint(fix.latitude,fix.longitude),now,fix.accuracy,
+                fix.speed.takeIf{fix.hasSpeed()},reliableBearing,bearingAccuracy,
+                currentRoad,enforcementCameras.filter{it.id in coordinateReferenceIds867})
+        }).filter { cameraPreferences.categoryEnabled(it.camera.category) &&
+            (it.camera.isRedLight || it.camera.isAverage ||
+                it.camera.id in coordinateReferenceIds867) }
+        val approaches=CameraVoiceGroup867.combine(rawApproaches)
         upcomingEnforcementCamera=approaches.firstOrNull()
         cameraVoicePlanner.observeVisible(approaches,now)
         if(approaches.isEmpty()) {
             cameraVoiceDiagnostic=if(currentRoad.isNullOrBlank())
                 "Waiting for matched road name from navigation"
-            else "No camera matched current road, route and GPS position"
+            else if(coordinateCatalogMatchCount!=100)
+                "Coordinate import validation failed: ${coordinateCatalogMatchCount}/100"
+            else "No camera matched current road, direction or 2KM route distance"
             return
         }
         if(muted || !cameraPreferences.voice) {
@@ -730,6 +752,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 "publishedDirection=${approach.camera.directionText} currentRoad=$currentRoad " +
                 "directionConfirmed=${approach.directionConfirmed} " +
                 "genericSafety=${approach.genericSafetyEligible} " +
+                "distanceType=${if(approach.coordinateFallbackUsed)"GEOGRAPHIC_APPROX" else "ROUTE"} " +
+                "sourceGps=(${approach.camera.point.lat},${approach.camera.point.lon}) " +
+                "vehicleGps=(${fix.latitude},${fix.longitude}) accuracy=${fix.accuracy}m " +
                 "previousDistance=${planned.previousMetresAhead?.toInt()}m " +
                 "cameraRouteDistance=${planned.metresAhead.toInt()}m " +
                 "threshold=${planned.warningThresholdMetres?.toInt()}m " +
@@ -740,7 +765,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             if(accepted) {
                 // Only a pending request until MediaPlayer.start() confirms real playback.
                 cameraVoicePlanner.markRequested(planned)
-                cameraVoiceDiagnostic="PENDING: ${planned.clipId}.mp3; waiting for Android playback STARTED"
+                cameraVoiceDiagnostic="PENDING: ${planned.clipId}.mp3; ${if(approach.coordinateFallbackUsed)"coordinate estimate safety (not route metres); " else ""}waiting for Android playback STARTED"
                 return
             }
             reason="DEFERRED: camera audio busy/priority/focus; rechecking next GPS fix"
@@ -966,7 +991,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         requestJob?.cancel()
         upcomingEnforcementCamera=null
         voiceAudio.stopObsoleteCameraForRouteChange()
-        cameraVoicePlanner.reset()
+        cameraVoicePlanner.reset(); cameraGpsFallback867.reset()
         reroute.requested(now); loading=true
         message=if(decision!=null || offRoute) "Recalculating route…" else null
         val trace=decision?.let { RerouteLatency(id,it.confirmingFixMs,now,SystemClock.elapsedRealtime()) }

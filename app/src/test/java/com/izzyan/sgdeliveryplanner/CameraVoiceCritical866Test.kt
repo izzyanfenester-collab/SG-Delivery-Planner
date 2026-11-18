@@ -18,10 +18,10 @@ class CameraVoiceCritical866Test {
     private fun event(cue:CameraVoiceCue865,state:PandaPlaybackState866,elapsed:Long)=
         PandaPlaybackEvent866(cue.phrase.key,state,"test",elapsed)
 
-    @Test fun fixedCamera650To470CrossingGeneratesRealRecordedClip() {
+    @Test fun fixedCamera2200To1800CrossingGeneratesRealRecordedClip() {
         val p=CameraVoicePlanner865();val cam=camera("S1")
-        assertNull(cue(p,cam,650.0))
-        val warning=cue(p,cam,470.0)
+        assertNull(cue(p,cam,2200.0))
+        val warning=cue(p,cam,1800.0)
         assertEquals("speed_camera_ahead",warning?.clipId)
         assertEquals(VoicePriority.CAMERA,warning?.phrase?.priority)
     }

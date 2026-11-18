@@ -111,7 +111,8 @@ internal data class CameraAlertPreferences(
     val master:Boolean=true, val speed:Boolean=true, val redLight:Boolean=true,
     val mobile:Boolean=true, val voice:Boolean=true,val icons:Boolean=true,
     val speedLimitDisplay:Boolean=true,val overspeed:Boolean=false,
-    val averageVoice:Boolean=true, val verifiedOverspeedVoice:Boolean=true
+    val averageVoice:Boolean=true, val verifiedOverspeedVoice:Boolean=true,
+    val coordinateCameraAlerts:Boolean=true, val coordinateReminder:Boolean=true
 ) {
     fun categoryEnabled(category:String)=master && when(category) {
         "RED_LIGHT_CAMERA"->redLight
@@ -127,7 +128,8 @@ internal class CameraSafetyPrefs(context:Context) {
         prefs.getBoolean("redLight",true),prefs.getBoolean("mobile",true),
         prefs.getBoolean("voice",true),prefs.getBoolean("icons",true),
         prefs.getBoolean("speedLimitDisplay",true),prefs.getBoolean("overspeed",false),
-        prefs.getBoolean("averageVoice",true),prefs.getBoolean("verifiedOverspeedVoice",true))
+        prefs.getBoolean("averageVoice",true),prefs.getBoolean("verifiedOverspeedVoice",true),
+        prefs.getBoolean("coordinateCameraAlerts",true),prefs.getBoolean("coordinateReminder",true))
     fun save(value:CameraAlertPreferences){
         prefs.edit().putBoolean("master",value.master).putBoolean("speed",value.speed)
             .putBoolean("redLight",value.redLight).putBoolean("mobile",value.mobile)
@@ -135,7 +137,9 @@ internal class CameraSafetyPrefs(context:Context) {
             .putBoolean("speedLimitDisplay",value.speedLimitDisplay)
             .putBoolean("overspeed",value.overspeed)
             .putBoolean("averageVoice",value.averageVoice)
-            .putBoolean("verifiedOverspeedVoice",value.verifiedOverspeedVoice).apply()
+            .putBoolean("verifiedOverspeedVoice",value.verifiedOverspeedVoice)
+            .putBoolean("coordinateCameraAlerts",value.coordinateCameraAlerts)
+            .putBoolean("coordinateReminder",value.coordinateReminder).apply()
     }
 }
 
