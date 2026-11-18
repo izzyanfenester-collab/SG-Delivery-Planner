@@ -252,10 +252,13 @@ internal object CameraApproachLogic {
             val ahead=projected.progressedMetres-vehicle.progressedMetres
             // No post-camera warning: never convert a behind-camera (-30m) into 0m ahead.
             if(ahead < 25.0 || ahead > 2600.0)continue
+            val routeHeading=projected.segmentBearing
             val directionalTextMatches=directionMatches(camera,routeHeading,upcomingRoads,records)
             val bothDirectionsDocumented=nearPublishedBidirectionalSite(camera,records) &&
                 projected.lateralMetres<=10.0 && vehicle.lateralMetres<=12.0 &&
-                accuracyMetres<=12f && (speedMps?:0f)>=3f
+                accuracyMetres<=12f && (speedMps?:0f)>=3f &&
+                vehicleBearingDegrees?.isFinite()==true &&
+                CameraRouteGeometry.angularGap(vehicleBearingDegrees,routeHeading)<=20.0
             val direction=directionalTextMatches || bothDirectionsDocumented
             val required=when {
                 camera.isRedLight -> 300.0
