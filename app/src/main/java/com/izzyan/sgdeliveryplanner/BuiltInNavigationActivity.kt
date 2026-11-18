@@ -281,30 +281,50 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                     fontSize=27.sp,fontWeight=FontWeight.Bold)
                                 Text("km/h",color=SGColors.Silver,fontSize=11.sp)
                                 if(session.cameraPreferences.speedLimitDisplay){
-                                    val limit=session.speedLimitState868
+                                    // A red circle does not imply verification: the distinct
+                                    // classification is always immediately beneath the sign.
+                                    val limit=SpeedLimitDisplay869.render(session.speedLimitState868)
                                     Spacer(Modifier.height(3.dp))
                                     Text("SPEED LIMIT",color=SGColors.Gold,
-                                        fontSize=9.sp,fontWeight=FontWeight.Bold)
+                                        fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
                                     Surface(
                                         color=Color.White,
                                         shape=CircleShape,
-                                        border=BorderStroke(if(limit.verifiedKmh!=null)3.dp else 1.dp,
-                                            if(limit.verifiedKmh!=null)Color(0xFFD52C2C) else Color.Gray),
-                                        modifier=Modifier.size(53.dp)
+                                        border=BorderStroke(
+                                            if(limit.highlightOverspeed)4.dp else
+                                                if(limit.hasNumericLimit)3.dp else 1.5.dp,
+                                            if(limit.highlightOverspeed)Color(0xFFFF3B30) else
+                                                if(limit.hasNumericLimit)Color(0xFFD52C2C) else Color.Gray
+                                        ),
+                                        modifier=Modifier.size(60.dp)
                                     ){
-                                        Box(contentAlignment=Alignment.Center){
-                                            Text(limit.verifiedKmh?.toString() ?: "—",
-                                                color=if(limit.verifiedKmh!=null)Color.Black else Color.Gray,
-                                                fontSize=if(limit.verifiedKmh!=null)21.sp else 24.sp,
-                                                fontWeight=FontWeight.Bold)
+                                        Column(
+                                            horizontalAlignment=Alignment.CenterHorizontally,
+                                            verticalArrangement=Arrangement.Center,
+                                            modifier=Modifier.fillMaxSize()
+                                        ){
+                                            Text(limit.numberKmh?.toString() ?: "—",
+                                                color=if(limit.hasNumericLimit)Color.Black else Color.Gray,
+                                                fontSize=if(limit.hasNumericLimit)24.sp else 25.sp,
+                                                fontWeight=FontWeight.Black,
+                                                lineHeight=25.sp,maxLines=1)
+                                            if(limit.hasNumericLimit){
+                                                Text("km/h",color=Color.Black,
+                                                    fontSize=8.sp,lineHeight=10.sp,maxLines=1)
+                                            }
                                         }
                                     }
-                                    if(limit.isReferenceOnly){
-                                        Text("REF ${limit.referenceKmh} km/h",
-                                            color=SGColors.Gold,fontSize=10.sp,
-                                            fontWeight=FontWeight.SemiBold,maxLines=1)
-                                        Text("UNVERIFIED",color=SGColors.Silver,
-                                            fontSize=8.sp,maxLines=1)
+                                    Text(limit.badge.label,
+                                        color=when(limit.badge){
+                                            SpeedLimitBadge869.VERIFIED -> Color(0xFF82C89A)
+                                            SpeedLimitBadge869.REFERENCE -> SGColors.Gold
+                                            SpeedLimitBadge869.UNVERIFIED -> Color(0xFFFFAF72)
+                                            SpeedLimitBadge869.UNKNOWN -> SGColors.Silver
+                                        },
+                                        fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
+                                    limit.note?.let{
+                                        Text(it,color=SGColors.Silver,fontSize=8.sp,
+                                            fontWeight=FontWeight.Medium,maxLines=1)
                                     }
                                 }
                             }

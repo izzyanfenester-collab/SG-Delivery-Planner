@@ -18,13 +18,12 @@ internal class SpeedLimitTracker868 {
     private var pendingId:String?=null
     private var pendingCount=0
     private var stableId:String?=null
-    private var missed=0
     private var overspeedSamples=0
     private var withinSamples=0
     private var wasOverspeed=false
     private var previous:SpeedLimitState868=SpeedLimitState868()
     fun reset(){
-        pendingId=null;pendingCount=0;stableId=null;missed=0
+        pendingId=null;pendingCount=0;stableId=null
         overspeedSamples=0;withinSamples=0;wasOverspeed=false
         previous=SpeedLimitState868()
     }
@@ -53,11 +52,12 @@ internal class SpeedLimitTracker868 {
         }.minByOrNull{it.second}?.first
 
         if(match==null){
-            missed++
-            if(missed>=2)reset()
-            return previous
+            // Never carry a previous camera's speed onto a new road, exit ramp,
+            // opposite carriageway, poor-quality projection or ambiguous flyover.
+            // A fresh valid reference needs two consecutive matching GPS fixes.
+            reset()
+            return previous.copy(diagnostics="No confident upcoming camera-area road/direction match")
         }
-        missed=0
         if(match.cameraId!=pendingId){
             pendingId=match.cameraId
             pendingCount=1
