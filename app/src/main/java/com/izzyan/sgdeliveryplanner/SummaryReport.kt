@@ -1,6 +1,5 @@
 package com.izzyan.sgdeliveryplanner
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -79,16 +78,21 @@ fun buildSummaryReport(plan: Plan): String = buildString {
     }
 }
 
-internal fun summaryReportShareIntent(context: Context, plan: Plan): Intent =
-    singleDeliveryShareIntent(context,generateSummaryReportImage(context,plan)).apply {
+internal fun summaryReportShareIntent(context: Context, plan: Plan): Intent {
+    val file=generateSummaryReportImage(context,plan)
+    require(file.isFile && file.length()>0L && file.canRead()) {
+        "Delivery Summary Report PNG could not be read."
+    }
+    return singleDeliveryShareIntent(context,file).apply {
         putExtra(Intent.EXTRA_SUBJECT,"Delivery Report Summary")
     }
-
-internal fun openSummaryReportShare(context: Context, send: Intent) {
-    val chooser=Intent.createChooser(send,"Share Report")
-    if(context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    context.startActivity(chooser)
 }
+
+/** Exactly the same saved-default and secure image URI flow as Delivery → Share Report Photo.
+ * Returning a fallback request does NOT mean the report was sent; only the runner sends in WhatsApp.
+ */
+internal fun openSummaryReportShare(context: Context, send: Intent): WhatsAppImageShareFallbackRequest? =
+    openDefaultWhatsAppImageShare(context,send,"Share Report")
 
 internal fun copySummaryReport(context: Context, plan: Plan) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -102,6 +106,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var sharing by remember(plan) { mutableStateOf(false) }
+    var shareFallback by remember(plan.id) { mutableStateOf<WhatsAppImageShareFallbackRequest?>(null) }
     val fields = remember(plan) { summaryReportFields(plan) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * .9f
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -143,7 +148,7 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                             scope.launch {
                                 try {
                                     val send=withContext(Dispatchers.IO) {summaryReportShareIntent(context,plan)}
-                                    openSummaryReportShare(context,send)
+                                    shareFallback=openSummaryReportShare(context,send)
                                 } catch(e: kotlinx.coroutines.CancellationException) {throw e}
                                 catch(_: Exception) {Toast.makeText(context,"The report could not be shared. Please try again.",Toast.LENGTH_LONG).show()}
                                 finally {sharing=false}
@@ -175,5 +180,8 @@ fun DeliverySummaryReportPreview(plan: Plan, onClose: () -> Unit) {
                 }
             }
         }
+    }
+    shareFallback?.let { request ->
+        WhatsAppImageShareFallbackDialog(request) { shareFallback=null }
     }
 }

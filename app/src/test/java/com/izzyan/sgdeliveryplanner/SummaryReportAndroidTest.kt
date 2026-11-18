@@ -106,10 +106,11 @@ Remark: Fuel receipt retained""",
     }
 
     @Test
-    fun shareReportOpensAnAndroidChooserWithTheCompleteReport() {
+    fun askEveryTimeRetainsOriginalShareChooserWithCompleteReport() {
         val app = ApplicationProvider.getApplicationContext<Application>()
+        WhatsAppPreferences(app).updateDefault(null)
         val plan = route()
-        openSummaryReportShare(app,summaryReportShareIntent(app,plan))
+        assertNull(openSummaryReportShare(app,summaryReportShareIntent(app,plan)))
         val chooser = Shadows.shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         assertEquals("Share Report", chooser.getCharSequenceExtra(Intent.EXTRA_TITLE))
