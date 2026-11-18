@@ -21,11 +21,12 @@ class NavigationIntentAndroidTest {
         assertNull(intent.action)
         assertNull(intent.data)
         assertNull(intent.clipData)
-        assertEquals(setOf("postal", "address", "lat", "lon"), intent.extras!!.keySet())
+        assertEquals(setOf("postal", "address", "block", "lat", "lon"), intent.extras!!.keySet())
         assertEquals(plan.stops[1].place.postal, intent.getStringExtra("postal"))
         assertEquals(plan.stops[1].place.lat, intent.getDoubleExtra("lat", 0.0), 0.0)
         assertEquals(plan.stops[1].place.lon, intent.getDoubleExtra("lon", 0.0), 0.0)
         assertEquals(plan.stops[1].place.address, intent.getStringExtra("address"))
+        assertEquals(plan.stops[1].place.block, intent.getStringExtra("block"))
         assertNull(builtInNavigationIntent(context, plan.copy(current = 3)))
     }
 }
