@@ -1,0 +1,249 @@
+name: Publish verified SG Delivery B869 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b869-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b869-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Verify exact user-approved B869 GPS and speed-limit source scope
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          expected={
+              'app/src/main/assets/sg_speed_limits_reference_868.csv',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/BuiltInNavigationActivity.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/CameraSafetySettingsUi.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/SpeedLimitDisplay869.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/SpeedLimitReferenceStore868.kt',
+              'app/src/main/java/com/izzyan/sgdeliveryplanner/SpeedLimitTracker868.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/SpeedLimitDisplay869Test.kt',
+              'app/src/test/java/com/izzyan/sgdeliveryplanner/SpeedLimitReference868Test.kt',
+          }
+          changed=set(subprocess.check_output(
+              ['git','diff','--name-only','f23b7144c6468ecfb5c11e7fab850513bb0a9d96','HEAD','--','app/src'],text=True).splitlines())
+          assert changed==expected, f'B869 Official source-scope conflict: {changed ^ expected}'
+          print('Approved B867-to-B869 app source scope verified.')
+          PY
+          grep -F 'applicationId = "com.izzyan.sgdeliveryplanner"' app/build.gradle.kts
+          grep -F 'versionCode = 71; versionName = "1.4.57-b869"' app/build.gradle.kts
+          grep -F 'applicationIdSuffix = ".testing"' app/build.gradle.kts
+      - run: python3 scripts/build_postal_seed.py
+      - name: Import verified original Panda Warrior V2 from B857 Official FIXED
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/b857"
+          gh release download v1.4.45-b857 --pattern SG-Delivery-B857-Official.apk --dir "$RUNNER_TEMP/b857"
+          echo "f5d215ef9ca67f603c45da61f553254953fd2248a5a0a16c449c479f47467819  $RUNNER_TEMP/b857/SG-Delivery-B857-Official.apk" | sha256sum -c -
+          python3 - <<'PY'
+          import json, os, pathlib, zipfile
+          apk = pathlib.Path(os.environ['RUNNER_TEMP']) / 'b857/SG-Delivery-B857-Official.apk'
+          prefix = 'assets/voicepacks/panda_warrior_v2/'
+          with zipfile.ZipFile(apk) as z:
+              m = json.loads(z.read(prefix + 'manifest.json'))
+              assert len(m['clips']) == 185
+              assert z.testzip() is None
+              for name in z.namelist():
+                  if name.startswith(prefix) and not name.endswith('/'):
+                      path = pathlib.Path('app/src/main') / name
+                      path.parent.mkdir(parents=True, exist_ok=True)
+                      path.write_bytes(z.read(name))
+          PY
+      - name: Verify authentic user-supplied 209 clip ZIP
+        run: |
+          set -euo pipefail
+          file=voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+          test -s "$file"
+          echo "e8e3b56d9b0a9adc1d8b541134af8ac97905ba66e65e48336783f06e1a355c24  $file" | sha256sum -c -
+      - name: Install portable FFmpeg to convert original recorded camera MP3
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/panda-ffmpeg-venv"
+          "$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -m pip install --disable-pip-version-check -q imageio-ffmpeg==0.6.0
+          ffmpeg_exe=$("$RUNNER_TEMP/panda-ffmpeg-venv/bin/python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+          test -x "$ffmpeg_exe"
+          mkdir -p "$RUNNER_TEMP/panda-ffmpeg-bin"
+          ln -s "$ffmpeg_exe" "$RUNNER_TEMP/panda-ffmpeg-bin/ffmpeg"
+          echo "$RUNNER_TEMP/panda-ffmpeg-bin" >> "$GITHUB_PATH"
+          "$ffmpeg_exe" -version | head -1
+      - name: Import authentic 24 camera MP3 and offline PCM with 185 clip identity check
+        run: |
+          set -euo pipefail
+          python3 scripts/install_panda209_camera_865.py voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip
+      - name: Full unit tests, lint and unsigned release compilation
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Restore original official JKS signing key securely
+        shell: bash
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SG_DELIVERY_KEYSTORE_BASE64 SG_DELIVERY_KEYSTORE_PASSWORD SG_DELIVERY_KEY_ALIAS SG_DELIVERY_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing protected signing secret: $key"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b869.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b869.jks"
+      - name: Align native libraries to 16 KB and sign with original Official identity
+        shell: bash
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$unsigned"
+          mkdir -p dist
+          "$bt/zipalign" -P 16 -f -v 4 "$unsigned" dist/b869-aligned-unsigned.apk >/dev/null
+          "$bt/apksigner" sign \
+            --ks "$RUNNER_TEMP/sg-delivery-b869.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" \
+            --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B869-Official.apk dist/b869-aligned-unsigned.apk
+          rm -f dist/b869-aligned-unsigned.apk
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B869-Official.apk | tee dist/signing-verification.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B869-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='71' versionName='1.4.57-b869'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B869-Official.apk | tail -1 | grep -F 'Verification successful'
+          python3 - <<'PY'
+          import zipfile, pathlib, json, os
+          nav='assets/voicepacks/panda_warrior_v2/'
+          cam='assets/voicepacks/panda_warrior_camera/'
+          apk=pathlib.Path('dist/SG-Delivery-B869-Official.apk')
+          b857=pathlib.Path(os.environ['RUNNER_TEMP'])/'b857/SG-Delivery-B857-Official.apk'
+          user=pathlib.Path('voice_upload/SG_Delivery_Panda_Warrior_V2_With_Camera_Alerts_209_Clips.zip')
+          with zipfile.ZipFile(apk) as a, zipfile.ZipFile(b857) as official, zipfile.ZipFile(user) as z:
+              assert a.testzip() is None and z.testzip() is None
+              navigation=json.loads(a.read(nav+'manifest.json'))['clips']
+              camera=json.loads(a.read(cam+'manifest.json'))['clips']
+              assert len(navigation)==185 and len(camera)==24
+              assert len({v['id'] for v in navigation+camera})==209
+              snapshot=json.loads(a.read('assets/sg_enforcement_cameras.json'))
+              coordinate=json.loads(a.read('assets/sg_speed_camera_reference_867.json'))
+              assert snapshot['record_count']==341 and coordinate['record_count']==100
+              by_id={item['camera_id']:item for item in snapshot['cameras']}
+              categories={}
+              for row in coordinate['cameras']:
+                  original=by_id[row['camera_id']]
+                  assert original['latitude']==row['latitude'] and original['longitude']==row['longitude']
+                  assert original['category']==row['category']
+                  assert original['official_name']==row['official_name']
+                  categories[row['category']]=categories.get(row['category'],0)+1
+              assert categories=={
+                  'FIXED_SPEED_CAMERA':20,'LTA_SPEED_CAMERA':13,
+                  'MOBILE_ENFORCEMENT_LOCATION':5,'AVERAGE_SPEED_ZONE':12,
+                  'POLICE_LASER_LOCATION':50
+              },categories
+              assert sum(1 for item in snapshot['cameras'] if item['category']=='RED_LIGHT_CAMERA')==241
+              # The Excel-derived 100-row speed references are advisory, never
+              # automatically promoted to verified legal limit just by GPS proximity.
+              import csv, io
+              entries=list(csv.DictReader(io.StringIO(a.read(
+                  'assets/sg_speed_limits_reference_868.csv').decode('utf-8-sig'))))
+              assert len(entries)==100 and len({x['Camera ID'] for x in entries})==100
+              assert sum(bool(x['Speed limit km/h']) for x in entries)==91
+              assert sum(not x['Speed limit km/h'] for x in entries)==9
+              assert sum('3 dp' in x['GPS Precision'] for x in entries)==12
+              assert sum(x['Status'].startswith('Rujukan') for x in entries)==32
+              assert sum(x['Status'].startswith('Padanan') for x in entries)==59
+              assert sum(x['Status']=='Perlu semakan' for x in entries)==9
+              for row in entries:
+                  ident=row['Camera ID']; number=ident.split('-')[1]
+                  if ident.startswith('F-'):
+                      camera_id=f"FIXED_SPEED_CAMERA-{int(number):03d}"
+                  elif ident.startswith('M-'):
+                      camera_id=f"MOBILE_ENFORCEMENT_LOCATION-{int(number):03d}"
+                  elif ident.startswith('L-'):
+                      camera_id=f"POLICE_LASER_LOCATION-{int(number):03d}"
+                  elif ident.startswith('KM-'):
+                      suffix=(f"-{number[2:]}" if len(number)>2 and ident!='KM-10A' else '')
+                      camera_id=f"LTA_SPEED_CAMERA-{int(number[:2]):03d}"+suffix
+                  else:
+                      assert ident.startswith('A-')
+                      camera_id=f"AVERAGE_SPEED_ZONE-{int(number[2]):03d}-D{number[1]}"
+                  camera=by_id[camera_id]
+                  assert abs(camera['latitude']-float(row['Latitude']))<1e-8
+                  assert abs(camera['longitude']-float(row['Longitude']))<1e-8
+                  assert row['Status'] and row['GPS Precision'] and row['Source']
+
+              for clip in navigation:
+                  assert a.read(nav+clip['file'])==official.read(nav+clip['file'])==z.read(clip['file']), clip['id']
+              for clip in camera:
+                  assert a.read(cam+clip['file'])==z.read(clip['file']), clip['id']
+                  pcm=a.read(cam+'audio_pcm/'+clip['id']+'.pcm')
+                  assert len(pcm)>10000 and len(pcm)%2==0, clip['id']
+              assert any(p.startswith('lib/arm64-v8a/') for p in a.namelist())
+              assert any(p.startswith('lib/armeabi-v7a/') for p in a.namelist())
+          print('B869 Official: 209 original Panda MP3, 341 SPF camera records, 100 exact Excel GPS speed reference rows with classifications, 24 offline PCM verified.')
+          PY
+          sha256sum dist/SG-Delivery-B869-Official.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B869-Official-Verified-APK
+          path: dist/SG-Delivery-B869-Official.apk
+          if-no-files-found: error
+      - name: Publish approved stable release, never change B857 or testing releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.57-b869
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Official B869 release already exists: do not overwrite."
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B869-Official.apk \
+            --target "$GITHUB_SHA" --latest \
+            --title "SG Delivery Build #869 Official – Enhanced Speed Limit Display with Panda Warrior" \
+            --notes "Owner explicitly approved merging Build #869 TESTING as Official. Built on verified B868 with Excel/CSV-derived 100 camera speed-limit records in indexed SQLite; 91 candidate numeric values classified as 32 REFERENCE and 59 UNVERIFIED, plus 9 UNKNOWN with no guessed speed. High-confidence live GPS road/direction matching displays available candidate numbers in a clear red-border circular speed indicator under Current Speed with always-visible evidence classification, while official VERIFIED status and legal overspeed warning require independently verified authoritative road-segment data. No automatic promotion of unverified references, no fabricated legal limits. All 341 SPF published cameras including 241 red-light records preserved; original 209 authentic Panda Warrior ElevenLabs MP3 and offline PCM preserved, with 2KM speed-camera / optional 500M reminder, existing cinematic GPS, offline maps, themes, delivery/payment and saved data unchanged. Original official package com.izzyan.sgdeliveryplanner and original signing certificate retained. versionCode 71, 1.4.57-b869, stable latest release supports Check for Update. Automated Android unit tests, lint, APK signing/asset validation pass; real-road posted limits, device display and speaker/Bluetooth audible tests not independently established."
+          gh release view "$tag" --json tagName,isPrerelease,isDraft,assets
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b869.jks"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B869-Official-CI-Verification
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/signing-verification.txt
