@@ -271,6 +271,13 @@ internal object CameraApproachLogic {
         if(!current.valid()||shape.size<2||!accuracyMetres.isFinite()||accuracyMetres>25) return emptyList()
         val vehicle=CameraRouteGeometry.project(current,shape) ?: return emptyList()
         if(vehicle.lateralMetres>25.0) return emptyList()
+        val vehicleRoad=roadCorridors.firstOrNull {
+            vehicle.progressedMetres>=it.startMetres && vehicle.progressedMetres<=it.endMetres
+        }?.road
+        // Validate the runner's current road as well as the future camera road.
+        // A nearby parallel road must not borrow the active route's camera corridor.
+        if(!currentRoad.isNullOrBlank() && !vehicleRoad.isNullOrBlank() &&
+            !roadMatches(currentRoad,vehicleRoad))return emptyList()
         if(vehicleBearingDegrees?.isFinite()==true && (speedMps?:0f)>=3f &&
             CameraRouteGeometry.angularGap(vehicleBearingDegrees,vehicle.segmentBearing)>55.0)
             return emptyList()

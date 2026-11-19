@@ -49,6 +49,9 @@ internal class CameraRouteRecovery872 {
             now-previousMs !in 1L..5_000L || bearingAccuracy==null ||
             bearingAccuracy !in 0f..20f ||
             CameraRouteGeometry.angularGap(previousHeading,bearing)>20.0) return emptyList()
+        val vehicle=CameraRouteGeometry.project(current,shape)?:return emptyList()
+        if(vehicle.lateralMetres>8.0 ||
+            CameraRouteGeometry.angularGap(bearing,vehicle.segmentBearing)>15.0)return emptyList()
         return CameraApproachLogic.find(current,shape,currentRoad?:road,upcoming,accuracy,
             records,speed,bearing,bearingAccuracy,corridors).map {
                 it.copy(coordinateFallbackUsed=true,matchReason="recovered-real-route-corridor")

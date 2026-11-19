@@ -79,6 +79,9 @@ class Camera872ReplayTest {
         val road=CameraRoadCorridor872("Elevated Road",0.0,8000.0)
         assertTrue(CameraApproachLogic.find(point(3100.0),route,"Elevated Road",listOf("End Road"),
             6f,listOf(camera()),16f,90.0,5f,listOf(road)).isEmpty())
+        assertTrue(CameraApproachLogic.find(point(3100.0),route,"Parallel Road",listOf("End Road"),
+            6f,listOf(camera()),16f,90.0,5f,
+            listOf(CameraRoadCorridor872("Camera Road",0.0,8000.0))).isEmpty())
     }
     @Test fun primaryWarnsOnLaterRouteRoadBeforeRunnerJoinsIt() {
         val corridors=listOf(CameraRoadCorridor872("Feeder Road",0.0,4000.0),
@@ -106,6 +109,8 @@ class Camera872ReplayTest {
         assertTrue(recovered.coordinateFallbackUsed)
         assertEquals(1900.0,recovered.routeMetresAhead,0.1)
         assertEquals("speed_camera_ahead",due(CameraVoicePlanner865(),recovered)?.clipId)
+        assertTrue(r.scan(point(3300.0,20.0),3000,emptyList(),null,listOf("End Road"),
+            6f,16f,90.0,5f,listOf(cam),corridors).isEmpty())
         assertTrue(tick(3300.0,20_000,emptyList(),null).isEmpty())
         r.reset();assertTrue(tick(3400.0,21_000,emptyList(),null).isEmpty())
     }

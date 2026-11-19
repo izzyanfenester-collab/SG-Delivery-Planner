@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           bt="$ANDROID_HOME/build-tools/36.0.0"
-          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b872test' versionCode='76' versionName='1.4.60-b872-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b872test' versionCode='77' versionName='1.4.60-b872-testing-r2'"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
           "$bt/apksigner" verify --verbose "$apk"
           mkdir -p dist
@@ -58,7 +58,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag=v1.4.60-b872-testing
+          tag=v1.4.60-b872-testing-r2
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::error::Testing release already exists; refusing replacement"
             exit 1
