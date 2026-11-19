@@ -1,0 +1,129 @@
+name: Publish approved SG Delivery B872 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b872-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b872-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact user-approved B872 R2 application source
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor dd368b27ef30fccadbfc62ab69ceed2aeb0c770f HEAD
+          git merge-base --is-ancestor d44b460e6725fe0d36dfda2ffab1930220ba164f HEAD
+          git diff --exit-code d44b460e6725fe0d36dfda2ffab1930220ba164f HEAD -- app/src/main app/src/test
+          python3 - <<'PY'
+          import pathlib, subprocess
+          touched=set(subprocess.check_output(['git','diff','--name-only',
+              'd44b460e6725fe0d36dfda2ffab1930220ba164f','HEAD','--','app/src'],text=True).splitlines())
+          assert touched=={'app/src/debug/res/values/strings.xml'}, touched
+          expected=subprocess.check_output(['git','show',
+              'dd368b27ef30fccadbfc62ab69ceed2aeb0c770f:app/src/debug/res/values/strings.xml'])
+          assert pathlib.Path('app/src/debug/res/values/strings.xml').read_bytes()==expected
+          PY
+          grep -F 'versionCode = 73; versionName = "1.4.60-b872"' app/build.gradle.kts
+          grep -F 'applicationId = "com.izzyan.sgdeliveryplanner"' app/build.gradle.kts
+          grep -F 'applicationIdSuffix = ".testing"' app/build.gradle.kts
+      - name: Restore byte-identical original 209 recordings and camera PCM
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.59-b871/SG-Delivery-B871-Official.apk -o "$RUNNER_TEMP/B871.apk"
+          python3 scripts/restore_b871_assets872.py "$RUNNER_TEMP/B871.apk"
+          python3 scripts/build_postal_seed.py
+      - name: Full regression tests, GPS replays, playback lifecycle, lint and Official compilation
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Restore original Official signing key securely
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SG_DELIVERY_KEYSTORE_BASE64 SG_DELIVERY_KEYSTORE_PASSWORD SG_DELIVERY_KEY_ALIAS SG_DELIVERY_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing protected signing secret: $key"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b872.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b872.jks"
+      - name: Sign Official APK with existing identity and verify upgrade compatibility
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$unsigned"
+          mkdir -p dist
+          "$bt/zipalign" -P 16 -f -v 4 "$unsigned" "$RUNNER_TEMP/b872-aligned.apk" >/dev/null
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/sg-delivery-b872.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B872-Official.apk "$RUNNER_TEMP/b872-aligned.apk"
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B872-Official.apk | tee dist/signing-verification.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B872-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='73' versionName='1.4.60-b872'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B872-Official.apk >/dev/null
+          python3 scripts/verify_b872_official.py "$RUNNER_TEMP/B871.apk" dist/SG-Delivery-B872-Official.apk dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cd dist
+          zip -q -r B872-Official-Verification.zip B872-Official-acceptance.json B872-Official-2KM-replay-logs.txt signing-verification.txt unit-test-results lint-results-debug.html
+          sha256sum SG-Delivery-B872-Official.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B872-Official-Verified-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish user-approved B872 as latest stable update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.60-b872
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Official B872 already exists; refusing to overwrite"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B872-Official.apk dist/B872-Official-Verification.zip \
+            --target "$GITHUB_SHA" --latest \
+            --title "SG Delivery Build #872 Official – 2KM Camera Voice and Larger Icons" \
+            --notes "Owner explicitly approved merging B872 TESTING R2 (d44b460e6725fe0d36dfda2ffab1930220ba164f) into Official. Same approved application logic: universal 2000m primary camera threshold, sampled-GPS crossings and start-inside handling, route/direction/current-road matching, controlled route recovery, priority-aware Panda voice retry and stale-event cancellation, direct authentic MP3 playback, diagnostic lifecycle/focus/volume handling, and +20% stable camera symbols. Original 209 MP3/PCM and 341 camera records remain byte-identical to B871. Existing smooth zoom, aggressive rerouting, premium themes, delivery/payment/history, summary WhatsApp sharing and saved-data behaviour retained. Canonical Official package, versionCode 73/version 1.4.60-b872, original signing certificate for in-place upgrade. Full automated tests, lint, APK signing/alignment and asset integrity verified; evidence attached. Physical GPS/speaker/Bluetooth verification has not been performed. Existing 12 average-speed points still lack verified entrance/exit evidence, so production zone-boundary announcements remain pending verification. Unverified red-light cameras retain red-light-only warnings. Published as latest stable for Check for Update."
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = "$tag"
+      - name: Remove temporary signing key and aligned APK
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b872.jks" "$RUNNER_TEMP/b872-aligned.apk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B872-Official-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/signing-verification.txt

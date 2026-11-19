@@ -11,9 +11,17 @@ import org.maplibre.android.annotations.IconFactory
 
 /** Small native bitmap icons. Created once per style, never on per-frame GPS updates. */
 internal object CameraSafetyMapIcons {
-    fun icon(context:Context,category:String):Icon {
-        val bitmap=Bitmap.createBitmap(48,56,Bitmap.Config.ARGB_8888)
+    const val BASE_WIDTH=48
+    const val BASE_HEIGHT=56
+    const val SCALE=1.20f
+    fun icon(context:Context,category:String):Icon =
+        IconFactory.getInstance(context).fromBitmap(bitmap(category))
+    fun bitmap(category:String):Bitmap {
+        // Re-rasterize the vector drawing at +20%; do not stretch a small bitmap.
+        val bitmap=Bitmap.createBitmap(kotlin.math.ceil(BASE_WIDTH*SCALE).toInt(),
+            kotlin.math.ceil(BASE_HEIGHT*SCALE).toInt(),Bitmap.Config.ARGB_8888)
         val canvas=Canvas(bitmap)
+        canvas.scale(SCALE,SCALE)
         val paint=Paint(Paint.ANTI_ALIAS_FLAG)
         val red=Color.rgb(231,55,68)
         val amber=Color.rgb(235,165,41)
@@ -24,7 +32,7 @@ internal object CameraSafetyMapIcons {
         canvas.drawRoundRect(RectF(4f,3f,44f,44f),12f,12f,paint)
         paint.style=Paint.Style.FILL
         when(category) {
-            "RED_LIGHT_CAMERA" -> {
+            "RED_LIGHT_CAMERA","RED_LIGHT_SPEED_CAMERA" -> {
                 paint.color=Color.DKGRAY;canvas.drawRoundRect(RectF(15f,7f,33f,39f),7f,7f,paint)
                 for((cy,c) in listOf(13f to red,23f to amber,33f to Color.rgb(52,202,96))){
                     paint.color=c;canvas.drawCircle(24f,cy,3.5f,paint)
@@ -45,11 +53,11 @@ internal object CameraSafetyMapIcons {
                 paint.color=Color.BLACK;canvas.drawCircle(24f,23f,3.5f,paint)
             }
         }
-        paint.color=if(category=="RED_LIGHT_CAMERA")red else amber
+        paint.color=if(category in setOf("RED_LIGHT_CAMERA","RED_LIGHT_SPEED_CAMERA"))red else amber
         val triangle=android.graphics.Path().apply {
             moveTo(17f,44f);lineTo(31f,44f);lineTo(24f,53f);close()
         }
         canvas.drawPath(triangle,paint)
-        return IconFactory.getInstance(context).fromBitmap(bitmap)
+        return bitmap
     }
 }

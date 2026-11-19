@@ -25,10 +25,10 @@ class CameraVoiceCritical866Test {
         assertEquals("speed_camera_ahead",warning?.clipId)
         assertEquals(VoicePriority.CAMERA,warning?.phrase?.priority)
     }
-    @Test fun redLight340To260CrossingGeneratesSpecificRedLightClip() {
+    @Test fun redLight2150To1890CrossingGeneratesSpecificRedLightClip() {
         val p=CameraVoicePlanner865();val cam=camera("R1","RED_LIGHT_CAMERA")
-        assertNull(cue(p,cam,340.0))
-        assertEquals("red_light_camera_ahead",cue(p,cam,260.0)?.clipId)
+        assertNull(cue(p,cam,2150.0))
+        assertEquals("red_light_camera_ahead",cue(p,cam,1890.0)?.clipId)
     }
     @Test fun controllerAcceptedButNotStartedMustNeverCountAsPlayed() {
         val p=CameraVoicePlanner865();val cam=camera("S2")
@@ -71,7 +71,8 @@ class CameraVoiceCritical866Test {
     }
     @Test fun highPriorityTurnDefersUntilTurnFinished() {
         val p=CameraVoicePlanner865();val cam=camera("S5")
-        assertNull(p.due(approach(cam,470.0),settings,true,true,60.0,12f))
+        assertNotNull(p.due(approach(cam,470.0),settings,true,true,60.0,12f))
+        assertEquals("immediate-maneuver-priority",CameraVoicePriority872.deferredReason(60.0,null))
         assertEquals("speed_camera_ahead",cue(p,cam,435.0)?.clipId)
     }
     @Test fun differentCameraIdsAreIndependent() {
@@ -102,7 +103,7 @@ class CameraVoiceCritical866Test {
     }
     @Test fun beforeCameraOnlyAndNoWrongDirectionOrUnverifiedAverageZone() {
         val p=CameraVoicePlanner865()
-        assertNull(cue(p,camera("PAST"),20.0))
+        assertNull(cue(p,camera("PAST"),-20.0))
         assertNull(p.due(approach(camera("OPPOSITE"),300.0,false),
             settings,true,true,600.0,12f))
         assertNull(cue(p,camera("AVE","AVERAGE_SPEED_ZONE"),420.0))

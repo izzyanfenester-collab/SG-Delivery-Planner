@@ -38,7 +38,7 @@ class CameraVoiceTriggerFix865Test {
         assertFalse(cue!!.phrase.parts.any{it.clip=="red_light_camera_ahead"})
     }
     @Test fun noSafetyCueWithoutStableGenuineHeadingOrAccurateGeometry() {
-        assertFalse(search(listOf(camera()),bearing=270.0).single().genericSafetyEligible)
+        assertTrue(search(listOf(camera()),bearing=270.0).isEmpty())
         assertFalse(search(listOf(camera()),bearing=null).single().genericSafetyEligible)
         assertFalse(search(listOf(camera()),accuracy=20f).single().genericSafetyEligible)
         assertTrue(search(listOf(camera()),road="Adjacent Flyover").isEmpty())
@@ -79,7 +79,8 @@ class CameraVoiceTriggerFix865Test {
     @Test fun gpsVoicePriorityAndDuplicateGateStillApply() {
         val a=search(listOf(camera())).single()
         val planner=CameraVoicePlanner865()
-        assertNull(planner.due(a,CameraAlertPreferences(),true,true,50.0,12f))
+        assertNotNull(planner.due(a,CameraAlertPreferences(),true,true,50.0,12f))
+        assertNotNull(CameraVoicePriority872.deferredReason(50.0,null))
         val cue=planner.due(a,CameraAlertPreferences(),true,true,600.0,12f)!!
         planner.markScheduled(cue)
         assertNull(planner.due(a,CameraAlertPreferences(),true,true,600.0,12f))

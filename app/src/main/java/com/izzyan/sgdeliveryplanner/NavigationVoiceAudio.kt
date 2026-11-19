@@ -109,7 +109,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     private val focus=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
         .setAudioAttributes(attrs).setOnAudioFocusChangeListener({change->
             if(change==AudioManager.AUDIOFOCUS_LOSS || change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
-                change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) stop()
+                change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) stop("audio-focus-lost-$change")
         },handler).build()
     private var focusHeld=false
     private var player:MediaPlayer?=null
@@ -136,6 +136,7 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     fun setVolume(value:Float){volume=value.coerceIn(0f,1f);runCatching{player?.setVolume(volume,volume)};if(volume<=0f)stop()}
     fun play(
         phrase:VoicePhrase,
+        stillRelevant:(()->Boolean)?=null,
         observer:((PandaPlaybackEvent866)->Unit)?=null
     ):Boolean {
         if(closed || volume<=0f || phrase.parts.isEmpty()) {
@@ -148,7 +149,8 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
         }
         val oldOwner=owner
         val old=oldOwner?.current
-        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank)) {
+        if(old!=null && (old.key==phrase.key || old.priority.rank>phrase.priority.rank ||
+                (old.priority==VoicePriority.CAMERA && phrase.priority==VoicePriority.CAMERA))) {
             Log.d("SGPanda866","REJECTED key=${phrase.key} reason=busy priority=${old.priority}")
             return false
         }
@@ -163,17 +165,31 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
         previewing=phrase.priority==VoicePriority.PREVIEW
         val token=generation
         val requested=SystemClock.elapsedRealtime()
+        // A lost Android preparation callback must never leave an approach pending forever.
+        handler.postDelayed({
+            if(token==generation && current?.key==phrase.key && !playbackStarted)
+                stop("prepare-timeout-failed")
+        },5_000L)
         preparation=executor.submit {
             var file:File?=null
             try {
-                val parts=phrase.parts.map { part ->
-                    if(Thread.currentThread().isInterrupted)throw InterruptedException()
-                    app.assets.open("${if(part.clip in cameraPack.clips)PANDA_CAMERA_ROOT else PANDA_ASSET_ROOT}/audio_pcm/${part.clip}.pcm")
-                        .use{it.readBytes()}
-                }
-                val created=File.createTempFile("panda866_",".wav",app.cacheDir)
+                val direct=phrase.parts.singleOrNull()?.clip?.let{cameraPack.clips[it]}
+                val created=File.createTempFile("panda872_",if(direct!=null)".mp3" else ".wav",app.cacheDir)
                 file=created
-                created.outputStream().use{PandaWav.write(it,parts)}
+                if(direct!=null) {
+                    // Decode and play the original supplied camera MP3, offline.
+                    app.assets.open("$PANDA_CAMERA_ROOT/${direct.path}").use { input ->
+                        created.outputStream().use { input.copyTo(it) }
+                    }
+                    require(created.length()>5_000L){"Camera MP3 empty or truncated"}
+                } else {
+                    val parts=phrase.parts.map { part ->
+                        if(Thread.currentThread().isInterrupted)throw InterruptedException()
+                        app.assets.open("${if(part.clip in cameraPack.clips)PANDA_CAMERA_ROOT else PANDA_ASSET_ROOT}/audio_pcm/${part.clip}.pcm")
+                            .use{it.readBytes()}
+                    }
+                    created.outputStream().use{PandaWav.write(it,parts)}
+                }
                 if(Thread.currentThread().isInterrupted)throw InterruptedException()
                 handler.post {
                     if(token!=generation || closed){created.delete();return@post}
@@ -186,9 +202,19 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                         media.setOnPreparedListener {
                             if(token==generation && player===media) {
                                 try {
+                                    if(stillRelevant?.invoke()==false) {
+                                        stop("camera-no-longer-relevant-before-start")
+                                        return@setOnPreparedListener
+                                    }
+                                    if(manager.getStreamVolume(AudioManager.STREAM_MUSIC)<=0) {
+                                        stop("system-media-volume-zero-failed")
+                                        return@setOnPreparedListener
+                                    }
                                     media.start()
                                     playbackStarted=true
-                                    Log.i("SGPanda866","PLAYBACK_STARTED key=${phrase.key} clips=${phrase.parts.map{it.clip}} latencyMs=${SystemClock.elapsedRealtime()-requested}")
+                                    val outputDeviceType=if(android.os.Build.VERSION.SDK_INT>=28)
+                                        runCatching{media.routedDevice?.type}.getOrNull() else null
+                                    Log.i("SGPanda866","PLAYBACK_STARTED key=${phrase.key} clips=${phrase.parts.map{it.clip}} latencyMs=${SystemClock.elapsedRealtime()-requested} outputDeviceType=${outputDeviceType?:"system-default"} mediaVolume=${manager.getStreamVolume(AudioManager.STREAM_MUSIC)}")
                                     notifyCurrent(PandaPlaybackState866.STARTED,"mediaplayer-started")
                                 }catch(e:Exception){
                                     Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} start",e)

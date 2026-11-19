@@ -60,7 +60,12 @@ internal fun NavigationMap(
     var traveledLine by remember { mutableStateOf<Polyline?>(null) }
     val routeProgress = remember { NavigationRouteProgressTracker() }
     val trafficPolylines = remember { mutableListOf<Polyline>() }
-    val enforcementMarkers=remember { mutableListOf<Marker>() }
+    val enforcementMarkers=remember { mutableMapOf<String,Marker>() }
+    var enforcementStyleVersion by remember { mutableIntStateOf(0) }
+    val markerStyleVersion=remember { intArrayOf(-1) }
+    val cameraSites=remember(session.enforcementCameras) {
+        CameraMarkerSites872.group(session.enforcementCameras)
+    }
     val cameraIcons=remember(context) {
         CameraSafetySnapshotParser.categories.associateWith {
             CameraSafetyMapIcons.icon(context,it)
@@ -180,6 +185,7 @@ internal fun NavigationMap(
                 lastPaintedProgress = Double.NaN
                 NavigationMapPalette.apply(style, nightMode)
                 styleReady = true
+                enforcementStyleVersion++
                 session.mapMessage = null
             } catch (_: Exception) {
                 session.mapMessage = "GPS display could not start. Try reopening navigation."
@@ -274,32 +280,58 @@ internal fun NavigationMap(
     // B865 camera markers are a separate annotation layer, independent of the
     // road line, traveled-line split and native cinematic camera animation.
     // Refresh only on style change, new validated snapshot, icon toggle or ~1km tile change.
-    LaunchedEffect(styleReady,session.enforcementCameras,
-        session.cameraMarkerBucket,session.cameraPreferences.icons,session.cameraPreferences.master) {
+    LaunchedEffect(styleReady,enforcementStyleVersion,session.enforcementCameras,
+        session.cameraMarkerBucket,session.cameraPreferences) {
         val native=map ?: return@LaunchedEffect
-        if(!styleReady)return@LaunchedEffect
-        enforcementMarkers.forEach { runCatching { native.removeMarker(it) } }
-        enforcementMarkers.clear()
-        if(!session.cameraPreferences.master || !session.cameraPreferences.icons)return@LaunchedEffect
+        if(!styleReady) {
+            enforcementMarkers.values.forEach { runCatching { native.removeMarker(it) } }
+            enforcementMarkers.clear()
+            return@LaunchedEffect
+        }
+        if(markerStyleVersion[0]!=enforcementStyleVersion) {
+            enforcementMarkers.values.forEach { runCatching { native.removeMarker(it) } }
+            enforcementMarkers.clear()
+            markerStyleVersion[0]=enforcementStyleVersion
+        }
+        if(!session.cameraPreferences.master || !session.cameraPreferences.icons) {
+            enforcementMarkers.values.forEach { runCatching { native.removeMarker(it) } }
+            enforcementMarkers.clear()
+            return@LaunchedEffect
+        }
         val center=session.location?.let { GpsPoint(it.latitude,it.longitude) }
             ?: GpsPoint(session.destination.lat,session.destination.lon)
         if(!center.valid())return@LaunchedEffect
-        for(camera in session.enforcementCameras) {
-            // A small nearby spatial window; never place hundreds of annotations
-            // during a GPS frame. Opposite-direction SPF records remain separate.
-            if(abs(camera.point.lat-center.lat)>0.035 ||
-                abs(camera.point.lon-center.lon)>0.04)continue
-            if(!session.cameraPreferences.categoryEnabled(camera.category))continue
+        val wanted=cameraSites.filter {
+            abs(it.camera.point.lat-center.lat)<=0.035 && abs(it.camera.point.lon-center.lon)<=0.04 &&
+                session.cameraPreferences.categoryEnabled(it.camera.category)
+        }
+        val wantedIds=wanted.map{it.camera.id}.toSet()
+        for(id in enforcementMarkers.keys.toList()) {
+            if(id !in wantedIds)enforcementMarkers.remove(id)?.let { native.removeMarker(it) }
+        }
+        // Retain existing annotations through GPS bucket changes. Zoom, bearing
+        // and camera animations never recreate or rescale these marker objects.
+        for(site in wanted) {
+            val camera=site.camera
+            enforcementMarkers[camera.id]?.let { existing ->
+                val point=LatLng(camera.point.lat,camera.point.lon)
+                if(existing.position!=point)existing.position=point
+                if(existing.icon!=cameraIcons.getValue(camera.category))
+                    existing.icon=cameraIcons.getValue(camera.category)
+            }
+            if(camera.id in enforcementMarkers)continue
             val subtext=buildString {
                 append(camera.category.replace('_',' '))
+                if(site.recordCount>1)append(" • ${site.recordCount} published approaches")
                 append(" • ")
                 append(camera.directionText ?: "direction not verified")
                 append(" • ")
                 append(camera.speedLimitKmh?.let { "Verified ${it} km/h" }
                     ?: "Speed limit not verified")
-                if(camera.isRedLight)append(" • speed capability unverified")
+                if(camera.isRedLight)append(if(camera.verifiedDualEnforcement)
+                    " • verified speed-enforcement capability" else " • speed capability unverified")
             }
-            enforcementMarkers += native.addMarker(MarkerOptions()
+            enforcementMarkers[camera.id] = native.addMarker(MarkerOptions()
                 .position(LatLng(camera.point.lat,camera.point.lon))
                 .icon(cameraIcons.getValue(camera.category))
                 .title(camera.name)

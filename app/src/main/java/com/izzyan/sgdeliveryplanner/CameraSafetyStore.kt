@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
  * Validated source snapshot is imported in ONE transaction; on failure old data survives.
  */
 internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
-    context.applicationContext,"sg_spf_camera_safety.db",null,1) {
+    context.applicationContext,"sg_spf_camera_safety.db",null,2),java.io.Closeable {
     private val app=context.applicationContext
     override fun onCreate(db:SQLiteDatabase) {
         db.execSQL("""CREATE TABLE camera (
@@ -31,14 +31,21 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
             bearing REAL, direction_verified INTEGER NOT NULL DEFAULT 0,
             speed_limit INTEGER, speed_source TEXT, speed_verified_at TEXT,
             enforcement_status TEXT NOT NULL, zone_id TEXT,
-            source_url TEXT NOT NULL, source_date TEXT)""")
+            source_url TEXT NOT NULL, source_date TEXT,
+            zone_entry_verified INTEGER NOT NULL DEFAULT 0,
+            zone_exit_verified INTEGER NOT NULL DEFAULT 0,
+            zone_evidence_url TEXT, speed_evidence_url TEXT)""")
         db.execSQL("CREATE INDEX camera_location ON camera(latitude, longitude)")
         db.execSQL("CREATE INDEX camera_category ON camera(category)")
         db.execSQL("CREATE TABLE snapshot_meta (id INTEGER PRIMARY KEY CHECK(id=1), version TEXT NOT NULL, updated_at TEXT NOT NULL)")
     }
     override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) {
-        // Never drop user or camera data on an unrecognized schema change.
-        if(oldVersion!=newVersion) throw IllegalStateException("Manual camera schema migration required")
+        if(oldVersion==1 && newVersion==2) {
+            db.execSQL("ALTER TABLE camera ADD COLUMN zone_entry_verified INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE camera ADD COLUMN zone_exit_verified INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE camera ADD COLUMN zone_evidence_url TEXT")
+            db.execSQL("ALTER TABLE camera ADD COLUMN speed_evidence_url TEXT")
+        } else if(oldVersion!=newVersion) error("Manual camera schema migration required")
     }
     @Synchronized fun isPopulated():Boolean = readableDatabase.rawQuery(
         "SELECT COUNT(*) FROM camera",null).use { it.moveToFirst() && it.getInt(0)>0 }
@@ -68,6 +75,10 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
                     put("speed_verified_at",camera.speedLimitVerifiedAt)
                     put("enforcement_status",camera.speedEnforcementStatus)
                     put("zone_id",camera.zoneId)
+                    put("zone_entry_verified",if(camera.averageZoneEntryVerified)1 else 0)
+                    put("zone_exit_verified",if(camera.averageZoneExitVerified)1 else 0)
+                    put("zone_evidence_url",camera.zoneEvidenceUrl)
+                    put("speed_evidence_url",camera.speedEnforcementEvidenceUrl)
                     put("source_url",camera.sourceUrl);put("source_date",camera.sourcePublicationDate)
                 }
                 if(db.insertOrThrow("camera",null,row)<0)error("Unable to insert validated camera")
@@ -88,7 +99,8 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
         val results=ArrayList<EnforcementCamera>()
         readableDatabase.rawQuery("""SELECT id,category,name,latitude,longitude,road,direction_text,
             junction,bearing,direction_verified,speed_limit,speed_source,speed_verified_at,
-            enforcement_status,zone_id,source_url,source_date FROM camera""",null).use { c ->
+            enforcement_status,zone_id,source_url,source_date,zone_entry_verified,
+            zone_exit_verified,zone_evidence_url,speed_evidence_url FROM camera""",null).use { c ->
             while(c.moveToNext()) {
                 fun nullable(i:Int)=if(c.isNull(i))null else c.getString(i)
                 results += EnforcementCamera(
@@ -100,7 +112,9 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
                     speedLimitKmh=if(c.isNull(10))null else c.getInt(10),
                     speedLimitSource=nullable(11),speedLimitVerifiedAt=nullable(12),
                     speedEnforcementStatus=c.getString(13),zoneId=nullable(14),
-                    sourceUrl=c.getString(15),sourcePublicationDate=nullable(16))
+                    sourceUrl=c.getString(15),sourcePublicationDate=nullable(16),
+                    averageZoneEntryVerified=c.getInt(17)==1,averageZoneExitVerified=c.getInt(18)==1,
+                    zoneEvidenceUrl=nullable(19),speedEnforcementEvidenceUrl=nullable(20))
             }
         }
         return results
@@ -115,7 +129,7 @@ internal data class CameraAlertPreferences(
     val coordinateCameraAlerts:Boolean=true, val coordinateReminder:Boolean=true
 ) {
     fun categoryEnabled(category:String)=master && when(category) {
-        "RED_LIGHT_CAMERA"->redLight
+        "RED_LIGHT_CAMERA","RED_LIGHT_SPEED_CAMERA"->redLight
         "MOBILE_ENFORCEMENT_LOCATION","POLICE_LASER_LOCATION"->mobile
         "AVERAGE_SPEED_ZONE"->speed && averageVoice
         else->speed

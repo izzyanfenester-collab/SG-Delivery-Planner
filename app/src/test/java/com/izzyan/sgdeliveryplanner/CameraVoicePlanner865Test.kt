@@ -50,8 +50,9 @@ class CameraVoicePlanner865Test {
             preferences,true,true,900.0,10f))
         assertNull(planner.due(approach(camera(),400.0),
             preferences,true,false,900.0,10f))
-        assertNull(planner.due(approach(camera(),400.0),
+        assertNotNull(planner.due(approach(camera(),400.0),
             preferences,true,true,60.0,10f))
+        assertNotNull(CameraVoicePriority872.deferredReason(60.0,null))
     }
     @Test fun averageSpeedZoneRequiresActualVerifiedGeometry() {
         assertNull(CameraVoicePlanner865().due(approach(camera("AVERAGE_SPEED_ZONE"),200.0),
