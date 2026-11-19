@@ -136,4 +136,13 @@ class Camera872PlaybackTest {
             bitmap.recycle()
         }
     }
+    @Test @Config(sdk=[26]) fun minimumSupportedAndroidPlaysAndClosesCameraDatabase() {
+        val p=CameraVoicePlanner865();val c=cue(p,camera("API26"))
+        assertTrue(audio.play(c.phrase){p.playbackEvent(c,it)})
+        p.markRequested(c);spinUntil{audio.isPlaybackStarted}
+        assertTrue(p.isStarted(c))
+        CameraSafetyStore(ApplicationProvider.getApplicationContext<Context>()).use {
+            assertTrue(it.ensureBundled());assertEquals(341,it.cameras().size)
+        }
+    }
 }

@@ -212,7 +212,9 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
                                     }
                                     media.start()
                                     playbackStarted=true
-                                    Log.i("SGPanda866","PLAYBACK_STARTED key=${phrase.key} clips=${phrase.parts.map{it.clip}} latencyMs=${SystemClock.elapsedRealtime()-requested} outputDeviceType=${media.routedDevice?.type} mediaVolume=${manager.getStreamVolume(AudioManager.STREAM_MUSIC)}")
+                                    val outputDeviceType=if(android.os.Build.VERSION.SDK_INT>=28)
+                                        runCatching{media.routedDevice?.type}.getOrNull() else null
+                                    Log.i("SGPanda866","PLAYBACK_STARTED key=${phrase.key} clips=${phrase.parts.map{it.clip}} latencyMs=${SystemClock.elapsedRealtime()-requested} outputDeviceType=${outputDeviceType?:"system-default"} mediaVolume=${manager.getStreamVolume(AudioManager.STREAM_MUSIC)}")
                                     notifyCurrent(PandaPlaybackState866.STARTED,"mediaplayer-started")
                                 }catch(e:Exception){
                                     Log.e("SGPanda866","PLAYBACK_FAILED key=${phrase.key} start",e)
