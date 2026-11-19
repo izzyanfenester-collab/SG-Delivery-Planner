@@ -513,7 +513,8 @@ class BuiltInNavigationActivity : ComponentActivity() {
         FilledTonalButton(onClick = onClick, modifier = Modifier.width(65.dp).height(61.dp),
             contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
             colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = if (active) PremiumGold else PremiumNavy.copy(alpha = 0.96f),
+                // Reuse the speedometer/speed-limit host alpha on the surface only.
+                containerColor = if (active) PremiumGold.copy(alpha = SGColors.Card.alpha) else SGColors.Card,
                 contentColor = if (active) PremiumNavy else Color.White)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp)) {
