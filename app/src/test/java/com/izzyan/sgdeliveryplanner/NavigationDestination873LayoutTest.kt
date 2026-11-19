@@ -1,16 +1,18 @@
 package com.izzyan.sgdeliveryplanner
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -32,7 +34,21 @@ import org.robolectric.annotation.LooperMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class NavigationDestination873LayoutTest {
-    @get:Rule val compose=createComposeRule()
+    @get:Rule val compose=createAndroidComposeRule<ComponentActivity>()
+    // PixelCopy requires a real device compositor. Draw the actual Android view
+    // onto a native Canvas instead when running this rendering test in Robolectric.
+    private fun savePanel(file:File) {
+        val bounds=compose.onNodeWithTag("gps-bottom-panel").fetchSemanticsNode().boundsInRoot
+        file.parentFile?.mkdirs()
+        compose.runOnIdle {
+            val view=compose.activity.findViewById<View>(android.R.id.content)
+            val full=Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(full))
+            val panel=Bitmap.createBitmap(full,bounds.left.toInt(),bounds.top.toInt(),
+                bounds.width.toInt(),bounds.height.toInt())
+            file.outputStream().use{panel.compress(Bitmap.CompressFormat.PNG,100,it)}
+        }
+    }
     private fun textLayout(tag:String):TextLayoutResult {
         val results=mutableListOf<TextLayoutResult>()
         compose.onNodeWithTag(tag,useUnmergedTree=true)
@@ -82,21 +98,17 @@ class NavigationDestination873LayoutTest {
             compose.runOnIdle{width=w;fontScale=scale}
             compose.waitForIdle()
             println("B873 checking width=$w fontScale=$scale")
+            val summary=textLayout("gps-remaining-summary")
+            println("B873 summary size=${summary.size} lines=${summary.lineCount} " +
+                "overflowWidth=${summary.didOverflowWidth} overflowHeight=${summary.didOverflowHeight} " +
+                "constraints=${summary.layoutInput.constraints}")
             val diagnostic=File("build/reports/b873-ui/layout-${w}-${scale}.png")
-            diagnostic.parentFile?.mkdirs()
-            diagnostic.outputStream().use { out ->
-                compose.onNodeWithTag("gps-bottom-panel").captureToImage().asAndroidBitmap()
-                    .compress(Bitmap.CompressFormat.PNG,100,out)
-            }
+            savePanel(diagnostic)
             assertReadableDestination()
             println("B873 NATIVE_COMPOSE width=$w fontScale=$scale destination=${heading.full} clipped=false overlap=false font=26sp ExtraBold")
             if(w==360 && scale==1f) {
                 val file=File("build/reports/b873-ui/SG-Delivery-B873-Bottom-Panel.png")
-                file.parentFile?.mkdirs()
-                file.outputStream().use { out ->
-                    compose.onNodeWithTag("gps-bottom-panel").captureToImage().asAndroidBitmap()
-                        .compress(Bitmap.CompressFormat.PNG,100,out)
-                }
+                savePanel(file)
                 assertTrue(file.length()>1000)
             }
         }
