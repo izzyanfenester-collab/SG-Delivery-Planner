@@ -79,7 +79,8 @@ class CameraVoiceTriggerFix865Test {
     @Test fun gpsVoicePriorityAndDuplicateGateStillApply() {
         val a=search(listOf(camera())).single()
         val planner=CameraVoicePlanner865()
-        assertNull(planner.due(a,CameraAlertPreferences(),true,true,50.0,12f))
+        assertNotNull(planner.due(a,CameraAlertPreferences(),true,true,50.0,12f))
+        assertNotNull(CameraVoicePriority872.deferredReason(50.0,null))
         val cue=planner.due(a,CameraAlertPreferences(),true,true,600.0,12f)!!
         planner.markScheduled(cue)
         assertNull(planner.due(a,CameraAlertPreferences(),true,true,600.0,12f))

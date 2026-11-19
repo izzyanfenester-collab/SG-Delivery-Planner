@@ -14,11 +14,29 @@ internal data class EnforcementCamera(
     val directionBearing: Double?, val directionVerified: Boolean,
     val speedLimitKmh: Int?, val speedLimitSource: String?, val speedLimitVerifiedAt: String?,
     val speedEnforcementStatus: String,
-    val zoneId: String?
+    val zoneId: String?,
+    val averageZoneEntryVerified:Boolean=false,
+    val averageZoneExitVerified:Boolean=false,
+    val zoneEvidenceUrl:String?=null,
+    val speedEnforcementEvidenceUrl:String?=null
 ) {
-    val isRedLight get() = category == "RED_LIGHT_CAMERA"
+    val isRedLight get() = category in setOf("RED_LIGHT_CAMERA","RED_LIGHT_SPEED_CAMERA")
     val isMobile get() = category in setOf("MOBILE_ENFORCEMENT_LOCATION", "POLICE_LASER_LOCATION")
     val isAverage get() = category == "AVERAGE_SPEED_ZONE"
+    val verifiedZoneBoundary get() = isAverage && !zoneId.isNullOrBlank() &&
+        CameraEvidence872.official(zoneEvidenceUrl) &&
+        (averageZoneEntryVerified xor averageZoneExitVerified)
+    val verifiedDualEnforcement get() = isRedLight &&
+        speedEnforcementStatus=="VERIFIED_SPEED_ENFORCEMENT" &&
+        CameraEvidence872.official(speedEnforcementEvidenceUrl)
+}
+
+internal object CameraEvidence872 {
+    fun official(url:String?):Boolean = !url.isNullOrBlank() && runCatching {
+        val uri=java.net.URI(url)
+        uri.scheme=="https" && uri.host?.lowercase(Locale.ROOT) in setOf(
+            "www.police.gov.sg","www.lta.gov.sg","onemotoring.lta.gov.sg")
+    }.getOrDefault(false)
 }
 
 internal data class CameraSafetySnapshot(
@@ -32,7 +50,8 @@ internal data class CameraSafetySnapshot(
  */
 internal object CameraSafetySnapshotParser {
     val categories = setOf("RED_LIGHT_CAMERA","FIXED_SPEED_CAMERA","LTA_SPEED_CAMERA",
-        "MOBILE_ENFORCEMENT_LOCATION","AVERAGE_SPEED_ZONE","POLICE_LASER_LOCATION")
+        "MOBILE_ENFORCEMENT_LOCATION","AVERAGE_SPEED_ZONE","POLICE_LASER_LOCATION",
+        "RED_LIGHT_SPEED_CAMERA")
     private val allowedSpeedSourceHosts = setOf("www.lta.gov.sg","onemotoring.lta.gov.sg",
         "www.police.gov.sg","sso.agc.gov.sg")
 
@@ -77,7 +96,11 @@ internal object CameraSafetySnapshotParser {
                 bearing,bearing!=null,verifiedLimit,
                 limitSrc.takeIf{verifiedLimit!=null},limitDate.takeIf{verifiedLimit!=null},
                 c.getString("speed_enforcement_status"),
-                c.optString("average_speed_zone_id","").takeUnless{it.isBlank()||it=="null"})
+                c.optString("average_speed_zone_id","").takeUnless{it.isBlank()||it=="null"},
+                c.optBoolean("average_zone_entry_verified",false),
+                c.optBoolean("average_zone_exit_verified",false),
+                c.optString("average_zone_evidence_url","").takeIf{CameraEvidence872.official(it)},
+                c.optString("speed_enforcement_evidence_url","").takeIf{CameraEvidence872.official(it)})
         }
         require(cameras.count{it.isRedLight}>=200)
         require(cameras.count{it.category=="FIXED_SPEED_CAMERA"}>=18)
@@ -127,7 +150,11 @@ internal data class CameraApproach(
     val directionConfirmed: Boolean, val alertAllowed: Boolean,
     // Conservative nearby *general safety reminder*, never a claim of directional enforcement.
     val genericSafetyEligible: Boolean = false,
-    val coordinateFallbackUsed: Boolean = false
+    val coordinateFallbackUsed: Boolean = false,
+    val matchedRoad:String?=null,
+    val matchReason:String="route-direction-confirmed",
+    val voiceGroupId:String?=null,
+    val voiceGroupCategory:String?=null
 )
 
 /** Conservative approach classification: road, route shape AND published travel direction.
@@ -162,6 +189,7 @@ internal object CameraApproachLogic {
         val value=normalized(s)
             .replace(Regex("\\s+\\d+(?:\\.\\d+)?\\s*km\\b"),"")
             .substringBefore(" at ")
+            .substringBefore(" between ")
             .replace("-", " ")
             .replace(Regex("\\s+")," ").trim()
         return namedExpressways[value]?:value
@@ -237,34 +265,43 @@ internal object CameraApproachLogic {
         records:List<EnforcementCamera>,
         speedMps:Float?,
         vehicleBearingDegrees:Double?=null,
-        bearingAccuracyDegrees:Float?=null
+        bearingAccuracyDegrees:Float?=null,
+        roadCorridors:List<CameraRoadCorridor872> = emptyList()
     ):List<CameraApproach> {
         if(!current.valid()||shape.size<2||!accuracyMetres.isFinite()||accuracyMetres>25) return emptyList()
         val vehicle=CameraRouteGeometry.project(current,shape) ?: return emptyList()
         if(vehicle.lateralMetres>25.0) return emptyList()
+        if(vehicleBearingDegrees?.isFinite()==true && (speedMps?:0f)>=3f &&
+            CameraRouteGeometry.angularGap(vehicleBearingDegrees,vehicle.segmentBearing)>55.0)
+            return emptyList()
         val results=ArrayList<CameraApproach>()
         for(camera in records) {
-            if(!roadMatches(currentRoad,camera.road))continue
             // Bound the expensive polyline projection with a cheap spherical box.
             if(abs(camera.point.lat-current.lat)>0.045 || abs(camera.point.lon-current.lon)>0.045)continue
             val projected=CameraRouteGeometry.project(camera.point,shape) ?: continue
             if(projected.lateralMetres>16.0)continue
+            // A camera may be on a later named road, before the runner joins it.
+            // Match that exact route section, not every name anywhere in the route.
+            val cameraRoad=roadCorridors.firstOrNull {
+                projected.progressedMetres>=it.startMetres && projected.progressedMetres<=it.endMetres
+            }?.road ?: currentRoad
+            if(!roadMatches(cameraRoad,camera.road))continue
             val ahead=projected.progressedMetres-vehicle.progressedMetres
             // No post-camera warning: never convert a behind-camera (-30m) into 0m ahead.
-            if(ahead < 25.0 || ahead > 2600.0)continue
+            if((!camera.verifiedZoneBoundary && ahead<=0.0) || ahead < -80.0 || ahead > 3_200.0)continue
             val routeHeading=projected.segmentBearing
-            val directionalTextMatches=directionMatches(camera,routeHeading,upcomingRoads,records)
-            val bothDirectionsDocumented=nearPublishedBidirectionalSite(camera,records) &&
+            val downstream=if(roadCorridors.isEmpty())upcomingRoads else
+                roadCorridors.filter{it.startMetres>projected.progressedMetres}.map{it.road}
+            val directionalTextMatches=directionMatches(camera,routeHeading,downstream,records)
+            val explicitOpposite=camera.directionVerified && camera.directionBearing!=null &&
+                CameraRouteGeometry.angularGap(camera.directionBearing,routeHeading)>28.0
+            val bothDirectionsDocumented=!explicitOpposite && nearPublishedBidirectionalSite(camera,records) &&
                 projected.lateralMetres<=10.0 && vehicle.lateralMetres<=12.0 &&
                 accuracyMetres<=12f && (speedMps?:0f)>=3f &&
                 vehicleBearingDegrees?.isFinite()==true &&
-                CameraRouteGeometry.angularGap(vehicleBearingDegrees,routeHeading)<=20.0
+                CameraRouteGeometry.angularGap(vehicleBearingDegrees,vehicle.segmentBearing)<=20.0
             val direction=directionalTextMatches || bothDirectionsDocumented
-            val required=when {
-                camera.isRedLight -> 300.0
-                camera.isAverage -> 0.0 // Never infer an average-zone entrance from a point.
-                else -> CameraCoordinateCatalog867.PRIMARY_METRES
-            }
+            val required=CameraCoordinateCatalog867.PRIMARY_METRES
             // If SPF orientation cannot be corroborated, NEVER claim a speed or
             // red-light enforcement camera is operating in this direction.
             // An optional *generic* Panda safety reminder is allowed only with
@@ -275,13 +312,19 @@ internal object CameraApproachLogic {
                 ((bearingAccuracyDegrees?.isFinite()==true && bearingAccuracyDegrees<=20f) ||
                     (bearingAccuracyDegrees==null && (speedMps?:0f)>=7f &&
                         accuracyMetres<=8f))
-            val safetyReminder=!direction && !camera.isAverage &&
+            val safetyReminder=!direction && !explicitOpposite && !camera.isAverage &&
                 accuracyMetres<=12f && (speedMps?:0f)>=3f &&
                 vehicle.lateralMetres<=12.0 && projected.lateralMetres<=8.0 &&
                 ahead in 35.0..CameraCoordinateCatalog867.PRIMARY_METRES && headingReliable
-            results += CameraApproach(camera,ahead.coerceAtLeast(0.0),direction,
-                direction && ahead<=required && !camera.isAverage,
-                genericSafetyEligible=safetyReminder)
+            results += CameraApproach(camera,ahead,direction,
+                direction && ahead<=required && (!camera.isAverage || camera.verifiedZoneBoundary),
+                genericSafetyEligible=safetyReminder,matchedRoad=cameraRoad,
+                matchReason=when {
+                    camera.isAverage && !camera.verifiedZoneBoundary -> "zone-boundary-evidence-missing"
+                    explicitOpposite -> "opposite-camera-direction"
+                    !direction -> "published-direction-not-corroborated"
+                    else -> "route-road-and-direction-confirmed"
+                })
         }
         return results.sortedBy{it.routeMetresAhead}
     }

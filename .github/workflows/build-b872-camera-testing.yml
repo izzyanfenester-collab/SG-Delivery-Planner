@@ -1,0 +1,76 @@
+name: B872 Strict 2KM Camera Voice TESTING
+on:
+  push:
+    branches: [feature/build-872-strict-2km-camera-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b872-camera-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-872-strict-2km-camera-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Restore byte-identical 209 original MP3 from exact B871 Official baseline
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.59-b871/SG-Delivery-B871-Official.apk -o "$RUNNER_TEMP/B871.apk"
+          python3 scripts/restore_b871_assets872.py "$RUNNER_TEMP/B871.apk"
+          python3 scripts/build_postal_seed.py
+      - name: Unit GPS replays, production audio-controller lifecycle, regressions and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Check testing package, signature, alignment and asset identity
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b872test' versionCode='76' versionName='1.4.60-b872-testing'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          "$bt/apksigner" verify --verbose "$apk"
+          mkdir -p dist
+          cp "$apk" dist/SG-Delivery-B872-2KM-Camera-TESTING.apk
+          python3 scripts/verify_b872_apk.py "$RUNNER_TEMP/B871.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cd dist
+          zip -q -r B872-Verification-Evidence.zip B872-acceptance.json B872-2KM-replay-logs.txt unit-test-results lint-results-debug.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B872-TESTING-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish separate TESTING prerelease; never update Official or latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.60-b872-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Testing release already exists; refusing replacement"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B872-2KM-Camera-TESTING.apk dist/B872-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "SG Delivery #872 TESTING – Strict 2KM Camera Voice and Larger Icons" \
+            --notes "Exact B871 Official baseline dd368b27ef30fccadbfc62ab69ceed2aeb0c770f. Universal 2000m primary threshold, GPS crossing/start-inside handling, category-aware original MP3, priority deferral/retry, stale-event cancellation, timeout/focus/volume diagnostics, and camera-only +20% vector icons with stable annotations. 209 original MP3/PCM and 341 camera database records byte-identical to B871. Synthetic GPS and Robolectric production-controller STARTED evidence attached; physical GPS/speaker/Bluetooth/on-road acceptance NOT performed. Average-speed warning/entry/exit code requires verified boundary provenance; the existing 12 average-speed coordinates do not identify verified entrances/exits, so production zone-boundary warnings remain pending evidence. Verified dual function supported only with individual source evidence; existing unverified red lights retain red-light-only audio. Isolated .b872test package preserves Official data. NO OFFICIAL MERGE."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B872-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html

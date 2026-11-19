@@ -40,7 +40,7 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Panda Warrior Camera Voice",p.voice) {
             session.updateCameraPreferences(p.copy(voice=it))
         }
-        Text("Primary GPS camera warning: 2.0 KM ahead (route distance)",
+        Text("All camera categories: 2.0 KM ahead (route distance)",
             color=SGColors.Silver,fontSize=11.sp)
         CameraSafetyToggle("Secondary 500M Camera Reminder",p.coordinateReminder) {
             session.updateCameraPreferences(p.copy(coordinateReminder=it))
@@ -78,6 +78,10 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
             color=SGColors.Gold,fontSize=11.sp)
         Text("${session.enforcementCameras.size} verified SPF published records",
             color=SGColors.Silver,fontSize=11.sp)
+        val verifiedZoneBoundaries=session.enforcementCameras.count{it.verifiedZoneBoundary}
+        if(verifiedZoneBoundaries==0) Text(
+            "Average-speed entry/exit voice awaits verified zone boundaries. Published camera points remain visible.",
+            color=SGColors.Warning,fontSize=11.sp)
         Text("${session.coordinateCatalogMatchCount} matched speed enforcement reference points (100 expected)",
             color=SGColors.Silver,fontSize=11.sp)
         if(!session.cameraAudioAvailable) Text(
