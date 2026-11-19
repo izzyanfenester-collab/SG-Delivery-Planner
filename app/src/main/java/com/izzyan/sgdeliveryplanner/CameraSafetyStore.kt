@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
  * Validated source snapshot is imported in ONE transaction; on failure old data survives.
  */
 internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
-    context.applicationContext,"sg_spf_camera_safety.db",null,2) {
+    context.applicationContext,"sg_spf_camera_safety.db",null,2),java.io.Closeable {
     private val app=context.applicationContext
     override fun onCreate(db:SQLiteDatabase) {
         db.execSQL("""CREATE TABLE camera (

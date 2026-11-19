@@ -103,10 +103,8 @@ class CameraCoordinate867Test {
         assertTrue(scan(103.8054,listOf(camera()),street="Adjacent Road").isEmpty())
         assertTrue(scan(103.8054,listOf(camera()),
             shapePath=listOf(GpsPoint(1.302,103.8),GpsPoint(1.302,103.84))).isEmpty())
-        val unknown=scan(103.8054,listOf(camera(direction="Unrelated Road")),
-            upcoming=listOf("Different Road"),heading=270.0).single()
-        assertFalse(unknown.directionConfirmed)
-        assertFalse(unknown.genericSafetyEligible)
+        assertTrue(scan(103.8054,listOf(camera(direction="Unrelated Road")),
+            upcoming=listOf("Different Road"),heading=270.0).isEmpty())
     }
 
     @Test fun twoPublishedOpposingFixedCamerasAtSameSiteProduceOneVoiceAlert() {

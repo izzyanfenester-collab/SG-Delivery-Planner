@@ -795,10 +795,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         }
         if(muted || !cameraPreferences.voice) {
             cameraVoiceDiagnostic="GPS voice or Camera Voice is OFF"
+            approaches.forEach{logCameraApproach872(it,fix,null,"SUPPRESSED","navigation-or-camera-voice-disabled")}
             return
         }
         if(!cameraAudioAvailable) {
             cameraVoiceDiagnostic="209-clip Panda Warrior voice assets unavailable"
+            approaches.forEach{logCameraApproach872(it,fix,null,"FAILED","authentic-209-audio-pack-unavailable")}
             return
         }
         var reason="Camera published nearby; direction not confirmed for voice"

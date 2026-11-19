@@ -38,7 +38,7 @@ class CameraVoiceTriggerFix865Test {
         assertFalse(cue!!.phrase.parts.any{it.clip=="red_light_camera_ahead"})
     }
     @Test fun noSafetyCueWithoutStableGenuineHeadingOrAccurateGeometry() {
-        assertFalse(search(listOf(camera()),bearing=270.0).single().genericSafetyEligible)
+        assertTrue(search(listOf(camera()),bearing=270.0).isEmpty())
         assertFalse(search(listOf(camera()),bearing=null).single().genericSafetyEligible)
         assertFalse(search(listOf(camera()),accuracy=20f).single().genericSafetyEligible)
         assertTrue(search(listOf(camera()),road="Adjacent Flyover").isEmpty())

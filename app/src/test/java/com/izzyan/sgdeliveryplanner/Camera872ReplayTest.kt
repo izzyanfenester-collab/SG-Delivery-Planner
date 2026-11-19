@@ -149,4 +149,13 @@ class Camera872ReplayTest {
         assertNotNull(due(p,scan(cam,1800.0)))
         p.reset();assertNotNull(due(p,scan(cam,1500.0)))
     }
+    @Test fun coLocatedMarkersKeepAnOriginalCoordinateAndOtherCategoriesStaySeparate() {
+        val a=camera(id="A");val b=camera(id="B").copy(point=point(5005.0))
+        val red=camera("RED_LIGHT_CAMERA",id="RED")
+        val sites=CameraMarkerSites872.group(listOf(b,red,a))
+        assertEquals(2,sites.size)
+        val speed=sites.single{it.camera.category=="FIXED_SPEED_CAMERA"}
+        assertEquals("A",speed.camera.id);assertEquals(a.point,speed.camera.point)
+        assertEquals(2,speed.recordCount)
+    }
 }
