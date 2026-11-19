@@ -1,0 +1,115 @@
+name: Publish approved SG Delivery B874 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b874-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b874-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact approved B874 source and Official metadata
+        run: python3 scripts/verify_b874_official.py source
+      - name: Restore exact B873 app assets including original voice and postal seed
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.61-b873/SG-Delivery-B873-Official.apk -o "$RUNNER_TEMP/B873.apk"
+          python3 scripts/verify_b874_testing.py restore "$RUNNER_TEMP/B873.apk"
+      - name: Existing application regressions, lint and Official compilation
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Restore original Official signing key securely
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SG_DELIVERY_KEYSTORE_BASE64 SG_DELIVERY_KEYSTORE_PASSWORD SG_DELIVERY_KEY_ALIAS SG_DELIVERY_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing protected signing secret: $key"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b874.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b874.jks"
+      - name: Sign Official APK and verify existing B873 upgrade identity
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$unsigned"
+          mkdir -p dist
+          "$bt/zipalign" -P 16 -f -v 4 "$unsigned" "$RUNNER_TEMP/b874-aligned.apk" >/dev/null
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/sg-delivery-b874.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B874-Official.apk "$RUNNER_TEMP/b874-aligned.apk"
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B874-Official.apk | tee dist/signing-verification.txt
+          "$bt/apksigner" verify --print-certs "$RUNNER_TEMP/B873.apk" > "$RUNNER_TEMP/b873-cert.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' "$RUNNER_TEMP/b873-cert.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B874-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='81' versionName='1.4.62-b874'"
+          "$bt/aapt" dump badging dist/SG-Delivery-B874-Official.apk | grep -F "application-label:'SG Delivery'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B874-Official.apk >/dev/null
+          python3 scripts/verify_b874_official.py verify "$RUNNER_TEMP/B873.apk" dist/SG-Delivery-B874-Official.apk dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cd dist
+          zip -q -r B874-Official-Verification.zip B874-Official-acceptance.json B874-Official-source-audit.json signing-verification.txt unit-test-results lint-results-debug.html
+          sha256sum SG-Delivery-B874-Official.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B874-Official-Verified-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish owner-approved B874 as latest stable update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.62-b874
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Official B874 already exists; refusing overwrite"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B874-Official.apk dist/B874-Official-Verification.zip \
+            --target "$GITHUB_SHA" --latest \
+            --title "SG Delivery Build #874 Official – Transparent GPS Control Backgrounds" \
+            --notes "Owner explicitly approved merging B874 TESTING (e0a46b42641c3a9fe9a42146e7229ffe8a6b596b) into Official. Application and test source is unchanged from that approved build. All six GPS controls reuse the actual speedometer/speed-limit host alpha: 30 percent background opacity, translucent Navy inactive and Gold active. Icons and labels keep full opacity; dimensions, position, spacing, rounded shape, selected/pressed logic and click handlers are unchanged. No new blur/layer/dependency. All other GPS, voice, camera, delivery, report, payment, theme and saved-data code is unchanged. All 430 app assets, including 209 original MP3/PCM, 341 camera records, speed references and postal seed, verified byte-for-byte against Official B873. Canonical package with the original Official signing certificate; versionCode 81/version 1.4.62-b874 supports in-place upgrade from B873. Full automated regressions, lint, APK signature and 16KB alignment verified. Physical phone visual/GPS/control/Day/Night/2D/3D and GPU profiling remain unperformed. Published as latest stable for Check for Update."
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = "$tag"
+      - name: Remove temporary signing key and aligned APK
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b874.jks" "$RUNNER_TEMP/b874-aligned.apk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B874-Official-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/signing-verification.txt
