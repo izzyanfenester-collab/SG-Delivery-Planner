@@ -125,7 +125,7 @@ internal fun NavigationDestinationPanel873(
             Column(Modifier.weight(1f)) {
                 Text(remainingSummary,color=SGColors.Silver,fontSize=17.sp,
                     fontWeight=FontWeight.Bold,lineHeight=21.sp,softWrap=true,
-                    modifier=Modifier.testTag("gps-remaining-summary"))
+                    modifier=Modifier.fillMaxWidth().testTag("gps-remaining-summary"))
                 trafficLabel?.let{Text(it,color=SGColors.Silver,fontSize=11.sp)}
             }
             FilledTonalButton(onClick=onDelivery,
