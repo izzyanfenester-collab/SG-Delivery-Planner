@@ -78,33 +78,48 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 internal fun builtInNavigationIntent(context: Context, plan: Plan): Intent? =
-    navigationDestination(plan)?.let { builtInNavigationIntent(context, it) }
+    plan.stops.getOrNull(plan.current)?.let { builtInNavigationIntent(context, it) }
+
+/** Label data is bound to the selected order, including duplicate-postal orders. */
+internal fun builtInNavigationIntent(context:Context,stop:Stop):Intent =
+    builtInNavigationIntent(context,stop.place)
+        .putExtra(NAV_DELIVERY_ADDRESS_873,selectedDeliveryAddress873(stop))
+        .putExtra(NAV_DELIVERY_ORDER_873,stop.orderId)
 
 /** Single destination snapshot; the activity gets its origin from live device GPS. */
 internal fun builtInNavigationIntent(context: Context, stop: Place): Intent =
     Intent(context, BuiltInNavigationActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         .putExtra("postal", stop.postal).putExtra("address", stop.address)
         .putExtra("lat", stop.lat).putExtra("lon", stop.lon)
         .apply { destinationHeading870(stop).block?.let { putExtra("block", it) } }
 
 /** Foreground-only navigation. This activity has no access to delivery-status or schedule writes. */
 class BuiltInNavigationActivity : ComponentActivity() {
+    private var currentDestination873 by mutableStateOf<NavigationDestinationSnapshot873?>(null)
     override fun attachBaseContext(newBase: Context) = super.attachBaseContext(englishAppContext(newBase))
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val postal = intent.getStringExtra("postal") ?: run { finish(); return }
-        val stop = Place(postal, intent.getDoubleExtra("lat", Double.NaN), intent.getDoubleExtra("lon", Double.NaN), intent.getStringExtra("block").orEmpty(), "", intent.getStringExtra("address").orEmpty())
+        currentDestination873=navigationDestinationSnapshot873(intent)?:run{finish();return}
         MapLibre.getInstance(this)
         setContent {
             IzzDeliveryTheme(true) {
-                NavigationContent(stop)
+                currentDestination873?.let{NavigationContent(it)}
             }
         }
     }
 
+    override fun onNewIntent(intent:Intent) {
+        super.onNewIntent(intent)
+        val next=navigationDestinationSnapshot873(intent)?:return
+        setIntent(intent)
+        currentDestination873=next
+    }
+
     @Composable
-    private fun NavigationContent(stop: Place) {
-        val session = remember { NavigationSession(this@BuiltInNavigationActivity, stop) }
+    private fun NavigationContent(snapshot:NavigationDestinationSnapshot873) {
+        val stop=snapshot.place
+        val session = remember(snapshot.sessionKey) { NavigationSession(this@BuiltInNavigationActivity, stop) }
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
@@ -128,7 +143,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
             lifecycle.addObserver(observer)
             onDispose { lifecycle.removeObserver(observer) }
         }
-        LaunchedEffect(permitted, retry) {
+        LaunchedEffect(permitted, retry, session) {
             if (permitted) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 try { session.run() } finally { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
@@ -367,46 +382,22 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         modifier = Modifier.background(PremiumNavy.copy(alpha = 0.85f), RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp))
                     Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard)) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
-                            verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            // Responsive 26sp block and postal header from the selected stop.
-                            NavigationDestinationHeading870(destinationHeading870(stop))
-                            val remaining = session.remainingSeconds
-                            val eta = if (remaining != null) Instant.ofEpochMilli(
-                                navigationEta(System.currentTimeMillis(), remaining))
-                                .atZone(ZoneId.of("Asia/Singapore"))
-                                .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
-                            Row(Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(eta, color = Color.White, fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 29.sp, lineHeight = 33.sp)
-                                    NavigationRemainingSummary("${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}")
-                                    if (session.localTrafficVisible) {
-                                        val level = session.trafficState.ahead
-                                        val label = when (level) {
-                                            LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
-                                            LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
-                                            LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
-                                            LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
-                                        }
-                                        Text(label, color = SGColors.Silver, fontSize = 11.sp)
-                                    }
-                                }
-                                FilledTonalButton(onClick = { finish() },
-                                    modifier = Modifier.heightIn(min = 48.dp),
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = SGColors.SecondaryBackground,
-                                        contentColor = Color.White),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+                        val remaining = session.remainingSeconds
+                        val eta = if (remaining != null) Instant.ofEpochMilli(
+                            navigationEta(System.currentTimeMillis(), remaining))
+                            .atZone(ZoneId.of("Asia/Singapore"))
+                            .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)) else "--:--"
+                        val trafficLabel=if(session.localTrafficVisible)when(session.trafficState.ahead) {
+                            LocalTrafficLevel.SMOOTH -> "Local traffic estimate: Smooth"
+                            LocalTrafficLevel.SLOW -> "Local traffic estimate: Slow"
+                            LocalTrafficLevel.JAMMED -> "Local traffic estimate: Jammed"
+                            LocalTrafficLevel.UNKNOWN -> "Local traffic: insufficient GPS data"
+                        } else null
+                        NavigationDestinationPanel873(
+                            heading=snapshot.heading,eta=eta,
+                            remainingSummary="${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
+                            trafficLabel=trafficLabel,onDelivery={finish()})
+
                     }
                 }
             }
@@ -514,18 +505,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     lineHeight = (font * 1.5f).sp, fontWeight = FontWeight.Bold,
                     maxLines = 1, softWrap = false)
             }
-        }
-    }
-
-    /** Keep KM and duration on the same line, reducing type only when needed
-     * on narrow displays or accessibility settings; never hide the duration. */
-    @Composable
-    private fun NavigationRemainingSummary(summary: String) {
-        Box(Modifier.fillMaxWidth()) {
-            // Preserve 17sp readability even on small displays; wrap instead of
-            // shrinking the GPS distance and duration to a tiny font.
-            Text(summary, color = SGColors.Silver, fontSize = 17.sp,
-                fontWeight = FontWeight.Bold, lineHeight = 21.sp, softWrap = true)
         }
     }
 

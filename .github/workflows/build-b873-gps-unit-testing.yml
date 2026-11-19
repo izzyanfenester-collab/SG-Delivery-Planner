@@ -1,0 +1,97 @@
+name: B873 GPS Bottom Panel Unit Number TESTING
+on:
+  push:
+    branches: [feature/build-873-gps-unit-number-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b873-gps-unit-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-873-gps-unit-number-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact B872 baseline and limit changes to destination presentation
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor ccb07e51c6eba272172021b9600f286d2fc24db2 HEAD
+          python3 - <<'PY'
+          import pathlib,subprocess
+          base='ccb07e51c6eba272172021b9600f286d2fc24db2'
+          allowed={
+            'app/src/main/java/com/izzyan/sgdeliveryplanner/BuiltInNavigationActivity.kt',
+            'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationChooser.kt',
+            'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationDestination873.kt',
+            'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationDestinationIntent873.kt'}
+          touched=set(subprocess.check_output(['git','diff','--name-only',base,'HEAD','--','app/src/main'],text=True).splitlines())
+          assert touched==allowed,touched ^ allowed
+          path='app/src/main/java/com/izzyan/sgdeliveryplanner/BuiltInNavigationActivity.kt'
+          old=subprocess.check_output(['git','show',base+':'+path],text=True)
+          new=pathlib.Path(path).read_text(); marker='internal class NavigationSession('
+          assert old[old.index(marker):]==new[new.index(marker):], 'GPS engine changed unexpectedly'
+          PY
+      - name: Restore all 209 original B872 voice files
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.60-b872/SG-Delivery-B872-Official.apk -o "$RUNNER_TEMP/B872.apk"
+          python3 scripts/restore_b872_assets873.py "$RUNNER_TEMP/B872.apk"
+          python3 scripts/build_postal_seed.py
+      - name: Unit formats, selected-order intents, native Compose layout, regressions and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Verify isolated APK, unchanged camera/audio assets and actual layout evidence
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b873test' versionCode='78' versionName='1.4.61-b873-testing'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          "$bt/apksigner" verify --verbose "$apk"
+          mkdir -p dist
+          cp "$apk" dist/SG-Delivery-B873-GPS-Unit-TESTING.apk
+          python3 scripts/verify_b873_apk.py "$RUNNER_TEMP/B872.apk" "$apk" dist
+          cp app/build/reports/b873-ui/SG-Delivery-B873-Bottom-Panel.png dist/
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cd dist
+          zip -q -r B873-Verification-Evidence.zip B873-acceptance.json B873-layout-logs.txt SG-Delivery-B873-Bottom-Panel.png unit-test-results lint-results-debug.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B873-GPS-Unit-TESTING-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish separate TESTING prerelease; Official remains B872
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.61-b873-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::B873 testing release exists; refusing overwrite"
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B873-GPS-Unit-TESTING.apk dist/B873-Verification-Evidence.zip dist/SG-Delivery-B873-Bottom-Panel.png \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "SG Delivery #873 TESTING – GPS Unit, Block and Postal Panel" \
+            --notes "Exact Official B872 baseline ccb07e51c6eba272172021b9600f286d2fc24db2. Bottom GPS panel shows the selected delivery record's real unit beside its verified block and six-digit postal code. No unit is guessed or looked up by postal. The launcher carries the selected Stop.order.fullAddress/orderId; legacy stops use their own Place.address. Missing or ambiguous units stay omitted. Same-coordinate order changes retain the route session identity and update labels; custom End/checkpoint payloads keep their previous display. Destination remains 26sp ExtraBold with responsive right alignment/wrapping and accessibility scaling, 29sp ETA left, distance/duration and unchanged Delivery return action. Native Compose layout tests and per-order intent tests included; rendered panel preview uses fixture data and is not a physical phone screenshot. GPS NavigationSession source is byte-identical to B872; 209 voice MP3/PCM, camera database/detection/icons/2KM alerts, zoom/rerouting, themes, reports, payments, saved data and update checker retained. Separate .b873test package. Physical runner-device visual QA remains pending. NO OFFICIAL MERGE."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B873-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/b873-ui/

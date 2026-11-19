@@ -95,8 +95,8 @@ internal fun externalNavigationIntent(stop: Place, choice: NavigationChoice): In
 
 /** Handoff only: no access to ViewModel, persistence, delivery statuses or ETA writes. */
 internal fun openDeliveryNavigation(context: Context, plan: Plan, choice: NavigationChoice): Boolean {
-    val stop = navigationDestination(plan) ?: return false
-    return openNavigationDestination(context, stop, choice, allowAppOnlyFallback = true)
+    val stop = plan.stops.getOrNull(plan.current) ?: return false
+    return openNavigationDestination(context, stop.place, choice, allowAppOnlyFallback = true,deliveryStop=stop)
 }
 
 /** Use the route's saved End snapshot; automatic End is the final optimized stop, not current. */
@@ -116,13 +116,15 @@ internal fun openEndNavigation(context: Context, plan: Plan, choice: NavigationC
         Toast.makeText(context, "End Location needs valid GPS coordinates for ${choice.label}. Choose another navigation app.", Toast.LENGTH_LONG).show()
         return false
     }
-    return openNavigationDestination(context, end, choice, allowAppOnlyFallback = false)
+    return openNavigationDestination(context, end, choice, allowAppOnlyFallback = false,
+        deliveryStop=plan.stops.lastOrNull().takeIf{plan.endAtLastDelivery})
 }
 
 /** Shared destination launcher. Summary requires a destination-bearing intent, never a bare app launch. */
-private fun openNavigationDestination(context: Context, stop: Place, choice: NavigationChoice, allowAppOnlyFallback: Boolean): Boolean {
+private fun openNavigationDestination(context: Context, stop: Place, choice: NavigationChoice, allowAppOnlyFallback: Boolean,deliveryStop:Stop?=null): Boolean {
     try {
-        val intent = if (choice == NavigationChoice.BUILT_IN) builtInNavigationIntent(context, stop)
+        val intent = if (choice == NavigationChoice.BUILT_IN)
+            deliveryStop?.let{builtInNavigationIntent(context,it)}?:builtInNavigationIntent(context, stop)
             else externalNavigationIntent(stop, choice)
         if (choice != NavigationChoice.BUILT_IN && intent.resolveActivity(context.packageManager) == null) {
             if (allowAppOnlyFallback && (choice == NavigationChoice.TOMTOM || choice == NavigationChoice.SYGIC)) {
