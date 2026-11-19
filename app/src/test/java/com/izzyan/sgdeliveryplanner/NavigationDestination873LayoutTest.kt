@@ -55,7 +55,10 @@ class NavigationDestination873LayoutTest {
         assertEquals(header.right,destination.right,1.5f)
         compose.onNodeWithText("12:30 PM").assertIsDisplayed()
         compose.onNodeWithTag("gps-remaining-summary").assertIsDisplayed()
-        assertFalse(textLayout("gps-remaining-summary").hasVisualOverflow)
+        val summary=textLayout("gps-remaining-summary")
+        assertFalse("Remaining summary clipped: size=${summary.size} lines=${summary.lineCount} " +
+            "overflowWidth=${summary.didOverflowWidth} overflowHeight=${summary.didOverflowHeight} " +
+            "constraints=${summary.layoutInput.constraints}",summary.hasVisualOverflow)
         compose.onNodeWithTag("gps-delivery-button").assertIsDisplayed()
     }
     @Test fun narrowWidthsAndLargeFontScalesWrapWithoutClippingOrOverlap() {
@@ -77,11 +80,19 @@ class NavigationDestination873LayoutTest {
         }
         for((w,scale) in listOf(320 to 1f,360 to 1f,411 to 1f,320 to 1.3f,320 to 1.5f,280 to 2f)) {
             compose.runOnIdle{width=w;fontScale=scale}
-            compose.waitForIdle();assertReadableDestination()
+            compose.waitForIdle()
+            println("B873 checking width=$w fontScale=$scale")
+            val diagnostic=File("build/reports/b873-ui/layout-${w}-${scale}.png")
+            diagnostic.parentFile?.mkdirs()
+            diagnostic.outputStream().use { out ->
+                compose.onNodeWithTag("gps-bottom-panel").captureToImage().asAndroidBitmap()
+                    .compress(Bitmap.CompressFormat.PNG,100,out)
+            }
+            assertReadableDestination()
             println("B873 NATIVE_COMPOSE width=$w fontScale=$scale destination=${heading.full} clipped=false overlap=false font=26sp ExtraBold")
             if(w==360 && scale==1f) {
                 val file=File("build/reports/b873-ui/SG-Delivery-B873-Bottom-Panel.png")
-                file.parentFile.mkdirs()
+                file.parentFile?.mkdirs()
                 file.outputStream().use { out ->
                     compose.onNodeWithTag("gps-bottom-panel").captureToImage().asAndroidBitmap()
                         .compress(Bitmap.CompressFormat.PNG,100,out)
