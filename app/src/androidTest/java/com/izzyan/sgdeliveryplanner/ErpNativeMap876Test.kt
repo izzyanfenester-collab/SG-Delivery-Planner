@@ -116,10 +116,18 @@ class ErpNativeMap876Test {
         // Inspect a real shared coordinate through the production map click listener/card.
         val shared=catalog.sites.single{s->s.records.any{it.uniqueId=="627"}}
         move(shared.point,18.0,0.0,0.0)
-        main{a->fun fix(age:Long)=Location("stationary-test").apply{
-            latitude=shared.point.lat;longitude=shared.point.lon;accuracy=3f;speed=0f;speedAccuracyMetersPerSecond=.2f
-            elapsedRealtimeNanos=(SystemClock.elapsedRealtime()-age)*1_000_000
-        };a.erpState.observe(fix(3000));a.erpState.observe(fix(0))}
+        main { activity ->
+            fun stationaryFix(ageMillis: Long): Location = Location("stationary-test").apply {
+                latitude = shared.point.lat
+                longitude = shared.point.lon
+                accuracy = 3f
+                speed = 0f
+                speedAccuracyMetersPerSecond = .2f
+                elapsedRealtimeNanos = (SystemClock.elapsedRealtime() - ageMillis) * 1_000_000L
+            }
+            activity.erpState.observe(stationaryFix(3000L))
+            activity.erpState.observe(stationaryFix(0L))
+        }
         val tapPixel=main{it.nativeMap!!.projection.toScreenLocation(LatLng(shared.point.lat,shared.point.lon))}
         rule.onRoot().performTouchInput{click(Offset(tapPixel.x,tapPixel.y))}
         rule.onNodeWithText("Unique ID: 627").assertIsDisplayed()
