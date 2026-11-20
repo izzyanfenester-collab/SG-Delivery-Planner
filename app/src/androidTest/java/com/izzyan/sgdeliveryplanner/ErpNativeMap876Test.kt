@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.RectF
 import android.location.Location
 import android.os.SystemClock
+import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -39,6 +40,20 @@ class ErpNativeMap876Test {
     }
     private fun ready(){rule.waitUntil(120000){main{it.ready && it.erpState.catalog!=null && it.nativeMap?.style?.getLayer(ErpMapLayer876.LAYER)!=null}}}
     private fun folder()=File(rule.activity.filesDir,"erp-876-native-evidence").apply{mkdirs()}
+    /** Deliver a real touchscreen tap to the native MapLibre MapView, not the Compose test root. */
+    private fun tapNativeMap(point:GpsPoint) {
+        main { activity ->
+            val pixel=activity.nativeMap!!.projection.toScreenLocation(LatLng(point.lat,point.lon))
+            val downTime=SystemClock.uptimeMillis()
+            val down=MotionEvent.obtain(downTime,downTime,MotionEvent.ACTION_DOWN,pixel.x,pixel.y,0)
+            val up=MotionEvent.obtain(downTime,downTime+90L,MotionEvent.ACTION_UP,pixel.x,pixel.y,0)
+            try {
+                activity.mapView.dispatchTouchEvent(down)
+                activity.mapView.dispatchTouchEvent(up)
+            } finally { down.recycle();up.recycle() }
+        }
+        rule.waitForIdle()
+    }
     private fun snapshot(name:String):Bitmap {
         val done=CountDownLatch(1);var bitmap:Bitmap?=null
         main{it.nativeMap!!.snapshot{b->bitmap=b;done.countDown()}}
@@ -128,17 +143,19 @@ class ErpNativeMap876Test {
             activity.erpState.observe(stationaryFix(3000L))
             activity.erpState.observe(stationaryFix(0L))
         }
-        val tapPixel=main{it.nativeMap!!.projection.toScreenLocation(LatLng(shared.point.lat,shared.point.lon))}
-        rule.onRoot().performTouchInput{click(Offset(tapPixel.x,tapPixel.y))}
-        // Both records are present in the native marker's scrollable details dialog.
-        // On shorter emulator viewports, scroll each record into view before asserting visibility.
-        rule.onNodeWithText("Unique ID: 627").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText("Unique ID: 838").performScrollTo().assertIsDisplayed()
+        assertTrue("Stationary safety gate must accept the simulated stable location",main{it.erpState.canInspect()})
+        val sharedHits=main{a->val px=a.nativeMap!!.projection.toScreenLocation(LatLng(shared.point.lat,shared.point.lon))
+            a.nativeMap!!.queryRenderedFeatures(px,ErpMapLayer876.LAYER).map{it.getStringProperty("site_key")}.toSet()}
+        assertTrue("Selected shared ERP site must be hit-testable",shared.key in sharedHits)
+        tapNativeMap(shared.point)
+        rule.waitUntil(5000){main{it.erpState.selected?.key==shared.key}}
+        rule.onNodeWithText("Unique ID: 627").assertIsDisplayed()
+        rule.onNodeWithText("Unique ID: 838").assertIsDisplayed()
         val screen=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         File(folder(),"B876-shared-record-information-card.png").outputStream().use{screen.compress(Bitmap.CompressFormat.PNG,100,it)}
         rule.onNodeWithText("Done").performClick()
         main{a->val moving=Location("moving-test").apply{latitude=shared.point.lat;longitude=shared.point.lon;accuracy=3f;speed=8f;speedAccuracyMetersPerSecond=.2f;elapsedRealtimeNanos=SystemClock.elapsedRealtimeNanos()};a.erpState.observe(moving)}
-        rule.onRoot().performTouchInput{click(Offset(tapPixel.x,tapPixel.y))}
+        tapNativeMap(shared.point)
         rule.onNodeWithText("ERP GANTRY").assertDoesNotExist()
         val order=main{a->val layers=a.nativeMap!!.style!!.layers.map{it.id};layers.indexOf(ErpMapLayer876.LAYER)<layers.indexOf("mapbox-location-foreground-layer")}
         assertTrue("Vehicle arrow must render above ERP",order)
