@@ -28,6 +28,7 @@ internal class ErpNavigationState876(context:Context) {
     var visible by mutableStateOf(preferences.visible());private set
     var catalog by mutableStateOf<ErpCatalog876?>(null);private set
     var loadError by mutableStateOf<String?>(null);private set
+    var mapError by mutableStateOf<String?>(null);private set
     var selected by mutableStateOf<ErpSite876?>(null);private set
     var stationary by mutableStateOf(false);private set
     fun setVisible(value:Boolean){visible=value;preferences.setVisible(value);if(!value)selected=null}
@@ -48,6 +49,7 @@ internal class ErpNavigationState876(context:Context) {
         selected=catalog?.byKey?.get(key);return selected!=null
     }
     fun dismiss(){selected=null}
+    fun mapResult(error:String?){mapError=error}
 }
 
 @Composable
@@ -72,6 +74,7 @@ internal fun ErpSettingsPanel876(state:ErpNavigationState876) {
             Text("ERP Database: ${it.records.size} records / ${it.sites.size} map locations",color=SGColors.Silver,fontSize=11.sp)
             Text("Dataset: ${it.version}",color=SGColors.Silver,fontSize=10.sp)
         }?:Text(state.loadError?:"Loading local ERP database…",color=SGColors.Silver,fontSize=11.sp)
+        state.mapError?.let{Text(it,color=SGColors.Warning,fontSize=11.sp)}
     }
 }
 

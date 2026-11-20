@@ -41,7 +41,7 @@ class ErpMapVerificationActivity876:ComponentActivity() {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)
         erpState=ErpNavigationState876(this)
-        mapView=MapView(this,MapLibreMapOptions.createFromAttributes(this).textureMode(true)).apply{onCreate(savedInstanceState)}
+        mapView=MapView(this,MapLibreMapOptions().textureMode(true)).apply{onCreate(savedInstanceState)}
         setContent {IzzDeliveryTheme(dark=true){
             Box(Modifier.fillMaxSize()){
                 AndroidView(factory={mapView},modifier=Modifier.fillMaxSize())

@@ -111,14 +111,20 @@ internal fun ErpMapIntegration876(map:MapLibreMap?,styleReady:Boolean,state:ErpN
     LaunchedEffect(overlay,style,state?.catalog,state?.visible) {
         val owner=state?:return@LaunchedEffect
         val catalog=owner.catalog?:return@LaunchedEffect
-        if(overlay!=null && style!=null)overlay.sync(style,catalog,owner.visible)
+        if(overlay!=null && style!=null)try{
+            overlay.sync(style,catalog,owner.visible);owner.mapResult(null)
+        }catch(e:Exception){
+            android.util.Log.e("SGErp876","ERP overlay unavailable; navigation layers retained",e)
+            owner.mapResult("ERP map layer unavailable. Existing navigation remains active.")
+        }
     }
     DisposableEffect(overlay,state) {
         val listener=MapLibreMap.OnMapClickListener{tap->
             val owner=state
             if(owner==null || !owner.visible || overlay==null)false else {
                 val catalog=owner.catalog
-                val site=if(catalog==null)null else overlay.siteAt(tap,catalog)
+                val site=if(catalog==null)null else runCatching{overlay.siteAt(tap,catalog)}
+                    .onFailure{android.util.Log.w("SGErp876","ERP hit test unavailable",it)}.getOrNull()
                 if(site==null)false else if(!owner.canInspect()) {
                     Toast.makeText(context,"Stop safely and wait for a reliable GPS fix to view ERP details",Toast.LENGTH_SHORT).show();false
                 }else owner.select(site.key)
