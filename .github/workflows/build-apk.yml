@@ -7,6 +7,9 @@ permissions:
   contents: read
 jobs:
   build:
+    # B875 must bundle its validated offline catalog and exact baseline assets.
+    # Its dedicated workflow runs the full test/lint/build suite before publishing.
+    if: github.ref != 'refs/heads/feature/build-875-road-speed-limit-testing'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

@@ -8,7 +8,7 @@ BASELINE='10d641eaad1f43f08018baebacca6f8f01cdc38d'
 BASELINE_SHA256='2005a0c2ffcb4cfb3bd08def823382d6f8499970a1e36e037c1a51689acbfbbe'
 ROOT='app/src/main/java/com/izzyan/sgdeliveryplanner/'
 NAV=ROOT+'BuiltInNavigationActivity.kt'
-NEW_ASSETS={'assets/sg_road_speed_limits_875.db.gz','assets/sg_road_speed_limits_875_manifest.json'}
+NEW_ASSETS={'assets/sg_road_speed_limits_875.bin','assets/sg_road_speed_limits_875_manifest.json'}
 
 def prior(path):return subprocess.check_output(['git','show',BASELINE+':'+path],text=True)
 def function(text,name):
@@ -63,7 +63,7 @@ def verify(baseline,testing,output):
         for name in assets:assert old.read(name)==new.read(name),name
         assert len(json.loads(new.read('assets/sg_enforcement_cameras.json'))['cameras'])==341
         manifest=json.loads(new.read('assets/sg_road_speed_limits_875_manifest.json'))
-        zipped=new.read('assets/sg_road_speed_limits_875.db.gz');raw=gzip.decompress(zipped)
+        zipped=new.read('assets/sg_road_speed_limits_875.bin');raw=gzip.decompress(zipped)
         assert hashlib.sha256(zipped).hexdigest()==manifest['gzip_sha256'] and len(zipped)==manifest['gzip_bytes']
         assert hashlib.sha256(raw).hexdigest()==manifest['sha256'] and len(raw)==manifest['bytes']
         with tempfile.NamedTemporaryFile(suffix='.db') as tmp:
@@ -82,7 +82,7 @@ def verify(baseline,testing,output):
         if 'RoadSpeed' in path.name:speed_tests+=int(report.get('tests',0))
         for out in report.findall('system-out'):
             replay.extend(line for line in (out.text or '').splitlines() if 'B875 OFFLINE_REAL_DATA' in line)
-    assert totals['tests']>=637 and speed_tests>=33,totals
+    assert totals['tests']>=638 and speed_tests>=34,totals
     assert not any(totals[k] for k in ['failures','errors','skipped']),totals
     assert len(replay)>=3,replay
     (output/'B875-offline-gps-replay.log').write_text('\n'.join(replay)+'\n')
@@ -90,7 +90,7 @@ def verify(baseline,testing,output):
     result={'baseline_commit':BASELINE,'baseline_apk_sha256':BASELINE_SHA256,'testing_commit':audit['current_commit'],
             'testing_apk_sha256':hashlib.sha256(Path(testing).read_bytes()).hexdigest(),
             'application_id':'com.izzyan.sgdeliveryplanner.b875test','version_code':82,'version_name':'1.4.63-b875-testing',
-            'all_unit_tests':totals,'new_road_speed_tests':speed_tests,'python_catalog_tests':7,
+            'all_unit_tests':totals,'new_road_speed_tests':speed_tests,'python_catalog_tests':8,
             'unchanged_app_assets':len(assets),'original_mp3_unchanged':209,'original_pcm_unchanged':209,
             'camera_database_unchanged':341,'road_catalog':manifest,'unknown_state':'CHECK SIGNS',
             'real_offline_catalog_gps_replay':replay,'official_merge':False,

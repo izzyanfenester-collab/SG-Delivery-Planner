@@ -61,7 +61,9 @@ internal class RoadSpeedStore875(context:Context):Closeable {
         synchronized(installLock) {
             val existing=if(current.isFile)readVersion(current) else null
             if(existing==null || existing<bundled.version) {
-                try {app.assets.open("sg_road_speed_limits_875.db.gz").use{install(it,bundled,false)}}
+                // .bin retains the gzip bytes across Android/loose-asset loaders;
+                // .gz names can be treated as transparently compressed assets.
+                try {app.assets.open("sg_road_speed_limits_875.bin").use{install(it,bundled,false)}}
                 catch(e:Exception){if(existing==null)throw e
                     android.util.Log.w("SGRoadSpeed875","Bundled update invalid; keeping previous valid catalog",e)}
             }

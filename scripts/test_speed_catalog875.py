@@ -1,4 +1,5 @@
-import unittest
+import unittest,datetime
+from unittest.mock import patch
 from build_speed_catalog875 import parse_limit,direction,limits
 
 class SpeedCatalogTests(unittest.TestCase):
@@ -20,10 +21,14 @@ class SpeedCatalogTests(unittest.TestCase):
         self.assertEqual((50,50,'GENERAL_RULE','GENERAL_RULE'),r[:4])
         self.assertEqual((None,None),limits({'highway':'motorway','maxspeed:type':'SG:urban'},'Test')[:2])
     def test_whole_road_rule_is_not_applied_to_ramps_or_conflicts(self):
-        self.assertEqual('OFFICIAL',limits({'highway':'motorway','maxspeed':'90'},'Kranji Expressway')[2])
+        with patch('build_speed_catalog875.RULE_CHECKED',datetime.date.today().isoformat()):
+            self.assertEqual('OFFICIAL',limits({'highway':'motorway','maxspeed':'90'},'Kranji Expressway')[2])
         self.assertEqual('MAP_DATA',limits({'highway':'motorway_link','maxspeed':'50'},'Kranji Expressway')[2])
         self.assertEqual('MAP_DATA',limits({'highway':'motorway','maxspeed':'80'},'Kranji Expressway')[2])
     def test_empty_maxspeed_cannot_become_an_official_number(self):
         self.assertEqual((None,None),limits({'highway':'primary'},'Braddell Road')[:2])
+    def test_old_statutory_review_does_not_remain_official_indefinitely(self):
+        with patch('build_speed_catalog875.RULE_CHECKED','2020-01-01'):
+            self.assertEqual('MAP_DATA',limits({'highway':'motorway','maxspeed':'90'},'Kranji Expressway')[2])
 
 if __name__=='__main__':unittest.main()

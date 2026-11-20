@@ -62,7 +62,7 @@ jobs:
         run: |
           curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.62-b874/SG-Delivery-B874-Official.apk -o "$RUNNER_TEMP/B874.apk"
           python3 scripts/verify_b875_testing.py restore "$RUNNER_TEMP/B874.apk"
-          cp catalog/sg-road-speed-limits-875.db.gz app/src/main/assets/sg_road_speed_limits_875.db.gz
+          cp catalog/sg-road-speed-limits-875.db.gz app/src/main/assets/sg_road_speed_limits_875.bin
           cp catalog/sg-road-speed-limits-875-manifest.json app/src/main/assets/sg_road_speed_limits_875_manifest.json
       - name: Full regression tests, actual bundled offline GPS replay, lint and TESTING APK
         run: |

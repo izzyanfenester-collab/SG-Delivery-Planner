@@ -25,7 +25,8 @@ class RoadSpeedStore875Test {
     private fun fixture(version:Long,kmh:Int=80):Pair<RoadSpeedManifest875,ByteArray> {
         val file=File.createTempFile("road-fixture-",".db",context.cacheDir);file.delete()
         SQLiteDatabase.openOrCreateDatabase(file,null).use{db->
-            db.execSQL("PRAGMA journal_mode=DELETE");db.execSQL("PRAGMA application_id=1397183308");db.execSQL("PRAGMA user_version=1")
+            db.rawQuery("PRAGMA journal_mode=DELETE",null).use{it.moveToFirst()}
+            db.execSQL("PRAGMA application_id=1397183308");db.execSQL("PRAGMA user_version=1")
             db.execSQL("CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
             db.execSQL("CREATE TABLE road_way(id INTEGER PRIMARY KEY,name TEXT,highway TEXT,layer INTEGER,tunnel INTEGER,bridge INTEGER,forward_allowed INTEGER,backward_allowed INTEGER,forward_kmh INTEGER,backward_kmh INTEGER,forward_kind TEXT,backward_kind TEXT,forward_source TEXT,backward_source TEXT,checked_date TEXT,restrictions TEXT,reason TEXT)")
             db.execSQL("CREATE TABLE road_edge(id INTEGER PRIMARY KEY,source_id TEXT,way_id INTEGER REFERENCES road_way(id),lat1 REAL,lon1 REAL,lat2 REAL,lon2 REAL,verified_kmh INTEGER,verified_source TEXT,verified_date TEXT)")
@@ -64,6 +65,14 @@ class RoadSpeedStore875Test {
             assertTrue(reader.candidates(GpsPoint(1.6,103.8)).isEmpty())
         }
     }
+    @Test fun invalidNumericSnapshotWithMatchingHashesCannotReplaceGoodData(){
+        val a=fixture(1);val invalid=fixture(2,120)
+        RoadSpeedStore875(context).use{store->
+            assertTrue(store.install(ByteArrayInputStream(a.second),a.first))
+            try{store.install(ByteArrayInputStream(invalid.second),invalid.first);fail("Invalid legal speed must fail validation")}catch(_:IllegalArgumentException){}
+            assertEquals(80,store.candidates(GpsPoint(1.3005,103.8)).single().forward?.kmh)
+        }
+    }
     @Test fun actualBundledOfflineCatalogDrives70_80_90GpsReplayWithoutCameraAlerts(){
         val old=CameraSafetyPrefs(context).get();CameraSafetyPrefs(context).save(old.copy(master=false))
         RoadSpeedStore875(context).use{store->
@@ -72,9 +81,11 @@ class RoadSpeedStore875Test {
             SQLiteDatabase.openDatabase(file.path,null,SQLiteDatabase.OPEN_READONLY).use{db->
                 for(kmh in listOf(70,80,90)){
                     var seen=false
-                    db.rawQuery("""SELECT e.lat1,e.lon1,e.lat2,e.lon2,w.name FROM road_edge e JOIN road_way w ON w.id=e.way_id
+                    db.rawQuery("""SELECT e.lat1,e.lon1,e.lat2,e.lon2,w.name,w.tunnel FROM road_edge e JOIN road_way w ON w.id=e.way_id
                         WHERE w.highway='motorway' AND w.forward_allowed=1 AND w.forward_kmh=?
-                        AND (?!='70' OR w.tunnel=1) LIMIT 240""".trimIndent(),arrayOf(kmh.toString(),kmh.toString())).use{c->
+                        AND (?!='70' OR w.tunnel=1)
+                        ORDER BY (e.verified_kmh IS NOT NULL OR w.forward_kind='OFFICIAL') DESC,e.id
+                        LIMIT 240""".trimIndent(),arrayOf(kmh.toString(),kmh.toString())).use{c->
                         while(c.moveToNext()&&!seen){
                             val a=GpsPoint(c.getDouble(0),c.getDouble(1));val b=GpsPoint(c.getDouble(2),c.getDouble(3))
                             val point=GpsPoint((a.lat+b.lat)/2,(a.lon+b.lon)/2)
@@ -82,7 +93,7 @@ class RoadSpeedStore875Test {
                             val roads=store.candidates(point);val tracker=RoadSpeedLimitTracker875()
                             val fix=RoadSpeedFix875(point,1000,3f,bearing,20f,0.5f,c.getString(4),bearing)
                             tracker.observe(fix,roads);val result=tracker.observe(fix.copy(timeMs=2000),roads)
-                            if(result.numberKmh==kmh){seen=true;println("B875 OFFLINE_REAL_DATA road=${c.getString(4)} gps=$point heading=$bearing value=$kmh source=${result.limit?.kind} cameraMaster=OFF")}
+                            if(result.numberKmh==kmh){seen=true;println("B875 OFFLINE_REAL_DATA db=${meta.version} road=${c.getString(4)} segment=${result.segmentId} gps=$point accuracy=3m timeMs=2000 heading=$bearing value=$kmh source=${result.limit?.kind} tunnel=${c.getInt(5)} cameraMaster=OFF")}
                         }
                     }
                     assertTrue("No confident real $kmh km/h segment replay",seen)
