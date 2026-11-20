@@ -1,0 +1,26 @@
+name: B875 Speed Source Audit
+on:
+  push:
+    branches: [feature/build-875-road-speed-limit-testing]
+    paths: ['scripts/inspect_speed_sources875.py', '.github/workflows/b875-speed-source-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python3 -m pip install osmium==4.3.0
+      - name: Download published OSM extract, not map tiles
+        run: curl -fL --retry 3 --max-time 850 https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf -o source.osm.pbf
+      - name: Inspect road tags, actual Singapore boundary and official LTA speed signs
+        run: python3 scripts/inspect_speed_sources875.py source.osm.pbf source-audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B875-speed-source-audit
+          path: source-audit/
