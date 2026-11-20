@@ -59,7 +59,9 @@ class ErpCatalog876Test {
     }
     @Test fun missingAndUnkGantryValuesRemainUninvented(){
         val rows=catalog().records
-        assertEquals(19,rows.count{it.gantryNo.isBlank()});assertEquals(6,rows.count{it.gantryNo=="UNK"})
+        assertEquals(19,rows.count{it.gantryNo.isEmpty()})
+        assertEquals(1,rows.count{it.gantryNo.isNotEmpty()&&it.gantryNo.isBlank()})
+        assertEquals(20,rows.count{it.gantryNo.isBlank()});assertEquals(6,rows.count{it.gantryNo=="UNK"})
         rows.filter{it.gantryNo.isBlank()||it.gantryNo=="UNK"}.forEach{assertEquals("Not specified",it.gantryLabel)}
     }
     @Test fun everyStoredGoogleMapsLinkUsesTheActualUnroundedCoordinates(){catalog().records.forEach{assertTrue(it.supportsMapsLink);assertTrue(it.googleMaps.endsWith(it.latitudeText+","+it.longitudeText))}}

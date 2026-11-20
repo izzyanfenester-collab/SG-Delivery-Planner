@@ -81,7 +81,10 @@ def build(workbook,reference,output):
     manifest={'schema':1,'version':version,'record_count':len(rows),'location_count':len(sites),
         'workbook_sha256':sha(workbook),'reference_sha256':sha(reference),'database_sha256':sha(dbfile),
         'duplicate_groups':[sorted(r['unique_id'] for r in s) for s in sites.values() if len(s)>1],
-        'blank_gantry_count':sum(not r['gantry_no'] for r in rows),'unk_gantry_count':sum(r['gantry_no']=='UNK' for r in rows),
+        'blank_gantry_count':sum(not r['gantry_no'].strip() for r in rows),
+        'empty_gantry_count':sum(not r['gantry_no'] for r in rows),
+        'whitespace_gantry_count':sum(bool(r['gantry_no']) and not r['gantry_no'].strip() for r in rows),
+        'unk_gantry_count':sum(r['gantry_no']=='UNK' for r in rows),
         'coordinate_precision':'Original XML numeric text preserved; REAL doubles are render coordinates only',
         'icon_reference':'Original supplied blue-and-white rectangular E|R|P image, unchanged bytes'}
     (out/'sg_erp_manifest_876.json').write_text(json.dumps(manifest,indent=2)+'\n')

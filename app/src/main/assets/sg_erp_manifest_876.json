@@ -28,7 +28,9 @@
       "757"
     ]
   ],
-  "blank_gantry_count": 19,
+  "blank_gantry_count": 20,
+  "empty_gantry_count": 19,
+  "whitespace_gantry_count": 1,
   "unk_gantry_count": 6,
   "coordinate_precision": "Original XML numeric text preserved; REAL doubles are render coordinates only",
   "icon_reference": "Original supplied blue-and-white rectangular E|R|P image, unchanged bytes"
