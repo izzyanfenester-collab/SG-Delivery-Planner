@@ -47,9 +47,9 @@ try:
     signs=json.loads(raw);features=signs['features']
     meta['lta_signs_sha256']=hashlib.sha256(raw).hexdigest()
     meta['lta_signs_count']=len(features)
-    counts=collections.Counter(f.get('properties',{}).get('TYP_CD','') for f in features)
+    counts=collections.Counter(f.get('properties',{}).get('TYP_CD') or '' for f in features)
     meta['lta_speed_zone_types']={k:v for k,v in counts.items() if any(s in k.lower() for s in ('speed','school','silver','friendly'))}
-    kept=[f for f in features if any(s in f.get('properties',{}).get('TYP_CD','').lower() for s in ('speed','school','silver','friendly'))]
+    kept=[f for f in features if any(s in (f.get('properties',{}).get('TYP_CD') or '').lower() for s in ('speed','school','silver','friendly'))]
     with gzip.open(out/'lta-speed-signs.json.gz','wt') as f:json.dump({'type':'FeatureCollection','features':kept},f)
 except Exception as e:
     meta['lta_download_error']=f'{type(e).__name__}: {e}'
