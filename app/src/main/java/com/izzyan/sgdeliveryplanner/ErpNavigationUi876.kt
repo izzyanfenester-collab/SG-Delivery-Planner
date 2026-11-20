@@ -31,7 +31,7 @@ internal class ErpNavigationState876(context:Context) {
     var mapError by mutableStateOf<String?>(null);private set
     var selected by mutableStateOf<ErpSite876?>(null);private set
     var stationary by mutableStateOf(false);private set
-    fun setVisible(value:Boolean){visible=value;preferences.setVisible(value);if(!value)selected=null}
+    fun updateVisibility(value:Boolean){visible=value;preferences.setVisible(value);if(!value)selected=null}
     suspend fun load(context:Context){
         try{catalog=withContext(Dispatchers.IO){ErpStore876(context).load()};loadError=null}
         catch(e:CancellationException){throw e}
@@ -68,7 +68,7 @@ internal fun ErpSettingsPanel876(state:ErpNavigationState876) {
         Text("ERP Gantry Display",color=SGColors.Gold,fontSize=16.sp,fontWeight=FontWeight.Bold)
         Row(Modifier.fillMaxWidth().heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically){
             Text("Show ERP Gantry Icons",Modifier.weight(1f),color=SGColors.White,fontSize=14.sp)
-            Switch(checked=state.visible,onCheckedChange=state::setVisible)
+            Switch(checked=state.visible,onCheckedChange=state::updateVisibility)
         }
         state.catalog?.let{
             Text("ERP Database: ${it.records.size} records / ${it.sites.size} map locations",color=SGColors.Silver,fontSize=11.sp)
