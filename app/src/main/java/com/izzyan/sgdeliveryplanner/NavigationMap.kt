@@ -40,7 +40,8 @@ internal fun NavigationMap(
     session: NavigationSession,
     modifier: Modifier,
     locationPermitted: Boolean,
-    appearance: NavigationMapAppearance
+    appearance: NavigationMapAppearance,
+    erp: ErpNavigationState876? = null
 ) {
     val context = LocalContext.current
     val density = androidx.compose.ui.platform.LocalDensity.current.density
@@ -79,6 +80,8 @@ internal fun NavigationMap(
     var lastPaintedProgress by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
     var mapWidthPixels by remember { mutableIntStateOf(0) }
+
+    ErpMapIntegration876(map,styleReady,erp)
 
     LaunchedEffect(session.route) {
         // Rerouting starts a fresh travelled/remaining division; map style changes do not.
