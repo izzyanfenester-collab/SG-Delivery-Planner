@@ -292,14 +292,14 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color=if(session.speedLimitState868.overspeedVisual)
+                                    color=if(session.roadSpeedLimitState875.overspeedVisual)
                                         Color(0xFFE53935) else Color.White,
                                     fontSize=27.sp,fontWeight=FontWeight.Bold)
                                 Text("km/h",color=SGColors.Silver,fontSize=11.sp)
                                 if(session.cameraPreferences.speedLimitDisplay){
                                     // A red circle does not imply verification: the distinct
                                     // classification is always immediately beneath the sign.
-                                    val limit=SpeedLimitDisplay869.render(session.speedLimitState868)
+                                    val limit=session.roadSpeedLimitState875
                                     Spacer(Modifier.height(3.dp))
                                     Text("SPEED LIMIT",color=SGColors.Gold,
                                         fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
@@ -319,23 +319,24 @@ class BuiltInNavigationActivity : ComponentActivity() {
                                             verticalArrangement=Arrangement.Center,
                                             modifier=Modifier.fillMaxSize()
                                         ){
-                                            Text(limit.numberKmh?.toString() ?: "—",
+                                            Text(limit.numberKmh?.toString() ?: "CHECK\nSIGNS",
                                                 color=if(limit.hasNumericLimit)Color.Black else Color.Gray,
-                                                fontSize=if(limit.hasNumericLimit)24.sp else 25.sp,
+                                                fontSize=if(limit.hasNumericLimit)24.sp else 10.sp,
                                                 fontWeight=FontWeight.Black,
-                                                lineHeight=25.sp,maxLines=1)
+                                                lineHeight=if(limit.hasNumericLimit)25.sp else 12.sp,
+                                                maxLines=if(limit.hasNumericLimit)1 else 2)
                                             if(limit.hasNumericLimit){
                                                 Text("km/h",color=Color.Black,
                                                     fontSize=8.sp,lineHeight=10.sp,maxLines=1)
                                             }
                                         }
                                     }
-                                    Text(limit.badge.label,
-                                        color=when(limit.badge){
-                                            SpeedLimitBadge869.VERIFIED -> Color(0xFF82C89A)
-                                            SpeedLimitBadge869.REFERENCE -> SGColors.Gold
-                                            SpeedLimitBadge869.UNVERIFIED -> Color(0xFFFFAF72)
-                                            SpeedLimitBadge869.UNKNOWN -> SGColors.Silver
+                                    Text(limit.badgeLabel,
+                                        color=when(limit.limit?.kind){
+                                            RoadLimitSource875.OFFICIAL -> Color(0xFF82C89A)
+                                            RoadLimitSource875.MAP_DATA -> SGColors.Gold
+                                            RoadLimitSource875.GENERAL_RULE -> Color(0xFFFFAF72)
+                                            null -> SGColors.Silver
                                         },
                                         fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
                                     limit.note?.let{
@@ -629,6 +630,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private var speedRows868:List<SpeedLimitRow868> = emptyList()
     var speedLimitSourceCount868 by mutableIntStateOf(0); private set
     var speedLimitState868 by mutableStateOf(SpeedLimitState868()); private set
+    private val roadSpeedStore875=RoadSpeedStore875(context)
+    private val roadSpeedTracker875=RoadSpeedLimitTracker875()
+    private var roadSpeedLookup875:Job?=null
+    private var roadSpeedGeneration875=0L
+    var roadSpeedLimitState875 by mutableStateOf(RoadSpeedState875()); private set
+    var roadSpeedCatalogInfo875 by mutableStateOf("Loading offline road catalog…"); private set
     private var coordinateReferenceIds867:Set<String> = emptySet()
     var coordinateCatalogMatchCount by mutableIntStateOf(0); private set
     var cameraDatabaseVersion by mutableStateOf("Not loaded"); private set
@@ -705,6 +712,45 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             fix.speedAccuracyMetersPerSecond.takeIf{fix.hasSpeedAccuracy()},
             authoritativeSegmentMatch=false
         )
+    }
+
+    private fun clearRoadSpeed875(reason:String) {
+        roadSpeedGeneration875++;roadSpeedLookup875?.cancel()
+        roadSpeedLimitState875=roadSpeedTracker875.invalidate(reason)
+    }
+
+    /** Read-only lookup runs off the GPS/rerouting path; no camera setting gates it. */
+    private fun updateRoadSpeed875(fix:Location) {
+        val owner=scope?:return
+        val generation=++roadSpeedGeneration875
+        roadSpeedLookup875?.cancel()
+        val sample=RoadSpeedFix875(GpsPoint(fix.latitude,fix.longitude),fix.elapsedRealtimeNanos/1_000_000,
+            fix.accuracy,fix.bearing.takeIf{fix.hasBearing() && (!fix.hasBearingAccuracy() || fix.bearingAccuracyDegrees<=35)},
+            fix.speed.takeIf{fix.hasSpeed()},fix.speedAccuracyMetersPerSecond.takeIf{fix.hasSpeedAccuracy()},
+            street?.takeIf{!offRoute && it.isNotBlank()})
+        val routeShape=shape.takeIf{!offRoute}.orEmpty()
+        roadSpeedLookup875=owner.launch {
+            try {
+                val loaded=withContext(Dispatchers.IO){
+                    val meta=roadSpeedStore875.ensureBundled()
+                    val roads=roadSpeedStore875.candidates(sample.point)
+                    val routeMatch=NavigationRoadMatcher.match(sample.point,routeShape,sample.accuracy,sample.speed,sample.heading)
+                    Triple(meta,roads,routeMatch?.bearingDegrees)
+                }
+                if(!active || generation!=roadSpeedGeneration875)return@launch
+                if(SystemClock.elapsedRealtime()-sample.timeMs>6000){clearRoadSpeed875("GPS sample stale; check signs");return@launch}
+                roadSpeedCatalogInfo875="${loaded.first.ways} road ways · ${loaded.first.knownDirections} mapped directional limits · ${loaded.first.checkedDate}"
+                roadSpeedLimitState875=roadSpeedTracker875.observe(sample.copy(routeBearing=loaded.third),loaded.second,cameraPreferences.overspeed)
+                android.util.Log.d("SGRoadSpeed875","gps=${sample.point.lat},${sample.point.lon} accuracy=${sample.accuracy} heading=${sample.heading} ${roadSpeedLimitState875.diagnostics}")
+            }catch(e:CancellationException){throw e}
+            catch(e:Exception){
+                if(generation==roadSpeedGeneration875){
+                    roadSpeedLimitState875=roadSpeedTracker875.invalidate("Offline road catalog unavailable; check signs")
+                    roadSpeedCatalogInfo875="Catalog unavailable; previous data retained"
+                }
+                android.util.Log.e("SGRoadSpeed875","Road-speed lookup failed",e)
+            }
+        }
     }
 
     suspend fun refreshCameraSnapshot(){
@@ -975,6 +1021,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
 
     init {
         CameraSafetyUpdateScheduler.schedule(context)
+        RoadSpeedUpdateScheduler875.schedule(context)
         sdk.addProgressChangeListener { _, p -> main.post { if (active && !arrived && !offRoute && p.directionsRoute == route) updateProgress(p) } }
         voiceAudio.setVolume(voiceVolume)
     }
@@ -985,8 +1032,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             cameraRefreshMessage="No validated camera snapshot available."
         }
         loadSpeedReference868()
+        roadSpeedTracker875.reset();roadSpeedLimitState875=RoadSpeedState875()
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
+            launch {
+                while(isActive){
+                    delay(1000)
+                    val expired=roadSpeedTracker875.expire(SystemClock.elapsedRealtime())
+                    if(expired!=roadSpeedLimitState875)roadSpeedLimitState875=expired
+                }
+            }
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
                 message = "Resolving destination…"
                 destination = Repository(context.applicationContext as android.app.Application).resolve(destination.postal)
@@ -1009,6 +1064,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             fusedLocations(context).collect { fix ->
                 val now = SystemClock.elapsedRealtime()
                 if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || !fix.accuracy.isFinite() || fix.accuracy < 0 || fix.accuracy > 50) {
+                    clearRoadSpeed875("GPS accuracy or timestamp invalid; check signs")
                     message = "GPS accuracy is low. Waiting for a precise location…"
                     reroute.resetDrift(); instantDetector.reset(); arrival = ArrivalDetector(); return@collect
                 }
@@ -1019,11 +1075,12 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                         fix.elapsedRealtimeNanos / 1_000_000L,
                         fix.accuracy, fix.speed.takeIf { fix.hasSpeed() }))) {
                     message = "GPS position jump ignored. Checking the next fix…"
+                    clearRoadSpeed875("GPS jump rejected; check signs")
                     return@collect
                 }
                 lastFix = now; location = fix
                 scanCameraSafety(fix,now)
-                updateSpeedLimit868(fix)
+                updateRoadSpeed875(fix)
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
                 val reliable = RerouteFix(GpsPoint(fix.latitude,fix.longitude),fix.accuracy,
                     fix.speed.takeIf { fix.hasSpeed() },
@@ -1088,7 +1145,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "GPS or destination unavailable. Please retry." }
-        finally { active = false; requestGate.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); voiceAudio.stop(); scope = null }
+        finally { active = false; roadSpeedLookup875?.cancel();roadSpeedStore875.close();requestGate.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); voiceAudio.stop(); scope = null }
     }
 
     private fun requestRoute(fix: RerouteFix, decision: RerouteDecision? = null) {

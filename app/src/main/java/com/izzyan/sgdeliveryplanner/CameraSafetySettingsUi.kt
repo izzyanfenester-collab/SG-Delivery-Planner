@@ -54,21 +54,21 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Show Camera Icons",p.icons) {
             session.updateCameraPreferences(p.copy(icons=it))
         }
-        CameraSafetyToggle("Verified Speed Limit Display",p.speedLimitDisplay) {
+        CameraSafetyToggle("Road Speed Limit Display",p.speedLimitDisplay) {
             session.updateCameraPreferences(p.copy(speedLimitDisplay=it))
         }
-        Text("Speed Reference DB: ${session.speedLimitSourceCount868}/100 imported offline",
+        Text("Road catalog: ${session.roadSpeedCatalogInfo875}",
             color=SGColors.Silver,fontSize=11.sp)
-        Text("91 provisional references · 9 unknown · 12 low-precision points",
+        Text("Legacy camera references retained: ${session.speedLimitSourceCount868}/100. Not road limits.",
             color=SGColors.Silver,fontSize=10.sp)
-        Text("Live Speed Limit: ${session.speedLimitState868.diagnostics}",
+        Text("Live Speed Limit: ${session.roadSpeedLimitState875.diagnostics}",
             color=SGColors.Gold,fontSize=10.sp)
         CameraSafetyToggle("Verified Overspeed Warning",p.overspeed) {
             session.updateCameraPreferences(p.copy(overspeed=it))
         }
         Text("Speed & red-light sources: Singapore Police Force",
             color=SGColors.Silver,fontSize=11.sp)
-        Text("Road speed limits: official verified source only. Unknown values remain blank.",
+        Text("Road limits: LTA/statute, validated OSM (ODbL), or applicable SG general rule. Unknown: CHECK SIGNS.",
             color=SGColors.Silver,fontSize=11.sp)
         Text("Snapshot: ${session.cameraDatabaseVersion}",
             color=SGColors.Silver,fontSize=11.sp)

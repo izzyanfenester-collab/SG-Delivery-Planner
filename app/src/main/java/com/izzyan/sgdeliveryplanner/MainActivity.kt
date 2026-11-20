@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
         org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
         runCatching { PostalDatasetScheduler.schedule(applicationContext) }
         runCatching { AppUpdateScheduler.schedule(applicationContext) }
+        runCatching { RoadSpeedUpdateScheduler875.schedule(applicationContext) }
         runCatching { OfflineMapUpdateScheduler.schedule(applicationContext) }
         setContent {
             val vm: PlannerViewModel = viewModel()

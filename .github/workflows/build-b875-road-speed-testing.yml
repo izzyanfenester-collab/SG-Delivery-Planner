@@ -1,0 +1,138 @@
+name: B875 Road Speed Limits TESTING
+on:
+  push:
+    branches: [feature/build-875-road-speed-limit-testing]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+  schedule:
+    - cron: '10 20 * * 0'
+permissions:
+  contents: write
+concurrency:
+  group: b875-road-speed-testing
+  cancel-in-progress: true
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python3 -m pip install osmium==4.3.0 shapely==2.1.2
+      - name: Download published road extract and official LTA dataset through documented APIs
+        run: |
+          curl -fL --retry 3 --max-time 850 https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf -o source.osm.pbf
+          python3 scripts/inspect_speed_sources875.py source.osm.pbf source-audit
+      - name: Validate parsing and build country-bounded directional offline catalog
+        run: |
+          mkdir -p catalog
+          python3 -m unittest discover -s scripts -p test_speed_catalog875.py -v 2>&1 | tee catalog/python-catalog-tests.txt
+          test "${PIPESTATUS[0]}" -eq 0
+          python3 scripts/build_speed_catalog875.py source-audit catalog --version "$(date -u +%Y%m%d%H%M)"
+          cp source-audit/source-audit.json catalog/B875-upstream-source-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B875-speed-catalog
+          path: |
+            catalog/*.gz
+            catalog/*.json
+            catalog/*.txt
+          if-no-files-found: error
+  build:
+    if: github.event_name != 'schedule' && github.ref == 'refs/heads/feature/build-875-road-speed-limit-testing'
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/download-artifact@v4
+        with: {name: B875-speed-catalog, path: catalog}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact Official baseline and preserve routing, zoom, camera, voice and user-data modules
+        run: python3 scripts/verify_b875_testing.py source
+      - name: Restore exact B874 assets and add only the new road-speed catalog
+        run: |
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.62-b874/SG-Delivery-B874-Official.apk -o "$RUNNER_TEMP/B874.apk"
+          python3 scripts/verify_b875_testing.py restore "$RUNNER_TEMP/B874.apk"
+          cp catalog/sg-road-speed-limits-875.db.gz app/src/main/assets/sg_road_speed_limits_875.db.gz
+          cp catalog/sg-road-speed-limits-875-manifest.json app/src/main/assets/sg_road_speed_limits_875_manifest.json
+      - name: Full regression tests, actual bundled offline GPS replay, lint and TESTING APK
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Verify APK metadata, signature, alignment and every original asset
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b875test' versionCode='82' versionName='1.4.63-b875-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #875 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          mkdir -p dist
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signing-verification.txt
+          cp "$apk" dist/SG-Delivery-B875-Road-Speed-Limit-TESTING.apk
+          python3 scripts/verify_b875_testing.py verify "$RUNNER_TEMP/B874.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cp catalog/*.json catalog/*.txt catalog/B875-unknown-road-ways.csv.gz dist/
+          cd dist
+          zip -q -r B875-Verification-Evidence.zip *.json *.log *.txt *.html *.csv.gz unit-test-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B875-TESTING-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish isolated TESTING APK without touching Official
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.63-b875-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo 'Existing TESTING release preserved; current output is available as a workflow artifact.'
+          else
+            gh release create "$tag" dist/SG-Delivery-B875-Road-Speed-Limit-TESTING.apk dist/B875-Verification-Evidence.zip \
+              --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title 'SG Delivery #875 TESTING – Offline Road Speed Limits' \
+              --notes 'Exact Official B874 baseline 10d641eaad1f43f08018baebacca6f8f01cdc38d. Independent .b875test installation. Replaces camera-proximity-only speed display with local directional SG road geometry lookup, provenance labels, conservative unknown/conditional/parallel-road handling, stale-fix expiry and validated weekly connected updates. Original 209 MP3/PCM, 341 cameras, postal assets, voice/camera/rerouting/zoom/control functions and user databases retained. Coverage is partial; MAP DATA is not legal certification. See evidence for full automated results, real offline 70/80/90 GPS replays, coverage and unknown-way list. Physical driving/Bluetooth/phone visual tests not performed. Weekly source cron awaits default-branch inclusion after approval. NO OFFICIAL MERGE.'
+          fi
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.62-b874
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/git/ref/heads/main --jq .object.sha)" = 10d641eaad1f43f08018baebacca6f8f01cdc38d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B875-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/B875-acceptance.json
+            dist/B875-source-audit.json
+  publish_data:
+    needs: [catalog, build]
+    if: always() && needs.catalog.result == 'success' && (needs.build.result == 'success' || (github.event_name == 'schedule' && needs.build.result == 'skipped'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: B875-speed-catalog, path: catalog}
+      - name: Publish validated TESTING data snapshot; clients keep prior catalog on any mismatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag=sg-road-speed-limits-875-testing
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false --title 'SG Road Speed Limits – TESTING Data' --notes 'Validated offline mapping catalog for B875 TESTING only. Original Official APK and stable update channel remain unchanged. Partial coverage; observe source/confidence labels. Source cron starts only when this workflow is approved onto the default branch.'
+          fi
+          gh release upload "$tag" catalog/sg-road-speed-limits-875.db.gz --clobber
+          gh release upload "$tag" catalog/B875-data-coverage.json catalog/B875-upstream-source-audit.json catalog/B875-official-sign-intervals.json catalog/B875-unknown-road-ways.csv.gz --clobber
+          gh release upload "$tag" catalog/sg-road-speed-limits-875-manifest.json --clobber
