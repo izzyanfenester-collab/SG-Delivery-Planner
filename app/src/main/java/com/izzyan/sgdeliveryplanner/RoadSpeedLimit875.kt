@@ -28,7 +28,8 @@ internal data class RoadSpeedState875(
     val numberKmh get()=limit?.kmh
     val hasNumericLimit get()=limit!=null
     val highlightOverspeed get()=overspeedVisual
-    val note:String? get()=sourceNote
+    // Keep the existing narrow meter panel; full source details live in diagnostics.
+    val note:String? get()=limit?.checkedDate
     val badgeLabel get()=limit?.kind?.label?:"CHECK SIGNS"
     val sourceNote get()=limit?.let{when(it.kind){
         RoadLimitSource875.OFFICIAL->"LTA / statute · ${it.checkedDate}"
