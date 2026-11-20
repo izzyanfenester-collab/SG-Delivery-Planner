@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace = "com.izzyan.sgdeliveryplanner"
  compileSdk = 36
- defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 83; versionName = "1.4.63-b875" }
+ defaultConfig { applicationId = "com.izzyan.sgdeliveryplanner"; minSdk = 26; targetSdk = 36; versionCode = 84; versionName = "1.4.64-b876"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
  // Release signing is intentionally supplied only by environment variables.
  // Never commit the keystore or passwords to the repository.
  val releaseKeystore = System.getenv("SG_DELIVERY_KEYSTORE_PATH")
@@ -58,6 +58,10 @@ dependencies {
  implementation("org.maplibre.navigation:navigation-core-android:5.0.0")
  implementation("org.maplibre.gl:android-sdk:13.5.0")
  implementation("com.google.android.gms:play-services-location:21.4.0")
+ androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.00"))
+ androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+ androidTestImplementation("androidx.test:runner:1.7.0")
+ androidTestImplementation("androidx.test.ext:junit:1.3.0")
  testImplementation("androidx.compose.ui:ui-test-junit4")
  debugImplementation("androidx.compose.ui:ui-test-manifest")
  testImplementation("junit:junit:4.13.2")

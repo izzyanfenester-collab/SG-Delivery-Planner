@@ -120,6 +120,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
     private fun NavigationContent(snapshot:NavigationDestinationSnapshot873) {
         val stop=snapshot.place
         val session = remember(snapshot.sessionKey) { NavigationSession(this@BuiltInNavigationActivity, stop) }
+        val erp = rememberErpNavigation876(session.location)
         var permitted by remember { mutableStateOf(hasPreciseLocation()) }
         var retry by remember { mutableIntStateOf(0) }
         var requestedPermission by remember { mutableStateOf(false) }
@@ -166,7 +167,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
         Scaffold(containerColor = PremiumNavy) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 // Full-screen vector map: UI panels overlay the road view without shrinking it.
-                NavigationMap(session, Modifier.matchParentSize(), permitted, mapAppearance)
+                NavigationMap(session, Modifier.matchParentSize(), permitted, mapAppearance, erp)
 
                 Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()
                     .onSizeChanged { topPanelHeightPx = it.height }
@@ -420,6 +421,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         ) { session.setDimension(it == "3D") }
                         NavigationVoiceSettings(session)
                         CameraSafetySettingsPanel(session)
+                        ErpSettingsPanel876(erp)
                         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("Smart Auto Zoom", Modifier.weight(1f), color = SGColors.White)
@@ -459,6 +461,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 }
             )
         }
+        ErpInformationCard876(erp)
         if (showCameras) TrafficCameraDialog(session) { showCameras = false }
         if (showLocalTrafficConsent) {
             AlertDialog(

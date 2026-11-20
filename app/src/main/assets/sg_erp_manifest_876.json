@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "version": "xlsx-1f74a7542b5c",
+  "record_count": 106,
+  "location_count": 101,
+  "workbook_sha256": "1f74a7542b5cb1f774f4c2c6a2379a4040c49a0ddd9f08c3798db73af77f4e26",
+  "reference_sha256": "f0863913694b4919f099336521559273d3ffddffd93b433763eb074d5fafe08a",
+  "database_sha256": "4b93d1ed9c3a164a66bfb8e1de9a870044dd276bbc18e6cc59a211e2fffec67a",
+  "duplicate_groups": [
+    [
+      "627",
+      "838"
+    ],
+    [
+      "645",
+      "839"
+    ],
+    [
+      "646",
+      "840"
+    ],
+    [
+      "705",
+      "717"
+    ],
+    [
+      "331",
+      "757"
+    ]
+  ],
+  "blank_gantry_count": 20,
+  "empty_gantry_count": 19,
+  "whitespace_gantry_count": 1,
+  "unk_gantry_count": 6,
+  "coordinate_precision": "Original XML numeric text preserved; REAL doubles are render coordinates only",
+  "icon_reference": "Original supplied blue-and-white rectangular E|R|P image, unchanged bytes"
+}
