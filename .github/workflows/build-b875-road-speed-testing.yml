@@ -4,8 +4,6 @@ on:
     branches: [feature/build-875-road-speed-limit-testing]
     paths-ignore: ['**.md']
   workflow_dispatch:
-  schedule:
-    - cron: '10 20 * * 0'
 permissions:
   contents: write
 concurrency:

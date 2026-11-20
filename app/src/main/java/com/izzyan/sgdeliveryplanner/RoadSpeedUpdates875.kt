@@ -8,9 +8,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
-/** The TESTING data channel is independent of Official APK updates. */
+/** The validated Official data channel is independent of APK updates. */
 internal object RoadSpeedRemote875 {
-    const val ROOT="https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/sg-road-speed-limits-875-testing/"
+    const val ROOT="https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/sg-road-speed-limits/"
     private fun connection(path:String):HttpURLConnection=(URL(ROOT+path).openConnection() as HttpURLConnection).apply {
         connectTimeout=15000;readTimeout=30000
         setRequestProperty("User-Agent","SG-Delivery-Road-Speed-875")

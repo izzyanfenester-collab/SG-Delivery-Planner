@@ -1,0 +1,56 @@
+name: Refresh Official Singapore Road Speed Limits
+on:
+  schedule:
+    - cron: '10 20 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-official-road-speed-catalog
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python3 -m pip install osmium==4.3.0 shapely==2.1.2
+      - name: Fetch official published sources and build a new offline snapshot
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --max-time 850 https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf -o source.osm.pbf
+          python3 scripts/inspect_speed_sources875.py source.osm.pbf source-audit
+          mkdir -p catalog
+          python3 -m unittest discover -s scripts -p test_speed_catalog875.py -v 2>&1 | tee catalog/python-catalog-tests.txt
+          python3 scripts/build_speed_catalog875.py source-audit catalog --version "$(date -u +%Y%m%d%H%M)"
+          cp source-audit/source-audit.json catalog/B875-upstream-source-audit.json
+      - name: Validate new data against the previous valid Official snapshot before publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download sg-road-speed-limits --pattern sg-road-speed-limits-875-manifest.json --dir previous
+          python3 scripts/validate_road_speed_catalog875.py catalog previous/sg-road-speed-limits-875-manifest.json | tee catalog/publication-validation.json
+      - name: Publish data only after validation succeeds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=sg-road-speed-limits
+          gh release upload "$tag" catalog/sg-road-speed-limits-875.db.gz --clobber
+          gh release upload "$tag" catalog/B875-data-coverage.json catalog/B875-upstream-source-audit.json catalog/B875-official-sign-intervals.json catalog/B875-unknown-road-ways.csv.gz --clobber
+          gh release upload "$tag" catalog/sg-road-speed-limits-875-manifest.json --clobber
+          # The rolling data release stays a prerelease, so app-update checks ignore it.
+          test "$(gh release view "$tag" --json isPrerelease --jq .isPrerelease)" = true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SG-Official-speed-catalog-validation
+          path: |
+            catalog/*.json
+            catalog/*.txt
+            catalog/*.gz
+          if-no-files-found: warn

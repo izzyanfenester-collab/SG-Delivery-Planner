@@ -1,0 +1,142 @@
+name: Publish approved SG Delivery B875 Official
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-b875-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b875-official-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python3 -m pip install shapely==2.1.2
+      - name: Verify exact owner-approved source and Official upgrade metadata
+        run: python3 scripts/verify_b875_official.py source
+      - name: Restore byte-identical approved assets and speed snapshot
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.62-b874/SG-Delivery-B874-Official.apk -o "$RUNNER_TEMP/B874.apk"
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.63-b875-testing/SG-Delivery-B875-Road-Speed-Limit-TESTING.apk -o "$RUNNER_TEMP/B875-Testing.apk"
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.63-b875-testing/B875-Verification-Evidence.zip -o "$RUNNER_TEMP/B875-testing-evidence.zip"
+          python3 scripts/verify_b875_official.py restore "$RUNNER_TEMP/B875-Testing.apk" catalog "$RUNNER_TEMP/B875-testing-evidence.zip"
+          python3 scripts/validate_road_speed_catalog875.py catalog
+      - name: Validate catalog rules and full Android regressions, offline GPS replay, lint and release compilation
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          python3 -m unittest discover -s scripts -p test_speed_catalog875.py -v 2>&1 | tee dist/python-catalog-tests.txt
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+      - name: Restore original Official signing key securely
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in SG_DELIVERY_KEYSTORE_BASE64 SG_DELIVERY_KEYSTORE_PASSWORD SG_DELIVERY_KEY_ALIAS SG_DELIVERY_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing protected signing secret: $key"
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b875.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b875.jks"
+      - name: Sign and verify canonical Official APK and in-place upgrade identity
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$unsigned"
+          "$bt/zipalign" -P 16 -f -v 4 "$unsigned" "$RUNNER_TEMP/b875-aligned.apk" >/dev/null
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/sg-delivery-b875.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B875-Official.apk "$RUNNER_TEMP/b875-aligned.apk"
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B875-Official.apk | tee dist/signing-verification.txt
+          "$bt/apksigner" verify --print-certs "$RUNNER_TEMP/B874.apk" > "$RUNNER_TEMP/b874-cert.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' "$RUNNER_TEMP/b874-cert.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B875-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='83' versionName='1.4.63-b875'"
+          "$bt/aapt" dump badging dist/SG-Delivery-B875-Official.apk | grep -F "application-label:'SG Delivery'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B875-Official.apk >/dev/null
+          python3 scripts/verify_b875_official.py verify "$RUNNER_TEMP/B874.apk" "$RUNNER_TEMP/B875-Testing.apk" dist/SG-Delivery-B875-Official.apk dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cp catalog/*.json catalog/B875-unknown-road-ways.csv.gz dist/
+          cd dist
+          zip -q -r B875-Official-Verification.zip *.json *.txt *.log *.html *.csv.gz unit-test-results
+          sha256sum SG-Delivery-B875-Official.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B875-Official-Verified-APK-and-evidence
+          path: dist/
+          if-no-files-found: error
+      - name: Publish the approved offline data snapshot to the Official data channel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=sg-road-speed-limits
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title 'Singapore Road Speed Limits – Official Data' \
+              --notes 'Validated offline speed data for SG Delivery Official. Partial mapped/official coverage, not a complete certified road inventory. Clients verify all bytes/schema before replacing previous data. Weekly source refresh is registered on the default branch; the data release is excluded from stable app-update checks.'
+          else
+            echo '::error::Official data channel already exists; refusing unreviewed snapshot replacement'
+            exit 1
+          fi
+          gh release upload "$tag" catalog/sg-road-speed-limits-875.db.gz
+          gh release upload "$tag" catalog/B875-data-coverage.json catalog/B875-upstream-source-audit.json catalog/B875-official-sign-intervals.json catalog/B875-unknown-road-ways.csv.gz
+          gh release upload "$tag" catalog/sg-road-speed-limits-875-manifest.json
+      - name: Publish owner-approved B875 as latest stable update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.63-b875
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::Official B875 already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B875-Official.apk dist/B875-Official-Verification.zip \
+            --target "$GITHUB_SHA" --latest \
+            --title 'SG Delivery Build #875 Official – Offline Road Speed Limits' \
+            --notes 'Owner explicitly approved merging B875 TESTING commit 5361090ebf4575d395bc856894084fe98909ac64. Approved runtime/test source and all 432 application assets remain unchanged except the speed-data channel URL now points to Official. Canonical application ID and original Official signing certificate, versionCode 83/version 1.4.63-b875 support in-place upgrade from B874 without changing user database schemas/settings. Directional local SG road-speed lookup, offline data, confidence/source labels, conservative CHECK SIGNS, GPS hysteresis and weekly connected updates retained. All 209 MP3/PCM, 341 camera records, strict 2KM alerts, zoom, rerouting, controls, themes and delivery functionality preserved. Full Android regression/offline replay tests, 8 catalog tests, lint, signature and 16KB alignment verified; see evidence. Weekly Official data refresh is now registered on main. Coverage remains partial. Physical driving, Bluetooth, device upgrade and phone visual QA have not been performed. Published as latest stable for in-app Check for Update.'
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = "$tag"
+      - name: Remove temporary signing key and aligned APK
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b875.jks" "$RUNNER_TEMP/b875-aligned.apk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B875-Official-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/signing-verification.txt
+            dist/python-catalog-tests.txt
