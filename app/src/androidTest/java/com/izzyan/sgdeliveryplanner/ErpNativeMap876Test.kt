@@ -130,8 +130,10 @@ class ErpNativeMap876Test {
         }
         val tapPixel=main{it.nativeMap!!.projection.toScreenLocation(LatLng(shared.point.lat,shared.point.lon))}
         rule.onRoot().performTouchInput{click(Offset(tapPixel.x,tapPixel.y))}
-        rule.onNodeWithText("Unique ID: 627").assertIsDisplayed()
-        rule.onNodeWithText("Unique ID: 838").assertIsDisplayed()
+        // Both records are present in the native marker's scrollable details dialog.
+        // On shorter emulator viewports, scroll each record into view before asserting visibility.
+        rule.onNodeWithText("Unique ID: 627").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Unique ID: 838").performScrollTo().assertIsDisplayed()
         val screen=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         File(folder(),"B876-shared-record-information-card.png").outputStream().use{screen.compress(Bitmap.CompressFormat.PNG,100,it)}
         rule.onNodeWithText("Done").performClick()
