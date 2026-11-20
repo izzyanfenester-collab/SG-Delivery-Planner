@@ -119,7 +119,10 @@ class ErpNativeMap876Test {
                 }
                 Thread.sleep(250)
                 val at=main{it.nativeMap!!.projection.toScreenLocation(LatLng(target.point.lat,target.point.lon))}
-                val hits=main{it.nativeMap!!.queryRenderedFeatures(at,ErpMapLayer876.LAYER).map{it.getStringProperty("site_key")}}
+                val hits = main { activity ->
+                    activity.nativeMap!!.queryRenderedFeatures(at, ErpMapLayer876.LAYER)
+                        .map { feature -> feature.getStringProperty("site_key") }
+                }
                 assertTrue("ERP center anchoring failed in mode $i",target.key in hits)
                 val image=snapshot("B876-native-${if(mode.second==0.0)"2D" else "3D"}-z${mode.first.toInt()}-b${mode.third.toInt()}-${if(night)"night" else "day"}.png")
                 val density=rule.activity.resources.displayMetrics.density
