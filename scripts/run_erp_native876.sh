@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-set +e
+set -euo pipefail
 adb shell svc wifi disable
 adb shell svc data disable
 ./gradlew connectedDebugAndroidTest
-erp_native_status=$?
 mkdir -p dist/native-map
-adb exec-out run-as com.izzyan.sgdeliveryplanner.b876test tar -C files -cf - erp-876-native-evidence | tar -xf - -C dist/native-map
+# Gradle may uninstall the debug app after instrumentation; run-as cannot read its files then.
+# Tests publish native screenshots and JSON into public Downloads via scoped MediaStore.
+source_dir=/sdcard/Download/SGDeliveryB876Native
+adb shell ls "$source_dir/B876-native-map-results.json"
+adb pull "$source_dir" dist/native-map/
+mv dist/native-map/SGDeliveryB876Native dist/native-map/erp-876-native-evidence
+test -s dist/native-map/erp-876-native-evidence/B876-native-map-results.json
 adb logcat -d > dist/native-map/logcat.txt
-exit "$erp_native_status"

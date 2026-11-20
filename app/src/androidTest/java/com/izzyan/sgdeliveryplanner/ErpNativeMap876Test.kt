@@ -1,16 +1,20 @@
 package com.izzyan.sgdeliveryplanner
 
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
 import android.location.Location
+import android.os.Environment
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -40,6 +44,23 @@ class ErpNativeMap876Test {
     }
     private fun ready(){rule.waitUntil(120000){main{it.ready && it.erpState.catalog!=null && it.nativeMap?.style?.getLayer(ErpMapLayer876.LAYER)!=null}}}
     private fun folder()=File(rule.activity.filesDir,"erp-876-native-evidence").apply{mkdirs()}
+    /** Persist evidence outside app-owned internal storage so it survives Gradle test APK cleanup. */
+    private fun saveEvidence(name:String,data:ByteArray,mime:String) {
+        File(folder(),name).writeBytes(data)
+        val resolver=rule.activity.contentResolver
+        val metadata=ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME,name)
+            put(MediaStore.MediaColumns.MIME_TYPE,mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS + "/SGDeliveryB876Native")
+            put(MediaStore.MediaColumns.IS_PENDING,1)
+        }
+        val uri=requireNotNull(resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,metadata)) {
+            "Cannot create persistent native ERP test evidence $name"
+        }
+        val output=requireNotNull(resolver.openOutputStream(uri)){"Cannot write persistent evidence $name"}
+        output.use{it.write(data)}
+        resolver.update(uri,ContentValues().apply{put(MediaStore.MediaColumns.IS_PENDING,0)},null,null)
+    }
     /** Deliver a real touchscreen tap to the native MapLibre MapView, not the Compose test root. */
     private fun tapNativeMap(point:GpsPoint) {
         main { activity ->
@@ -59,7 +80,11 @@ class ErpNativeMap876Test {
         main{it.nativeMap!!.snapshot{b->bitmap=b;done.countDown()}}
         assertTrue("Native render snapshot timeout",done.await(30,TimeUnit.SECONDS))
         val image=requireNotNull(bitmap)
-        File(folder(),name).outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)}
+        val png=ByteArrayOutputStream().use{stream->
+            assertTrue("Failed to encode native ERP map PNG",image.compress(Bitmap.CompressFormat.PNG,100,stream))
+            stream.toByteArray()
+        }
+        saveEvidence(name,png,"image/png")
         return image
     }
     private fun move(point:GpsPoint,zoom:Double,pitch:Double,bearing:Double){
@@ -152,18 +177,23 @@ class ErpNativeMap876Test {
         rule.onNodeWithText("Unique ID: 627").assertIsDisplayed()
         rule.onNodeWithText("Unique ID: 838").assertIsDisplayed()
         val screen=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        File(folder(),"B876-shared-record-information-card.png").outputStream().use{screen.compress(Bitmap.CompressFormat.PNG,100,it)}
+        val infoPng=ByteArrayOutputStream().use{stream->
+            assertTrue("Failed to encode ERP information card",screen.compress(Bitmap.CompressFormat.PNG,100,stream))
+            stream.toByteArray()
+        }
+        saveEvidence("B876-shared-record-information-card.png",infoPng,"image/png")
         rule.onNodeWithText("Done").performClick()
         main{a->val moving=Location("moving-test").apply{latitude=shared.point.lat;longitude=shared.point.lon;accuracy=3f;speed=8f;speedAccuracyMetersPerSecond=.2f;elapsedRealtimeNanos=SystemClock.elapsedRealtimeNanos()};a.erpState.observe(moving)}
         tapNativeMap(shared.point)
         rule.onNodeWithText("ERP GANTRY").assertDoesNotExist()
         val order=main{a->val layers=a.nativeMap!!.style!!.layers.map{it.id};layers.indexOf(ErpMapLayer876.LAYER)<layers.indexOf("mapbox-location-foreground-layer")}
         assertTrue("Vehicle arrow must render above ERP",order)
-        File(folder(),"B876-native-map-results.json").writeText(JSONObject().put("records",106).put("locations",101)
+        val nativeResult=JSONObject().put("records",106).put("locations",101)
             .put("all_101_rendered_offline",true).put("modes",observations).put("repeat_sync_calls",100)
             .put("repeat_source_writes",stats.first).put("repeat_layer_installs",stats.second)
             .put("visibility_toggle",true).put("camera_route_retained",true).put("shared_record_selection",true)
             .put("moving_selection_blocked",true).put("vehicle_arrow_above_erp",order)
-            .put("map_style","local source-free renderer, not a physical road-driving session").toString(2))
+            .put("map_style","local source-free renderer, not a physical road-driving session").toString(2)
+        saveEvidence("B876-native-map-results.json",nativeResult.toByteArray(Charsets.UTF_8),"application/json")
     }
 }
