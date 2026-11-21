@@ -9,6 +9,8 @@ CHANGED={
  'app/build.gradle.kts','app/src/debug/res/values/strings.xml',
  'app/src/main/java/com/izzyan/sgdeliveryplanner/NavigationBottomSpeed881.kt',
  'app/src/test/java/com/izzyan/sgdeliveryplanner/DualCircleSpeed883Test.kt',
+ 'app/src/test/java/com/izzyan/sgdeliveryplanner/NavigationBottomSpeed881Test.kt',
+ 'app/src/test/java/com/izzyan/sgdeliveryplanner/SpeedLimitSign882Test.kt',
  'scripts/verify_b883_testing.py','.github/workflows/build-b883-testing.yml'
 }
 def sha(data):return hashlib.sha256(data).hexdigest()
