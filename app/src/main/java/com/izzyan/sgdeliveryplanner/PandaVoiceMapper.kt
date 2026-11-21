@@ -175,10 +175,3 @@ internal class PandaVoiceGate {
         stages+=stage(phrase,distance)
     }
 }
-internal fun deliveryVoiceEvent(before:Plan,after:Plan,action:String):String? {
-    if(action!="DELIVERED" || before.current !in before.stops.indices ||
-        normalizedStatus(before.stops[before.current].status)=="DELIVERED") return null
-    if(activeDeliveryPlan(after)==null && isRouteCompleted(after)) return "delivery_complete"
-    if(activeDeliveryPlan(after)!=null && after.current!=before.current && after.current in after.stops.indices) return "next_delivery"
-    return null
-}

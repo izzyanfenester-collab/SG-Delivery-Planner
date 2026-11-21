@@ -283,23 +283,3 @@ internal class NavigationVoiceAudio(context:Context):AutoCloseable {
     }
     override fun close(){stop("session-closed");closed=true;executor.shutdownNow()}
 }
-/** Delivery events use the same controller, scoped to MainActivity's foreground
- * lifetime. The navigation activity has its own controller and MainActivity
- * stops playback before launching it. */
-internal object DeliveryVoiceAnnouncements {
-    private var audio:NavigationVoiceAudio?=null
-    private var foreground=false
-    fun resume(){foreground=true}
-    fun pause(){foreground=false;stop()}
-    fun play(context:Context,id:String) {
-        if(!foreground)return
-        val prefs=GpsNavigationModePreferences(context)
-        if(!prefs.isSoundEnabled())return
-        val fallback=when(id){"next_delivery"->"On to the next delivery.";"delivery_complete"->"All deliveries completed.";else->return}
-        val controller=audio?:NavigationVoiceAudio(context).also{audio=it}
-        controller.setVolume(prefs.voiceVolume())
-        controller.play(VoicePhrase(id,VoicePriority.CHARACTER,listOf(VoicePart(id,fallback))))
-    }
-    fun stop(){audio?.stop()}
-    fun close(){foreground=false;audio?.close();audio=null}
-}

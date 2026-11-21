@@ -1,0 +1,105 @@
+name: B877 Silent Delivery Completion TESTING
+on:
+  push:
+    branches: [feature/build-877-silent-delivery-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b877-silent-delivery-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-877-silent-delivery-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact Official baseline and silent-delivery-only source changes
+        run: |
+          python3 -m py_compile scripts/verify_b877_testing.py
+          python3 scripts/verify_b877_testing.py source
+      - name: Restore all exact B876 Official assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.64-b876/SG-Delivery-B876-Official.apk -o "$RUNNER_TEMP/B876-Official.apk"
+          python3 scripts/verify_b877_testing.py restore "$RUNNER_TEMP/B876-Official.apk"
+      - name: All original regression tests, lint and isolated APK compilation
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM for Android acceptance tests
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Production delivery/report silence and preserved offline navigation/camera playback
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-save -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/run_silent_delivery877.sh
+      - name: Verify APK, unchanged assets, persisted delivery and playback-start evidence
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b877test' versionCode='85' versionName='1.4.65-b877-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #877 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signing-verification.txt
+          cp "$apk" dist/SG-Delivery-B877-Silent-Delivery-TESTING.apk
+          python3 scripts/verify_b877_testing.py verify "$RUNNER_TEMP/B876-Official.apk" "$apk"
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp -r app/build/outputs/androidTest-results/connected dist/native-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cd dist
+          zip -q -r B877-Verification-Evidence.zip *.json *.txt *.html *.md unit-test-results native-test-results native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B877-TESTING-APK-and-verification
+          path: |
+            dist/SG-Delivery-B877-Silent-Delivery-TESTING.apk
+            dist/SG-Delivery-B877-Testing-Report.md
+            dist/B877-Verification-Evidence.zip
+          if-no-files-found: error
+      - name: Publish TESTING prerelease; retain Official unchanged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.64-b876
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/git/ref/heads/main --jq .object.sha)" = 2c2f0cd84b7d950965794ceb4c4738774a3257a9
+          tag=v1.4.65-b877-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::B877 TESTING already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B877-Silent-Delivery-TESTING.apk dist/SG-Delivery-B877-Testing-Report.md dist/B877-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery Build #877 TESTING – Silent Delivery Completion' \
+            --notes-file dist/SG-Delivery-B877-Testing-Report.md
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.64-b876
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B877-diagnostic-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/
+            dist/
+          if-no-files-found: warn
