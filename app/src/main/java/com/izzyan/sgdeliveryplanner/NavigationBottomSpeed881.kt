@@ -3,7 +3,6 @@ package com.izzyan.sgdeliveryplanner
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,9 +26,10 @@ internal object SpeedLimitSign882 {
 }
 
 internal object NavigationBottomSpeedLayout881 {
-    const val SPEED_WIDTH_DP=70
+    const val SPEED_WIDTH_DP=64
     const val SPEED_LIMIT_WIDTH_DP=64
     const val SPEED_LIMIT_SIGN_DP=52
+    const val CURRENT_SPEED_SIGN_DP=SPEED_LIMIT_SIGN_DP
     const val GAUGE_SPACING_DP=8
     const val MIN_REMAINING_DP=105
     const val MIN_DELIVERY_DP=103
@@ -66,20 +66,34 @@ internal fun NavigationBottomSpeedMeters881(
         verticalAlignment=Alignment.CenterVertically,
         horizontalArrangement=Arrangement.spacedBy(NavigationBottomSpeedLayout881.GAUGE_SPACING_DP.dp)
     ) {
-        Surface(
-            color=SGColors.Card,
-            shape=RoundedCornerShape(SGDimensions.RadiusSmall),
-            modifier=Modifier.width(NavigationBottomSpeedLayout881.SPEED_WIDTH_DP.dp)
-                .testTag("gps-bottom-current-speed")
+        // B883: CURRENT SPEED is a circle too. Both circles share the exact
+        // same 52dp diameter, vertical centreline and baseline inside one Row.
+        // Do not introduce a km/h caption or any other secondary label.
+        Box(
+            Modifier.width(NavigationBottomSpeedLayout881.SPEED_WIDTH_DP.dp)
+                .testTag("gps-bottom-current-speed"),
+            contentAlignment=Alignment.Center
         ) {
-            Column(Modifier.padding(horizontal=3.dp,vertical=6.dp),
-                horizontalAlignment=Alignment.CenterHorizontally) {
-                val foreground=if(redOverspeed)Color(0xFFFF3030) else Color.White
-                Text(currentSpeedKmh?.toString()?:"--",color=foreground,
-                    fontSize=25.sp,fontWeight=FontWeight.Bold,
-                    maxLines=1,softWrap=false)
-                Text("km/h",color=if(redOverspeed)Color(0xFFFF3030) else SGColors.Silver,
-                    fontSize=11.sp,fontWeight=FontWeight.Bold,maxLines=1)
+            Surface(
+                color=SGColors.Card,
+                shape=CircleShape,
+                border=BorderStroke(3.dp,SGColors.Gold),
+                modifier=Modifier.size(NavigationBottomSpeedLayout881.CURRENT_SPEED_SIGN_DP.dp)
+                    .testTag("gps-bottom-current-speed-circle")
+            ) {
+                Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+                    val speedText=currentSpeedKmh?.coerceAtLeast(0)?.toString()?:"–"
+                    Text(
+                        speedText,
+                        color=if(redOverspeed)Color(0xFFFF3030) else Color.White,
+                        fontSize=if(currentSpeedKmh==null)25.sp else
+                            SpeedLimitSign882.fontSizeSp(currentSpeedKmh.coerceAtLeast(0)).sp,
+                        fontWeight=FontWeight.Black,
+                        maxLines=1,
+                        softWrap=false,
+                        modifier=Modifier.testTag("gps-bottom-current-speed-number")
+                    )
+                }
             }
         }
         // Only a genuine numeric limit may appear in the speed-limit sign.
