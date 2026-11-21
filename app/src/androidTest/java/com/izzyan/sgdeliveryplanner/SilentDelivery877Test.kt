@@ -2,6 +2,9 @@ package com.izzyan.sgdeliveryplanner
 
 import android.app.Application
 import android.content.Context
+import android.content.ContentValues
+import android.os.Environment
+import android.provider.MediaStore
 import android.media.AudioManager
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.*
@@ -31,11 +34,30 @@ class SilentDelivery877Test {
     private val app get() = instrumentation.targetContext.applicationContext as Application
     private val results get() = File(app.filesDir, "b877-evidence").apply { mkdirs() }
 
+    /** Scoped Downloads evidence survives Gradle uninstalling the test application. */
+    private fun saveEvidence(name: String, text: String) {
+        File(results, name).writeText(text)
+        val resolver = app.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, if (name.endsWith(".json")) "application/json" else "text/plain")
+            put(MediaStore.MediaColumns.RELATIVE_PATH,
+                Environment.DIRECTORY_DOWNLOADS + "/SGDeliveryB877Native")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = requireNotNull(resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values))
+        requireNotNull(resolver.openOutputStream(uri)).use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        resolver.update(uri, ContentValues().apply {
+            put(MediaStore.MediaColumns.IS_PENDING, 0)
+        }, null, null)
+    }
+
     private fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
             .bufferedReader().use { it.readText() }
 
     private fun configureAudio() = ui.runOnIdle {
+        assertFalse("Offline acceptance must have no validated network", hasValidatedNetwork(app))
         GpsNavigationModePreferences(app).apply { setSoundEnabled(true); setVoiceVolume(1f) }
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audio.setStreamVolume(AudioManager.STREAM_MUSIC,
@@ -82,7 +104,7 @@ class SilentDelivery877Test {
             val log = shell("logcat -d -v brief -s SGPanda866:V TextToSpeech:V")
             assertFalse("$name requested Panda playback:\n$log",
                 log.contains("key=") || log.contains("speak("))
-            File(results, "$name.log").writeText(log)
+            saveEvidence("$name.log", log)
             phases.put(JSONObject().put("flow", name).put("result", "PASS")
                 .put("pandaPlaybackRequested", false))
         }
@@ -162,7 +184,7 @@ class SilentDelivery877Test {
         }
         assertTrue(GpsNavigationModePreferences(app).isSoundEnabled())
         assertEquals(1f, GpsNavigationModePreferences(app).voiceVolume(), 0f)
-        File(results, "delivery-flows.json").writeText(JSONObject()
+        saveEvidence("delivery-flows.json", JSONObject()
             .put("result", "PASS").put("environment", "Android API 35 emulator; offline")
             .put("flows", phases).put("persistedDelivered", 3)
             .put("gpsVoiceEnabled", true).put("voiceVolume", 1).toString(2))
@@ -191,7 +213,7 @@ class SilentDelivery877Test {
             assertTrue("No real MediaPlayer STARTED for $id: $states", started.await(15, TimeUnit.SECONDS))
             assertTrue("No real MediaPlayer COMPLETED for $id: $states", completed.await(20, TimeUnit.SECONDS))
             assertFalse(states.any { it.state == PandaPlaybackState866.FAILED })
-            File(results, "audio-$id.json").writeText(JSONObject()
+            saveEvidence("audio-$id.json", JSONObject()
                 .put("result", "PASS").put("clip", id).put("offline", true)
                 .put("started", true).put("completed", true)
                 .put("events", JSONArray(states.map { JSONObject()
