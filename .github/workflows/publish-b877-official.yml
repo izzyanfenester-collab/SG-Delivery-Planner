@@ -28,7 +28,7 @@ jobs:
         run: |
           python3 -m py_compile scripts/verify_b877_official.py
           python3 scripts/verify_b877_official.py source
-      - name: Download and verify B876 Official and approved B877 TESTING
+      - name: Restore verified B876 app assets and regenerate Android optimization profiles
         run: |
           set -euo pipefail
           curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.64-b876/SG-Delivery-B876-Official.apk -o "$RUNNER_TEMP/B876-Official.apk"

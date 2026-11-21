@@ -18,6 +18,7 @@ TEST_SHA = "120dd97ea5b1f23187258b6bba5dac0cc01ffd2f7bdb509ea977a88e1b0ffd9e"
 EVIDENCE_SHA = "ca629ac389eb59342e8ba71a494c34223d744eefc3decc04a4bd900b13aafd34"
 CERT = "b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99"
 ROOT = Path(__file__).resolve().parents[1]
+PROFILES = {"assets/dexopt/baseline.prof", "assets/dexopt/baseline.profm"}
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
@@ -71,11 +72,15 @@ def restore(base, tested, evidence):
     inputs(base, tested, evidence)
     with zipfile.ZipFile(base) as archive:
         for name in assets(archive):
+            # ART profiles are generated for the newly compiled DEX by AGP.
+            # Copying old APK profiles into source assets collides with packageRelease.
+            if name in PROFILES:
+                continue
             assert ".." not in Path(name).parts
             target = ROOT / "app/src/main" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read(name))
-    print("Restored all 438 exact B876 Official / approved B877 TESTING assets")
+    print("Restored all 436 application assets; AGP regenerates the two Android optimization profiles")
 
 def verify(base, tested, evidence, official, output):
     audit = source()
@@ -86,7 +91,12 @@ def verify(base, tested, evidence, official, output):
     with zipfile.ZipFile(base) as first, zipfile.ZipFile(tested) as second, zipfile.ZipFile(official) as built:
         assert built.testzip() is None
         original = assets(first)
-        assert assets(built) == original == assets(second)
+        current = assets(built)
+        assert original == assets(second)
+        assert set(current) == set(original) and len(current) == 438
+        assert {n: h for n, h in current.items() if n not in PROFILES} == {n: h for n, h in original.items() if n not in PROFILES}
+        assert all(built.getinfo(name).file_size > 0 for name in PROFILES)
+        profiles = {name: {"baselineSha256": original[name], "officialSha256": current[name]} for name in sorted(PROFILES)}
         assert sum(name.endswith(".mp3") for name in original) == 209
         assert sum(name.endswith(".pcm") for name in original) == 209
         assert len(json.loads(built.read("assets/sg_enforcement_cameras.json"))["cameras"]) == 341
@@ -114,7 +124,8 @@ def verify(base, tested, evidence, official, output):
     report = {"officialMerge": True, "build": "877 Official", "sourceCommit": os.getenv("GITHUB_SHA"),
               "applicationId": "com.izzyan.sgdeliveryplanner", "versionCode": 85,
               "versionName": "1.4.65-b877", "officialSigningCertificateSha256": CERT,
-              "officialApkSha256": sha(Path(official).read_bytes()), "assetsByteIdentical": 438,
+              "officialApkSha256": sha(Path(official).read_bytes()), "applicationAssetsByteIdentical": 436,
+              "totalAssets": 438, "androidOptimizationProfilesRegenerated": profiles,
               "originalMp3Unchanged": 209, "originalPcmUnchanged": 209,
               "cameraRecordsUnchanged": 341, "erpRecords": 106, "erpLocations": 101,
               "unitTests": unit, "approvedTestingEvidenceSha256": EVIDENCE_SHA,
@@ -144,8 +155,10 @@ Validation:
   from 84 to 85. Data schema and persistence code are unchanged. Android can install
   this as an update over #876 without uninstalling or replacing its data directory.
   No physical device upgrade session was performed.
-- All 438 app assets match #876 Official and approved #877 TESTING byte for byte,
+- All 436 application assets match #876 Official and approved #877 TESTING byte for byte,
   including 209 MP3, 209 PCM, 341 cameras and the speed-limit data.
+  The other two assets are Android optimization profiles regenerated for the new
+  DEX by the release compiler; they contain no user data or voice recordings.
 - ERP database retained: 106 records at 101 locations.
 - Approved TESTING evidence carried forward: four Android emulator tests, nine
   silent delivery/report phases, three persisted delivered orders, and actual
