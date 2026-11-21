@@ -34,14 +34,15 @@ internal class OverspeedSafetyMonitor878 {
     }
 
     fun observe(road:RoadSpeedState875,fix:RoadSpeedFix875,enabled:Boolean,
-                nowMs:Long=fix.timeMs,cooldownMs:Long=90_000L):OverspeedState878 {
+                nowMs:Long=fix.timeMs,cooldownMs:Long=90_000L,
+                validatedFallbackSpeed:Boolean=false):OverspeedState878 {
         val limit=road.limit
         val reliable=enabled && limit?.kind==RoadLimitSource875.OFFICIAL &&
             road.segmentId!=null && road.observedAtMs==fix.timeMs &&
             fix.accuracy.isFinite() && fix.accuracy in 0.1f..25f &&
             fix.speed!=null && fix.speed.isFinite() && fix.speed>=0f &&
-            fix.speedAccuracy!=null && fix.speedAccuracy.isFinite() &&
-            fix.speedAccuracy in 0f..1.5f && nowMs>0 &&
+            (fix.speedAccuracy?.let{it.isFinite() && it in 0f..1.5f}
+                ?: validatedFallbackSpeed) && nowMs>0 &&
             (lastFixMs==0L || nowMs>lastFixMs)
         if(!reliable || (lastFixMs>0 && nowMs-lastFixMs>6000L)) {
             reset()
