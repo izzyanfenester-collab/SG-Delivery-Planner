@@ -18,6 +18,14 @@ import androidx.compose.ui.unit.sp
 /** B881: both gauges are siblings in one HORIZONTAL row, exclusively in the
  * opaque bottom arrival panel. Never install them as a floating map overlay.
  */
+internal object SpeedLimitSign882 {
+    /** The numeric speed limit is the sole visible content of the road sign.
+     * A missing or unverified number must NEVER be replaced by a guessed limit.
+     */
+    fun visibleNumber(number:Int?):String?=number?.takeIf { it>0 }?.toString()
+    fun fontSizeSp(number:Int):Int=if(number>=100)25 else 32
+}
+
 internal object NavigationBottomSpeedLayout881 {
     const val SPEED_WIDTH_DP=70
     const val SPEED_LIMIT_WIDTH_DP=64
@@ -77,8 +85,9 @@ internal fun NavigationBottomSpeedMeters881(
         // Only a genuine numeric limit may appear in the speed-limit sign.
         // Source labels, evidence dates and diagnostic notes remain in the
         // RoadSpeedState875 model for safety but must not be rendered.
-        if(showSpeedLimit && speedLimit.hasNumericLimit && speedLimit.numberKmh!=null) {
-            val limitKmh=checkNotNull(speedLimit.numberKmh)
+        val limitText=if(showSpeedLimit && speedLimit.hasNumericLimit)
+            SpeedLimitSign882.visibleNumber(speedLimit.numberKmh) else null
+        if(limitText!=null) {
             Column(
                 Modifier.width(NavigationBottomSpeedLayout881.SPEED_LIMIT_WIDTH_DP.dp)
                     .testTag("gps-bottom-speed-limit"),
@@ -96,9 +105,9 @@ internal fun NavigationBottomSpeedMeters881(
                 ) {
                     Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
                         Text(
-                            limitKmh.toString(),
+                            limitText,
                             color=Color.Black,
-                            fontSize=if(limitKmh>=100)25.sp else 32.sp,
+                            fontSize=SpeedLimitSign882.fontSizeSp(limitText.toInt()).sp,
                             fontWeight=FontWeight.Black,
                             maxLines=1,
                             softWrap=false,
