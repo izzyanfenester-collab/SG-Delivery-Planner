@@ -1,0 +1,86 @@
+name: SG Delivery B882 Number-Only Speed Limit Circle TESTING
+on:
+  push:
+    branches: [feature/build-882-speed-limit-number-only-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b882-number-only-speed-limit-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-882-speed-limit-number-only-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Audit exact B881 source baseline and number-only speed-limit sign
+        run: |
+          python3 -m py_compile scripts/verify_b882_testing.py
+          python3 scripts/verify_b882_testing.py source
+      - name: Restore verified 436 original B881 TESTING APK assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.69-b881-testing/SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk -o "$RUNNER_TEMP/B881-Testing.apk"
+          python3 scripts/verify_b882_testing.py restore "$RUNNER_TEMP/B881-Testing.apk"
+      - name: Run all JVM unit regression tests, lint and build isolated B882 APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Verify B882 package label, signed APK and unchanged original data
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b882test' versionCode='90' versionName='1.4.70-b882-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #882 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          cp "$apk" dist/SG-Delivery-B882-Number-Only-Speed-Limit-TESTING.apk
+          python3 scripts/verify_b882_testing.py verify "$RUNNER_TEMP/B881-Testing.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          (cd dist && zip -q -r B882-Verification-Evidence.zip B882-Verification.json zipalign.txt signature.txt unit-test-results lint-results-debug.html)
+          sha256sum dist/SG-Delivery-B882-Number-Only-Speed-Limit-TESTING.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B882-Number-Only-Speed-Limit-TESTING-APK-and-evidence
+          path: |
+            dist/SG-Delivery-B882-Number-Only-Speed-Limit-TESTING.apk
+            dist/B882-Verification-Evidence.zip
+          if-no-files-found: error
+      - name: Publish distinct TESTING prerelease without touching Official
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.70-b882-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::B882 Testing release already exists; refusing overwrite'
+            exit 1
+          fi
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.67-b879
+          gh release create "$tag" dist/SG-Delivery-B882-Number-Only-Speed-Limit-TESTING.apk dist/B882-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery Build #882 TESTING – Number-Only Speed Limit Circle' \
+            --notes 'B882 isolated TESTING, based on verified B881 horizontal bottom-panel meters. The existing 52dp red-bordered white Speed Limit circle displays ONLY an enlarged bold centered black speed number, e.g. 90; remove inner km/h, MAP DATA/source badge, evidence date/source note from visible speed-limit area. Never invent a speed limit if unavailable. Current vehicle Speed Meter still includes km/h and B879 red overspeed state. 6 compact B880 GPS controls, horizontal bottom layout, 106 ERP records at 101 sites, Panda Warrior, all camera alerts, route logic, reports, payment and all 436 app assets preserved byte-identical. Regression tests, lint, debug signing and zipalign verified. Physical-phone visual confirmation still needed. DO NOT MERGE INTO OFFICIAL without explicit approval.'
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.67-b879
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B882-Unit-Test-and-Build-Diagnostics
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/B882-Verification.json

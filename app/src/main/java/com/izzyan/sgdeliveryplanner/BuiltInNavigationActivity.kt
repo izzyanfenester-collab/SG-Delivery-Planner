@@ -263,95 +263,35 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
 
-                // Controls occupy the middle map area and scroll on shorter phones.
+                // B881: controls only on the map. Both speed meters have been
+                // relocated INSIDE NavigationDestinationPanel873 at the bottom.
+                // Preserve every compact B880 control and its action.
                 Column(
                     Modifier.align(Alignment.TopEnd).fillMaxHeight()
-                        .padding(top = topInset, bottom = bottomInset, end = 10.dp)
+                        .padding(top=topInset,bottom=bottomInset)
+                        .padding(end=GpsCompactLayout880.RAIL_END_PADDING_DP.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                    horizontalAlignment=Alignment.End,
+                    verticalArrangement=Arrangement.spacedBy(GpsCompactLayout880.CONTROL_GAP_DP.dp)
                 ) {
-                    GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode == "follow") {
+                    GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode=="follow") {
                         session.recenter()
                     }
-                    GpsControl(Icons.Filled.Map, "Route", session.cameraMode == "overview") {
-                        session.cameraMode = "overview"; session.cameraRequest++
+                    GpsControl(Icons.Filled.Map, "Route", session.cameraMode=="overview") {
+                        session.cameraMode="overview";session.cameraRequest++
                     }
                     GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
                     GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
                     GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
-                        if (session.localTrafficVisible) session.toggleLocalTraffic()
-                        else showLocalTrafficConsent = true
+                        if(session.localTrafficVisible)session.toggleLocalTraffic()
+                        else showLocalTrafficConsent=true
                     }
-                    GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings = true }
+                    GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings=true }
                 }
 
-                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    session.location?.takeIf { it.hasSpeed() }?.let { fix ->
-                        Surface(color = SGColors.Card,
-                            shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
-                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally) {
-                                // The number and unit share ONE live independent visual state.
-                                // No MP3/voice-cooldown callback is needed to turn either red.
-                                val red879=session.cameraPreferences.overspeed &&
-                                    session.redSpeedFontEnabled878 && session.overspeedVisualState879.red
-                                Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color=if(red879)Color(0xFFFF3030) else Color.White,
-                                    fontSize=27.sp,fontWeight=FontWeight.Bold)
-                                Text("km/h",color=if(red879)Color(0xFFFF3030) else SGColors.Silver,
-                                    fontSize=11.sp)
-                                if(session.cameraPreferences.speedLimitDisplay){
-                                    // A red circle does not imply verification: the distinct
-                                    // classification is always immediately beneath the sign.
-                                    val limit=session.roadSpeedLimitState875
-                                    Spacer(Modifier.height(3.dp))
-                                    Text("SPEED LIMIT",color=SGColors.Gold,
-                                        fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
-                                    Surface(
-                                        color=Color.White,
-                                        shape=CircleShape,
-                                        border=BorderStroke(
-                                            if(limit.highlightOverspeed)4.dp else
-                                                if(limit.hasNumericLimit)3.dp else 1.5.dp,
-                                            if(limit.highlightOverspeed)Color(0xFFFF3B30) else
-                                                if(limit.hasNumericLimit)Color(0xFFD52C2C) else Color.Gray
-                                        ),
-                                        modifier=Modifier.size(60.dp)
-                                    ){
-                                        Column(
-                                            horizontalAlignment=Alignment.CenterHorizontally,
-                                            verticalArrangement=Arrangement.Center,
-                                            modifier=Modifier.fillMaxSize()
-                                        ){
-                                            Text(limit.numberKmh?.toString() ?: "CHECK\nSIGNS",
-                                                color=if(limit.hasNumericLimit)Color.Black else Color.Gray,
-                                                fontSize=if(limit.hasNumericLimit)24.sp else 10.sp,
-                                                fontWeight=FontWeight.Black,
-                                                lineHeight=if(limit.hasNumericLimit)25.sp else 12.sp,
-                                                maxLines=if(limit.hasNumericLimit)1 else 2)
-                                            if(limit.hasNumericLimit){
-                                                Text("km/h",color=Color.Black,
-                                                    fontSize=8.sp,lineHeight=10.sp,maxLines=1)
-                                            }
-                                        }
-                                    }
-                                    Text(limit.badgeLabel,
-                                        color=when(limit.limit?.kind){
-                                            RoadLimitSource875.OFFICIAL -> Color(0xFF82C89A)
-                                            RoadLimitSource875.MAP_DATA -> SGColors.Gold
-                                            RoadLimitSource875.GENERAL_RULE -> Color(0xFFFFAF72)
-                                            null -> SGColors.Silver
-                                        },
-                                        fontSize=9.sp,fontWeight=FontWeight.Bold,maxLines=1)
-                                    limit.note?.let{
-                                        Text(it,color=SGColors.Silver,fontSize=8.sp,
-                                            fontWeight=FontWeight.Medium,maxLines=1)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                // Camera advisory card remains in its original bottom-left area.
+                Column(Modifier.align(Alignment.BottomStart).padding(start=12.dp,bottom=bottomInset),
+                    verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     session.upcomingEnforcementCamera?.let { camera ->
                         if(session.cameraPreferences.master) {
                             Surface(color=PremiumNavy.copy(alpha=0.90f),
@@ -402,7 +342,19 @@ class BuiltInNavigationActivity : ComponentActivity() {
                         NavigationDestinationPanel873(
                             heading=snapshot.heading,eta=eta,
                             remainingSummary="${session.remainingMeters?.let { metricDistance(it) } ?: "-- km"}  ·  ${remaining?.let { duration(it) } ?: "-- min"}",
-                            trafficLabel=trafficLabel,onDelivery={finish()})
+                            trafficLabel=trafficLabel,onDelivery={finish()},
+                            speedMeters={
+                                val liveKmh=session.location?.takeIf { it.hasSpeed() }
+                                    ?.speed?.coerceAtLeast(0f)?.times(3.6f)?.roundToInt()
+                                val red879=session.cameraPreferences.overspeed &&
+                                    session.redSpeedFontEnabled878 && session.overspeedVisualState879.red
+                                NavigationBottomSpeedMeters881(
+                                    currentSpeedKmh=liveKmh,
+                                    speedLimit=session.roadSpeedLimitState875,
+                                    redOverspeed=red879,
+                                    showSpeedLimit=session.cameraPreferences.speedLimitDisplay
+                                )
+                            })
 
                     }
                 }
@@ -518,7 +470,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
     @Composable
     private fun GpsControl(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
-        FilledTonalButton(onClick = onClick, modifier = Modifier.width(65.dp).height(61.dp),
+        FilledTonalButton(onClick = onClick, modifier = Modifier
+                .width(GpsCompactLayout880.CONTROL_WIDTH_DP.dp)
+                .height(GpsCompactLayout880.CONTROL_HEIGHT_DP.dp),
             contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
             colors = ButtonDefaults.filledTonalButtonColors(
                 // Reuse the speedometer/speed-limit host alpha on the surface only.
@@ -526,8 +480,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 contentColor = if (active) PremiumNavy else Color.White)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp))
-                Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Icon(icon, contentDescription = label,
+                    modifier = Modifier.size(GpsCompactLayout880.CONTROL_ICON_DP.dp))
+                Text(label, fontSize = GpsCompactLayout880.CONTROL_LABEL_SP.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines=1, softWrap=false)
             }
         }
     }
