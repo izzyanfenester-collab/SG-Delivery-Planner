@@ -48,9 +48,6 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Average Speed Zone Voice",p.averageVoice) {
             session.updateCameraPreferences(p.copy(averageVoice=it))
         }
-        CameraSafetyToggle("Verified Overspeed Voice",p.verifiedOverspeedVoice) {
-            session.updateCameraPreferences(p.copy(verifiedOverspeedVoice=it))
-        }
         CameraSafetyToggle("Show Camera Icons",p.icons) {
             session.updateCameraPreferences(p.copy(icons=it))
         }
@@ -63,9 +60,7 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
             color=SGColors.Silver,fontSize=10.sp)
         Text("Live Speed Limit: ${session.roadSpeedLimitState875.diagnostics}",
             color=SGColors.Gold,fontSize=10.sp)
-        CameraSafetyToggle("Verified Overspeed Warning",p.overspeed) {
-            session.updateCameraPreferences(p.copy(overspeed=it))
-        }
+        OverspeedSettings877(session.overspeed877,session.muted,session::updateOverspeedOptions877)
         Text("Speed & red-light sources: Singapore Police Force",
             color=SGColors.Silver,fontSize=11.sp)
         Text("Road limits: LTA/statute, validated OSM (ODbL), or applicable SG general rule. Unknown: CHECK SIGNS.",

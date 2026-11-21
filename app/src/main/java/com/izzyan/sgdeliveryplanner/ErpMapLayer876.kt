@@ -68,12 +68,12 @@ internal class ErpMapLayer876(private val context:Context,private val map:MapLib
                 iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
                 iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
                 iconAllowOverlap(true),iconIgnorePlacement(true),iconPadding(0f),iconOpacity(1f))
-            // Keep the native arrow, existing route annotations and cameras above ERP.
-            val foreground=style.layers.firstOrNull{
-                it.id.startsWith("mapbox-location-") || it.id.startsWith("maplibre-location-") ||
-                    it.id.startsWith("mapbox-android-") || it.id.contains("annotation",ignoreCase=true)
+            // Native line/casing annotations are inserted BEFORE this points layer,
+            // including lines created later by reroutes. ERP must be ABOVE it.
+            val annotations=style.layers.firstOrNull{
+                it.id.endsWith(".annotations.points")
             }
-            if(foreground==null)style.addLayer(layer) else style.addLayerBelow(layer,foreground.id)
+            if(annotations==null)style.addLayer(layer) else style.addLayerAbove(layer,annotations.id)
             layerInstalls++;previousVisibility=null
         }
         if(previousVisibility!=visible){
@@ -104,10 +104,10 @@ internal class ErpMapLayer876(private val context:Context,private val map:MapLib
 }
 
 @Composable
-internal fun ErpMapIntegration876(map:MapLibreMap?,styleReady:Boolean,state:ErpNavigationState876?) {
+internal fun ErpMapIntegration876(map:MapLibreMap?,styleReady:Boolean,state:ErpNavigationState876?,styleVersion:Int=0) {
     val context=LocalContext.current
     val overlay=remember(map,context){map?.let{ErpMapLayer876(context,it)}}
-    val style=if(styleReady)map?.style else null
+    val style=remember(map,styleReady,styleVersion){if(styleReady)map?.style else null}
     LaunchedEffect(overlay,style,state?.catalog,state?.visible) {
         val owner=state?:return@LaunchedEffect
         val catalog=owner.catalog?:return@LaunchedEffect

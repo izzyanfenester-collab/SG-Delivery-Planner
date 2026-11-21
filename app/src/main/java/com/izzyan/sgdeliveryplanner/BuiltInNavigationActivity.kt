@@ -292,11 +292,7 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color=if(session.roadSpeedLimitState875.overspeedVisual)
-                                        Color(0xFFE53935) else Color.White,
-                                    fontSize=27.sp,fontWeight=FontWeight.Bold)
-                                Text("km/h",color=SGColors.Silver,fontSize=11.sp)
+                                CurrentSpeedText877(fix.speed,session.overspeed877.red)
                                 if(session.cameraPreferences.speedLimitDisplay){
                                     // A red circle does not imply verification: the distinct
                                     // classification is always immediately beneath the sign.
@@ -720,6 +716,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun clearRoadSpeed875(reason:String) {
         roadSpeedGeneration875++;roadSpeedLookup875?.cancel()
         roadSpeedLimitState875=roadSpeedTracker875.invalidate(reason)
+        overspeed877.clear(reason)
     }
 
     /** Read-only lookup runs off the GPS/rerouting path; no camera setting gates it. */
@@ -744,11 +741,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if(SystemClock.elapsedRealtime()-sample.timeMs>6000){clearRoadSpeed875("GPS sample stale; check signs");return@launch}
                 roadSpeedCatalogInfo875="${loaded.first.ways} road ways · ${loaded.first.knownDirections} mapped directional limits · ${loaded.first.checkedDate}"
                 roadSpeedLimitState875=roadSpeedTracker875.observe(sample.copy(routeBearing=loaded.third),loaded.second,cameraPreferences.overspeed)
+                overspeed877.observe(sample,roadSpeedLimitState875,overspeedContext877())
                 android.util.Log.d("SGRoadSpeed875","gps=${sample.point.lat},${sample.point.lon} accuracy=${sample.accuracy} heading=${sample.heading} ${roadSpeedLimitState875.diagnostics}")
             }catch(e:CancellationException){throw e}
             catch(e:Exception){
                 if(generation==roadSpeedGeneration875){
                     roadSpeedLimitState875=roadSpeedTracker875.invalidate("Offline road catalog unavailable; check signs")
+                    overspeed877.clear("Offline road catalog unavailable; check signs")
                     roadSpeedCatalogInfo875="Catalog unavailable; previous data retained"
                 }
                 android.util.Log.e("SGRoadSpeed875","Road-speed lookup failed",e)
@@ -843,6 +842,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 continue
             }
             logCameraApproach872(approach,fix,planned,"GENERATED","threshold-or-first-observation")
+            if(voiceAudio.activePhraseKey?.startsWith(OverspeedNavigation877.PREFIX)==true)
+                voiceAudio.stop("camera-warning-priority")
             val deferred=CameraVoicePriority872.deferredReason(turnMeters,voiceAudio.activePriority,cameraManeuverType)
             if(deferred!=null) {
                 reason="DEFERRED: $deferred; retry next GPS fix while still ahead"
@@ -857,6 +858,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
             val candidateId=planned.cameraId
             val accepted=voiceAudio.play(planned.phrase,stillRelevant={cameraCueRelevant872(planned)}) { playback ->
+                if(playback.state==PandaPlaybackState866.STARTED)lastCameraVoiceStarted877=playback.elapsedMs
                 cameraVoicePlanner.playbackEvent(planned,playback)
                 if(playback.state!=PandaPlaybackState866.STARTED)activeCameraCue872=null
                 val status=playback.state.name
@@ -994,6 +996,14 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val main = android.os.Handler(Looper.getMainLooper())
     private var active = false
     private val voiceAudio = NavigationVoiceAudio(context)
+    internal val overspeed877=OverspeedNavigation877(context,voiceAudio)
+    private var lastCameraVoiceStarted877:Long?=null
+    private fun overspeedContext877()=OverspeedContext877(
+        active && !arrived && !loading && !offRoute && route!=null,muted,turnMeters,cameraManeuverType,lastCameraVoiceStarted877)
+    fun updateOverspeedOptions877(value:OverspeedOptions877) {
+        overspeed877.update(value)
+        updateCameraPreferences(cameraPreferences.copy(overspeed=value.enabled,verifiedOverspeedVoice=value.voice))
+    }
     private val pandaGate = PandaVoiceGate()
     var voiceVolume by mutableStateOf(gpsModePreferences.voiceVolume()); private set
     val pandaAvailable get() = voiceAudio.pack.available
@@ -1036,6 +1046,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         }
         loadSpeedReference868()
         roadSpeedTracker875.reset();roadSpeedLimitState875=RoadSpeedState875()
+        overspeed877.clear("Starting current road verification")
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             launch {
@@ -1043,6 +1054,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     delay(1000)
                     val expired=roadSpeedTracker875.expire(SystemClock.elapsedRealtime())
                     if(expired!=roadSpeedLimitState875)roadSpeedLimitState875=expired
+                    overspeed877.tick(overspeedContext877())
                 }
             }
             if (!GpsPoint(destination.lat, destination.lon).valid()) {

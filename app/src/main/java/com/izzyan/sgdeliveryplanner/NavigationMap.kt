@@ -81,7 +81,7 @@ internal fun NavigationMap(
     var mapHeightPixels by remember { mutableIntStateOf(0) }
     var mapWidthPixels by remember { mutableIntStateOf(0) }
 
-    ErpMapIntegration876(map,styleReady,erp)
+    ErpMapIntegration876(map,styleReady,erp,enforcementStyleVersion)
 
     LaunchedEffect(session.route) {
         // Rerouting starts a fresh travelled/remaining division; map style changes do not.
