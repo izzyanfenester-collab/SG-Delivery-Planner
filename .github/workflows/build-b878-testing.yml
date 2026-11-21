@@ -1,0 +1,82 @@
+name: B878 ERP Layer and Panda Overspeed TESTING
+on:
+  push:
+    branches: [feature/build-878-erp-layer-overspeed-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b878-erp-overspeed-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-878-erp-layer-overspeed-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact B877 Official baseline and targeted source-only changes
+        run: python3 scripts/verify_b878_testing.py source
+      - name: Restore byte-identical B877 Official bundled assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.65-b877/SG-Delivery-B877-Official.apk -o "$RUNNER_TEMP/B877-Official.apk"
+          python3 scripts/verify_b878_testing.py restore "$RUNNER_TEMP/B877-Official.apk"
+      - name: Full JVM/Robolectric regressions, verified limit and layer tests, lint, APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Validate isolated TESTING APK and unchanged B877 application assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b878test' versionCode='86' versionName='1.4.66-b878-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #878 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          cp "$apk" dist/SG-Delivery-B878-ERP-Overspeed-TESTING.apk
+          python3 scripts/verify_b878_testing.py verify "$RUNNER_TEMP/B877-Official.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          (cd dist && zip -q -r B878-Verification-Evidence.zip B878-Verification.json zipalign.txt signature.txt unit-test-results lint-results-debug.html)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B878-ERP-Overspeed-TESTING-APK-and-evidence
+          path: |
+            dist/SG-Delivery-B878-ERP-Overspeed-TESTING.apk
+            dist/B878-Verification-Evidence.zip
+          if-no-files-found: error
+      - name: Publish isolated TESTING GitHub Release; Official unchanged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.66-b878-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::Testing release already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B878-ERP-Overspeed-TESTING.apk dist/B878-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery #878 TESTING – ERP Above Route & Panda Overspeed' \
+            --notes 'B877 Official source baseline, isolated .b878test package. ERP sign symbol reordered above native blue route annotation while keeping GPS foreground above and camera markers unchanged. On verified LTA/statute directional road limit only, stable GPS speed above limit +3 km/h for >=2s makes speed AND km/h labels red, plays original Panda Warrior overspeed_warning MP3 with >=90s cooldown and critical maneuver priority. New settings: Overspeed Warning, Red Speed Font, Panda Voice, 90/120/180s cooldown and Preview. 106 ERP source records/101 locations, original 209 MP3 + PCM files, 341 cameras, all B877 assets and delivery data unchanged. Unit regressions/lint/build/signature/16KB alignment verified; no physical phone driving or Bluetooth QA. TESTING ONLY. NO OFFICIAL MERGE.'
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.65-b877
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B878-failure-and-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/B878-Verification.json

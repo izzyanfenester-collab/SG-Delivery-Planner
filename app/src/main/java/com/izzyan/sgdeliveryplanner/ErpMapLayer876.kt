@@ -11,6 +11,7 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -48,6 +49,36 @@ internal class ErpMapLayer876(private val context:Context,private val map:MapLib
     private val image by lazy{ErpMapIcon876.bitmap(context)}
     var sourceWrites=0;private set
     var layerInstalls=0;private set
+    var layerReorders=0;private set
+
+    private fun newIconLayer()=SymbolLayer(LAYER,SOURCE).withProperties(
+        iconImage(IMAGE),iconSize(1f),iconAnchor(Property.ICON_ANCHOR_CENTER),
+        iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+        iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+        iconAllowOverlap(true),iconIgnorePlacement(true),iconPadding(0f),iconOpacity(1f))
+
+    /** Idempotently place ERP over native blue route polylines and below the
+     * location arrow. Rerouting / MapLibre style replacement can install
+     * annotation layers *after* the ERP source becomes ready, so re-check on
+     * every route-geometry epoch instead of relying on a single initial insert.
+     */
+    private fun fixRouteLayerOrder(style:Style) {
+        val layers=style.layers
+        val ids=layers.map{it.id to (it is LineLayer)}
+        if(ErpLayerOrder878.correct(ids,LAYER))return
+        val slot=ErpLayerOrder878.slot(ids.filterNot{it.first==LAYER})
+        if(style.getLayer(LAYER)!=null)style.removeLayer(LAYER)
+        val replacement=newIconLayer()
+        when {
+            slot.referenceId==null -> style.addLayer(replacement)
+            slot.placeBelow -> style.addLayerBelow(replacement,slot.referenceId)
+            else -> style.addLayerAbove(replacement,slot.referenceId)
+        }
+        layerReorders++
+        val revised=style.layers.map{it.id to (it is LineLayer)}
+        if(!ErpLayerOrder878.correct(revised,LAYER))
+            android.util.Log.w("SGErp878","Native annotation/vehicle layer ordering ambiguous: ${revised.map{it.first}}")
+    }
     fun sync(style:Style,catalog:ErpCatalog876,visible:Boolean) {
         if(activeStyle!==style){activeStyle=style;dataVersion=null;previousVisibility=null}
         if(style.getSource(SOURCE)==null || dataVersion!=catalog.version) {
@@ -63,19 +94,9 @@ internal class ErpMapLayer876(private val context:Context,private val map:MapLib
         }
         if(style.getLayer(LAYER)==null) {
             style.addImage(IMAGE,image,false)
-            val layer=SymbolLayer(LAYER,SOURCE).withProperties(
-                iconImage(IMAGE),iconSize(1f),iconAnchor(Property.ICON_ANCHOR_CENTER),
-                iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
-                iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
-                iconAllowOverlap(true),iconIgnorePlacement(true),iconPadding(0f),iconOpacity(1f))
-            // Keep the native arrow, existing route annotations and cameras above ERP.
-            val foreground=style.layers.firstOrNull{
-                it.id.startsWith("mapbox-location-") || it.id.startsWith("maplibre-location-") ||
-                    it.id.startsWith("mapbox-android-") || it.id.contains("annotation",ignoreCase=true)
-            }
-            if(foreground==null)style.addLayer(layer) else style.addLayerBelow(layer,foreground.id)
             layerInstalls++;previousVisibility=null
         }
+        fixRouteLayerOrder(style)
         if(previousVisibility!=visible){
             style.getLayer(LAYER)?.setProperties(visibility(if(visible)Property.VISIBLE else Property.NONE))
             previousVisibility=visible
@@ -104,11 +125,12 @@ internal class ErpMapLayer876(private val context:Context,private val map:MapLib
 }
 
 @Composable
-internal fun ErpMapIntegration876(map:MapLibreMap?,styleReady:Boolean,state:ErpNavigationState876?) {
+internal fun ErpMapIntegration876(map:MapLibreMap?,styleReady:Boolean,state:ErpNavigationState876?,
+    routePaintEpoch:Int=0) {
     val context=LocalContext.current
     val overlay=remember(map,context){map?.let{ErpMapLayer876(context,it)}}
     val style=if(styleReady)map?.style else null
-    LaunchedEffect(overlay,style,state?.catalog,state?.visible) {
+    LaunchedEffect(overlay,style,state?.catalog,state?.visible,routePaintEpoch) {
         val owner=state?:return@LaunchedEffect
         val catalog=owner.catalog?:return@LaunchedEffect
         if(overlay!=null && style!=null)try{
