@@ -292,12 +292,15 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
+                                // The number and unit share ONE live independent visual state.
+                                // No MP3/voice-cooldown callback is needed to turn either red.
+                                val red879=session.cameraPreferences.overspeed &&
+                                    session.redSpeedFontEnabled878 && session.overspeedVisualState879.red
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color=if(session.overspeedState878.confirmed && session.redSpeedFontEnabled878)
-                                        Color(0xFFE53935) else Color.White,
+                                    color=if(red879)Color(0xFFFF3030) else Color.White,
                                     fontSize=27.sp,fontWeight=FontWeight.Bold)
-                                Text("km/h",color=if(session.overspeedState878.confirmed && session.redSpeedFontEnabled878)
-                                    Color(0xFFE53935) else SGColors.Silver,fontSize=11.sp)
+                                Text("km/h",color=if(red879)Color(0xFFFF3030) else SGColors.Silver,
+                                    fontSize=11.sp)
                                 if(session.cameraPreferences.speedLimitDisplay){
                                     // A red circle does not imply verification: the distinct
                                     // classification is always immediately beneath the sign.
@@ -637,6 +640,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private val roadSpeedStore875=RoadSpeedStore875(context)
     private val roadSpeedTracker875=RoadSpeedLimitTracker875()
     private val overspeedMonitor878=OverspeedSafetyMonitor878()
+    private val overspeedVisualMonitor879=OverspeedVisualMonitor879()
+    var overspeedVisualState879 by mutableStateOf(OverspeedVisualState879()); private set
+    var overspeedDiagnostic879 by mutableStateOf("Waiting for GPS and current road"); private set
     private val overspeedPrefs878=OverspeedPreferences878(context)
     var redSpeedFontEnabled878 by mutableStateOf(overspeedPrefs878.redSpeedFont()); private set
     var overspeedVoiceCooldownSeconds878 by mutableIntStateOf(overspeedPrefs878.cooldownSeconds()); private set
@@ -667,6 +673,11 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if(!newPrefs.overspeed) {
             overspeedMonitor878.reset()
             overspeedState878=OverspeedState878()
+            overspeedVisualMonitor879.reset("Overspeed Warning disabled in Settings")
+            overspeedVisualState879=overspeedVisualMonitor879.state
+        } else if(!cameraPreferences.overspeed) {
+            // Preferences have just become ON; reevaluate on the next real fix.
+            overspeedVisualMonitor879.reset("Waiting for a new GPS fix after enabling warnings")
         }
         if((!newPrefs.verifiedOverspeedVoice || !newPrefs.overspeed) &&
             voiceAudio.activePhraseKey?.startsWith("overspeed-878-")==true)
@@ -740,11 +751,40 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun clearRoadSpeed875(reason:String) {
         roadSpeedGeneration875++;roadSpeedLookup875?.cancel()
         roadSpeedLimitState875=roadSpeedTracker875.invalidate(reason)
+        overspeedVisualMonitor879.reset(reason)
+        overspeedVisualState879=overspeedVisualMonitor879.state
+        overspeedDiagnostic879=reason
         overspeedMonitor878.reset()
         overspeedState878=OverspeedState878()
         if(voiceAudio.activePhraseKey?.startsWith("overspeed-878-")==true)
             voiceAudio.stop("speed-limit-unavailable")
     }
+    /** Evaluate EXACTLY the currently displayed GPS speed against the same
+     * map-matched road state that supplies the existing 90/80/... limit circle.
+     * Never couple the UI RED state to offline MP3 availability or voice events.
+     */
+    private fun updateOverspeedVisual879(fix:Location):OverspeedVisualState879 {
+        val sample=RoadSpeedFix875(GpsPoint(fix.latitude,fix.longitude),
+            fix.elapsedRealtimeNanos/1_000_000L,fix.accuracy,
+            fix.bearing.takeIf { fix.hasBearing() },
+            fix.speed.takeIf{fix.hasSpeed()},
+            fix.speedAccuracyMetersPerSecond.takeIf{fix.hasSpeedAccuracy()})
+        val visual=overspeedVisualMonitor879.observe(roadSpeedLimitState875,sample,
+            cameraPreferences.overspeed)
+        overspeedVisualState879=visual
+        overspeedDiagnostic879="Speed=${visual.shownSpeedKmh ?: "?"} km/h; " +
+            "Limit=${visual.applicableLimitKmh ?: "?"} km/h; " +
+            "Source=${visual.limitSource?.label ?: "UNKNOWN"}; " +
+            "Road=${visual.roadSegmentId ?: "UNMATCHED"}; " +
+            "Accuracy=${fix.accuracy}m; speedAccuracy=" +
+            "${if(fix.hasSpeedAccuracy()) fix.speedAccuracyMetersPerSecond.toString() else "ABSENT"}; " +
+            "Visual=${visual.red}; FontEnabled=${redSpeedFontEnabled878}; " +
+            "VoiceEligible=${overspeedState878.confirmed}; " +
+            "Reason=${visual.diagnostic}"
+        android.util.Log.d("SGOverspeed879",overspeedDiagnostic879)
+        return visual
+    }
+
     /** All safety audio goes through the real Panda V2 player. Real STARTED is the
      * only event that consumes a cooldown; blocked/deferred alerts can retry. */
     private fun warnOverspeed878() {
@@ -800,11 +840,20 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if(SystemClock.elapsedRealtime()-sample.timeMs>6000){clearRoadSpeed875("GPS sample stale; check signs");return@launch}
                 roadSpeedCatalogInfo875="${loaded.first.ways} road ways · ${loaded.first.knownDirections} mapped directional limits · ${loaded.first.checkedDate}"
                 roadSpeedLimitState875=roadSpeedTracker875.observe(sample.copy(routeBearing=loaded.third),loaded.second,cameraPreferences.overspeed)
+                // Publish red/white independently of Panda audio. The speed
+                // circle can show MAP DATA 90 while official-only voice stays OFF.
+                val visualForSample=updateOverspeedVisual879(fix)
                 overspeedMonitor878.requestTimedOut(SystemClock.elapsedRealtime())
                 overspeedState878=overspeedMonitor878.observe(roadSpeedLimitState875,sample,
                     cameraPreferences.overspeed,sample.timeMs,
-                    overspeedVoiceCooldownSeconds878*1_000L)
+                    overspeedVoiceCooldownSeconds878*1_000L,
+                    validatedFallbackSpeed=visualForSample.speedReliable &&
+                        visualForSample.roadSegmentId==roadSpeedLimitState875.segmentId)
                 warnOverspeed878()
+                // Road lookup is asynchronous: if the UI speed already moved on
+                // to a newer GPS fix, calculate the colour from that same fix.
+                location?.takeIf{it.elapsedRealtimeNanos>fix.elapsedRealtimeNanos}
+                    ?.let{updateOverspeedVisual879(it)}
                 android.util.Log.d("SGRoadSpeed875","gps=${sample.point.lat},${sample.point.lon} accuracy=${sample.accuracy} heading=${sample.heading} ${roadSpeedLimitState875.diagnostics}")
             }catch(e:CancellationException){throw e}
             catch(e:Exception){
@@ -1097,13 +1146,23 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         }
         loadSpeedReference868()
         roadSpeedTracker875.reset();roadSpeedLimitState875=RoadSpeedState875()
+        overspeedVisualMonitor879.reset()
+        overspeedVisualState879=overspeedVisualMonitor879.state
+        overspeedMonitor878.reset()
+        overspeedState878=OverspeedState878()
         active = true; scope = this; startAnnounced=false; adaptiveEta.reset(); arrival = ArrivalDetector(); reroute.resetDrift(); instantDetector.reset(); requestGate.clear(); pandaGate.reset(); gpsSanityFilter.reset()
         try {
             launch {
                 while(isActive){
                     delay(1000)
                     val expired=roadSpeedTracker875.expire(SystemClock.elapsedRealtime())
-                    if(expired!=roadSpeedLimitState875)roadSpeedLimitState875=expired
+                    if(expired!=roadSpeedLimitState875) {
+                        roadSpeedLimitState875=expired
+                        overspeedVisualMonitor879.reset("Current speed limit expired; check signs")
+                        overspeedVisualState879=overspeedVisualMonitor879.state
+                        overspeedMonitor878.reset()
+                        overspeedState878=OverspeedState878()
+                    }
                 }
             }
             if (!GpsPoint(destination.lat, destination.lon).valid()) {
@@ -1143,6 +1202,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     return@collect
                 }
                 lastFix = now; location = fix
+                updateOverspeedVisual879(fix)
                 scanCameraSafety(fix,now)
                 updateRoadSpeed875(fix)
                 if(gpsWasLost) { gpsWasLost=false; pandaStatus("gps_restored","GPS signal restored.") }
