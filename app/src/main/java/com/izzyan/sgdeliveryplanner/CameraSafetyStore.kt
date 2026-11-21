@@ -124,7 +124,7 @@ internal class CameraSafetyStore(context:Context):SQLiteOpenHelper(
 internal data class CameraAlertPreferences(
     val master:Boolean=true, val speed:Boolean=true, val redLight:Boolean=true,
     val mobile:Boolean=true, val voice:Boolean=true,val icons:Boolean=true,
-    val speedLimitDisplay:Boolean=true,val overspeed:Boolean=false,
+    val speedLimitDisplay:Boolean=true,val overspeed:Boolean=true,
     val averageVoice:Boolean=true, val verifiedOverspeedVoice:Boolean=true,
     val coordinateCameraAlerts:Boolean=true, val coordinateReminder:Boolean=true
 ) {
@@ -141,7 +141,7 @@ internal class CameraSafetyPrefs(context:Context) {
         prefs.getBoolean("master",true),prefs.getBoolean("speed",true),
         prefs.getBoolean("redLight",true),prefs.getBoolean("mobile",true),
         prefs.getBoolean("voice",true),prefs.getBoolean("icons",true),
-        prefs.getBoolean("speedLimitDisplay",true),prefs.getBoolean("overspeed",false),
+        prefs.getBoolean("speedLimitDisplay",true),prefs.getBoolean("overspeed",true),
         prefs.getBoolean("averageVoice",true),prefs.getBoolean("verifiedOverspeedVoice",true),
         prefs.getBoolean("coordinateCameraAlerts",true),prefs.getBoolean("coordinateReminder",true))
     fun save(value:CameraAlertPreferences){
