@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,8 @@ class HistorySpacingVerificationActivity884:ComponentActivity() {
             val density=LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density,fontScale)) {
                 IzzDeliveryTheme(dark=true) {
+                    // Match the white onBackground content supplied by production App Scaffold.
+                    CompositionLocalProvider(LocalContentColor provides SGColors.White) {
                     MarinaBayBackdrop(Modifier.fillMaxSize()) {
                         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
                             horizontalAlignment=Alignment.CenterHorizontally) {
@@ -41,6 +44,7 @@ class HistorySpacingVerificationActivity884:ComponentActivity() {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

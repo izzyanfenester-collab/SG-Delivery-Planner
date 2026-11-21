@@ -85,7 +85,7 @@ def verify(base,apk):
   'physicalPhoneTesting':False,'officialMerge':False,'apkSha256':sha(pathlib.Path(apk).read_bytes())}
  (OUT/'B884-acceptance.json').write_text(json.dumps(result,indent=2))
  normal=layout['cases'][0]
- report=f'''# SG Delivery #884 TESTING – Compact History Cards
+ report=f'''# SG Delivery #884 TESTING – Compact History Cards (Revision 2)
 
 Baseline: #883 Official, {BASE}.
 Source: {result['sourceCommit']}
@@ -101,7 +101,9 @@ transparency, backdrop, labels, values, dates and every click handler are unchan
 
 Native Android API 35 comparison uses the actual production History composable
 and an exact DEBUG-only copy of #883, with identical synthetic Room records,
-viewport, density, fonts and background. At width 400dp/font scale 1.0 the first
+viewport, density, fonts and background. Revision 2 matches the white inherited
+content colour from production App Scaffold in the standalone comparison host.
+At width 400dp/font scale 1.0 the first
 card changes from {normal['baselineHeightDp']:.1f}dp to {normal['compactHeightDp']:.1f}dp,
 saving {normal['heightReductionPercent']:.1f}%. Further captures cover width 320dp
 at font scales 1.0 and 1.5. Typography is identical; native text checks retain all

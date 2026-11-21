@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.71-b883
           test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/git/ref/heads/main --jq .object.sha)" = 680cac0d016b4002aab2c148f16694a8a223035f
-          tag=v1.4.72-b884-testing
+          tag=v1.4.72-b884-testing-r2
           if gh release view "$tag" >/dev/null 2>&1; then exit 1; fi
           gh release create "$tag" dist/SG-Delivery-B884-Compact-History-TESTING.apk dist/SG-Delivery-B884-Testing-Report.md dist/B884-Verification-Evidence.zip \
             --target "$GITHUB_SHA" --prerelease --latest=false \
