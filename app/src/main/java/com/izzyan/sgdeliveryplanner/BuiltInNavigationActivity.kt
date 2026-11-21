@@ -263,33 +263,44 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     }
                 }
 
-                // Controls occupy the middle map area and scroll on shorter phones.
-                Column(
+                // B880: two independent, non-overlapping overlay lanes.
+                // Controls stay in the right rail; the large readable speed/
+                // limit card stays visible at the LOWER LEFT of Settings.
+                // The opaque top and arrival panels set the true safe bounds.
+                Box(
                     Modifier.align(Alignment.TopEnd).fillMaxHeight()
-                        .padding(top = topInset, bottom = bottomInset, end = 10.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                        .padding(top=topInset,bottom=bottomInset)
+                        .width(GpsCompactLayout880.RAIL_WIDTH_DP.dp)
+                        .padding(end=GpsCompactLayout880.RAIL_END_PADDING_DP.dp)
                 ) {
-                    GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode == "follow") {
-                        session.recenter()
+                    Column(
+                        Modifier.align(Alignment.TopEnd).verticalScroll(rememberScrollState()),
+                        horizontalAlignment=Alignment.End,
+                        verticalArrangement=Arrangement.spacedBy(GpsCompactLayout880.CONTROL_GAP_DP.dp)
+                    ) {
+                        GpsControl(Icons.Filled.MyLocation, "Follow", session.cameraMode=="follow") {
+                            session.recenter()
+                        }
+                        GpsControl(Icons.Filled.Map, "Route", session.cameraMode=="overview") {
+                            session.cameraMode="overview";session.cameraRequest++
+                        }
+                        GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
+                        GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
+                        GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
+                            if(session.localTrafficVisible)session.toggleLocalTraffic()
+                            else showLocalTrafficConsent=true
+                        }
+                        GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings=true }
                     }
-                    GpsControl(Icons.Filled.Map, "Route", session.cameraMode == "overview") {
-                        session.cameraMode = "overview"; session.cameraRequest++
-                    }
-                    GpsControl(Icons.Filled.Add, "Zoom +") { session.adjustZoom(0.5) }
-                    GpsControl(Icons.Filled.Remove, "Zoom −") { session.adjustZoom(-0.5) }
-                    GpsControl(Icons.Filled.Traffic, "Traffic", session.localTrafficVisible) {
-                        if (session.localTrafficVisible) session.toggleLocalTraffic()
-                        else showLocalTrafficConsent = true
-                    }
-                    GpsControl(Icons.Filled.Settings, "Settings") { showGpsSettings = true }
-                }
-
-                Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = bottomInset),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // A separate bottom-start lane is LEFT of the Settings rail.
+                    // Do not make this speed display part of the scrollable controls:
+                    // it must remain visible on compact phones and in 2D/3D modes.
+                    Box(Modifier.align(Alignment.BottomStart)
+                        .width(GpsCompactLayout880.METER_WIDTH_DP.dp)) {
                     session.location?.takeIf { it.hasSpeed() }?.let { fix ->
                         Surface(color = SGColors.Card,
-                            shape = RoundedCornerShape(SGDimensions.RadiusSmall)) {
+                            shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+                            modifier=Modifier.width(GpsCompactLayout880.METER_WIDTH_DP.dp)) {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 // The number and unit share ONE live independent visual state.
@@ -352,6 +363,12 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             }
                         }
                     }
+                    }
+                }
+
+                // Camera advisory card remains in its original bottom-left area.
+                Column(Modifier.align(Alignment.BottomStart).padding(start=12.dp,bottom=bottomInset),
+                    verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     session.upcomingEnforcementCamera?.let { camera ->
                         if(session.cameraPreferences.master) {
                             Surface(color=PremiumNavy.copy(alpha=0.90f),
@@ -518,7 +535,9 @@ class BuiltInNavigationActivity : ComponentActivity() {
 
     @Composable
     private fun GpsControl(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
-        FilledTonalButton(onClick = onClick, modifier = Modifier.width(65.dp).height(61.dp),
+        FilledTonalButton(onClick = onClick, modifier = Modifier
+                .width(GpsCompactLayout880.CONTROL_WIDTH_DP.dp)
+                .height(GpsCompactLayout880.CONTROL_HEIGHT_DP.dp),
             contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
             colors = ButtonDefaults.filledTonalButtonColors(
                 // Reuse the speedometer/speed-limit host alpha on the surface only.
@@ -526,8 +545,10 @@ class BuiltInNavigationActivity : ComponentActivity() {
                 contentColor = if (active) PremiumNavy else Color.White)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp))
-                Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Icon(icon, contentDescription = label,
+                    modifier = Modifier.size(GpsCompactLayout880.CONTROL_ICON_DP.dp))
+                Text(label, fontSize = GpsCompactLayout880.CONTROL_LABEL_SP.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines=1, softWrap=false)
             }
         }
     }
