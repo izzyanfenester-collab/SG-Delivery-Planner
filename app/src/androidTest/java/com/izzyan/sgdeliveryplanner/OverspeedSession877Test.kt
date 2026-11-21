@@ -61,6 +61,7 @@ class OverspeedSession877Test {
         }
         main{a->set(a.session,"location",fix)
             a.nativeMap?.locationComponent?.forceLocationUpdate(fix)
+            a.session.javaClass.getDeclaredMethod("scanCameraSafety",Location::class.java,Long::class.javaPrimitiveType).apply{isAccessible=true}.invoke(a.session,fix,now)
             a.session.javaClass.getDeclaredMethod("updateRoadSpeed875",Location::class.java).apply{isAccessible=true}.invoke(a.session,fix)}
         ui.waitUntil(10_000){main{it.session.roadSpeedLimitState875.observedAtMs==now || it.session.roadSpeedLimitState875.limit==null}}
         return now
@@ -81,6 +82,7 @@ class OverspeedSession877Test {
             audio.setStreamVolume(AudioManager.STREAM_MUSIC,maxOf(1,audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)/2),0)
             a.session.setSoundEnabled(true);a.session.changeVoiceVolume(1f)
             a.session.updateOverspeedOptions877(OverspeedOptions877())
+            a.session.updateCameraPreferences(a.session.cameraPreferences.copy(master=false))
             set(a.session,"scope",a.lifecycleScope);set(a.session,"active",true)
             set(a.session,"route",route);set(a.session,"shape",listOf(eighty.a,eighty.b))
             set(a.session,"turnMeters",1000.0)
@@ -127,6 +129,7 @@ class OverspeedSession877Test {
             .put("normal75",true).put("red86",becameRed).put("redNumberAndUnitPixels",true)
             .put("normal79Restored",true).put("red96On90",true).put("unknownNoWarning",true)
             .put("criticalGuidanceDeferredOverspeed",deferred).put("overspeedPlaybackStarted",true)
+            .put("cameraScanDoesNotCancelIndependentOverspeed",true)
             .put("overspeedPlaybackCompleted",true).put("continuousVoiceStartCount",starts)
             .put("realGpsProviderAndPhysicalDriveTested",false))
         main{a->(raw(a.session,"roadSpeedStore875") as RoadSpeedStore875).close()}

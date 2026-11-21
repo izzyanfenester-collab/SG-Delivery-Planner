@@ -777,7 +777,9 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             cameraVoiceDiagnostic="Master Camera Alerts is OFF"
             upcomingEnforcementCamera=null
             currentCameraApproaches872=emptyList()
-            voiceAudio.stopObsoleteCameraForRouteChange()
+            // Camera visibility/voice settings do not cancel a separate speed warning.
+            if(voiceAudio.activePhraseKey?.startsWith(OverspeedNavigation877.PREFIX)!=true)
+                voiceAudio.stopObsoleteCameraForRouteChange()
             return
         }
         if(offRoute || route==null) {

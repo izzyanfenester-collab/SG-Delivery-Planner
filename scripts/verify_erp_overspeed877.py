@@ -86,6 +86,7 @@ def verify(base,apk):
     assert erp['records']==106 and erp['locations']==101 and len(erp['cases'])==6
     assert all(c['erpAboveRouteAndCasing'] and c['vehicleAboveErp'] for c in erp['cases'])
     assert speed['overspeedPlaybackStarted'] and speed['overspeedPlaybackCompleted'] and speed['continuousVoiceStartCount']==1
+    assert speed['cameraScanDoesNotCancelIndependentOverspeed']
     old=json.loads((OUT/'native/SGDeliveryB877Native/delivery-flows.json').read_text());assert old['result']=='PASS'
     for clip in ('turn_right','speed_camera_ahead','red_light_camera_ahead'):
         played=json.loads((OUT/'native/SGDeliveryB877Native'/('audio-'+clip+'.json')).read_text())
@@ -131,7 +132,8 @@ native vehicle stack stays above ERP. 100 repeated overlay syncs create no layer
 
 Controlled Android Location replay enters the actual NavigationSession asynchronous
 road-speed lookup using the unchanged offline catalog's verified SLE 80 km/h and
-BKE 90 km/h records. The actual speed text changed red/normal, critical guidance
+BKE 90 km/h records. Each replay also executes the normal camera scan, including
+camera-master OFF without cancelling independent overspeed audio. The speed text changed red/normal, critical guidance
 deferred overspeed, and overspeed MP3 playback STARTED/COMPLETED exactly once during
 continuous overspeed. Unknown limits clear warnings. Existing turn/speed-camera/
 red-light playback and nine silent-delivery/report phases pass as well.
