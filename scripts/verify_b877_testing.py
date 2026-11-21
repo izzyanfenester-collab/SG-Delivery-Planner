@@ -89,14 +89,14 @@ def checked_base(path):
 def restore(path):
     with checked_base(path) as baseline:
         names = [n for n in baseline.namelist() if n.startswith("assets/") and not n.endswith("/")]
-        assert len(names) == 436, len(names)
+        assert len(names) == 438, len(names)
         for name in names:
             relative = pathlib.PurePosixPath(name)
             assert ".." not in relative.parts
             target = ROOT / "app/src/main" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(baseline.read(name))
-        print("Restored all 436 exact B876 Official assets, including 209 MP3 and 209 PCM.")
+        print("Restored all 438 exact B876 Official assets, including 209 MP3 and 209 PCM.")
 
 def xml_counts(folder):
     count = dict(tests=0, failures=0, errors=0, skipped=0)
@@ -119,7 +119,7 @@ def verify(base_path, apk_path):
         now = {n: sha(tested.read(n)) for n in tested.namelist()
                if n.startswith("assets/") and not n.endswith("/")}
         assert assets == now, "APK asset content differs from Official baseline"
-        assert len(assets) == 436
+        assert len(assets) == 438
         assert sum(n.endswith(".mp3") for n in assets) == 209
         assert sum(n.endswith(".pcm") for n in assets) == 209
         # Locate retained completion recordings by original manifest IDs.
@@ -182,7 +182,7 @@ No phone or application mute is used. GPS voice preference stays ON at 100%.
   order details, progress and completion timestamps remained correct.
 - Real MediaPlayer STARTED and COMPLETED callbacks confirmed for turn_right,
   speed_camera_ahead and red_light_camera_ahead while offline.
-- All 436 B876 Official assets byte-identical, including 209 MP3 and 209 PCM.
+- All 438 B876 Official assets byte-identical, including 209 MP3 and 209 PCM.
   Both original completion clips remain stored without delivery event mappings.
 - ERP 106 records / 101 map locations, cameras, speed limits, routing, camera zoom,
   premium themes, WhatsApp, payment, backup and data schema sources unchanged.
