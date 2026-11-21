@@ -1,0 +1,82 @@
+name: B881 Horizontal Bottom Panel Speed Meters TESTING
+on:
+  push:
+    branches: [feature/build-881-bottom-panel-speed-meters-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b881-bottom-speed-meters-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-881-bottom-panel-speed-meters-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact B879 Official baseline and layout-only source changes
+        run: python3 scripts/verify_b881_testing.py source
+      - name: Restore byte-identical B879 Official bundled assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.67-b879/SG-Delivery-B879-Official.apk -o "$RUNNER_TEMP/B879-Official.apk"
+          python3 scripts/verify_b881_testing.py restore "$RUNNER_TEMP/B879-Official.apk"
+      - name: All JVM/Robolectric horizontal-bottom-panel layout regressions, lint and isolated B881 APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Validate B881 TESTING APK and all original B879 assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b881test' versionCode='89' versionName='1.4.69-b881-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #881 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          cp "$apk" dist/SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk
+          python3 scripts/verify_b881_testing.py verify "$RUNNER_TEMP/B879-Official.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          (cd dist && zip -q -r B881-Verification-Evidence.zip B881-Verification.json zipalign.txt signature.txt unit-test-results lint-results-debug.html)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B881-Bottom-Panel-Speed-TESTING-APK-and-evidence
+          path: |
+            dist/SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk
+            dist/B881-Verification-Evidence.zip
+          if-no-files-found: error
+      - name: Publish isolated TESTING GitHub Release; Official unchanged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.69-b881-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::Testing release already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk dist/B881-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery #880 TESTING – Compact GPS Controls & Relocated Speed Meters' \
+            --notes 'B881 isolated TESTING derived from B880 compact GPS controls, which used B879 Official. Floating Current Speed and Speed Limit badges have been completely removed from map overlays. Both gauges now appear side by side inside the opaque Bottom Navigation Panel, arranged horizontally between distance and Delivery button when space permits, or in an additional row INSIDE the panel on small or large-font screens—never vertically stacked. All six compact 52x49dp B880 controls and existing actions preserved. B879 overspeed red numeric/font and Panda voice, ERP 106/101, 2KM camera alerts, 436 original assets, Block/Unit/Postal, Arrival Time, Payment, History and all other features unchanged. JVM tests, lint, package/signature, zipalign and byte-identical assets checked; physical-phone visual and driving QA remains necessary. DO NOT MERGE INTO OFFICIAL.'
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.67-b879
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B881-failure-and-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/B881-Verification.json
