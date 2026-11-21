@@ -48,9 +48,6 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
         CameraSafetyToggle("Average Speed Zone Voice",p.averageVoice) {
             session.updateCameraPreferences(p.copy(averageVoice=it))
         }
-        CameraSafetyToggle("Verified Overspeed Voice",p.verifiedOverspeedVoice) {
-            session.updateCameraPreferences(p.copy(verifiedOverspeedVoice=it))
-        }
         CameraSafetyToggle("Show Camera Icons",p.icons) {
             session.updateCameraPreferences(p.copy(icons=it))
         }
@@ -63,9 +60,32 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
             color=SGColors.Silver,fontSize=10.sp)
         Text("Live Speed Limit: ${session.roadSpeedLimitState875.diagnostics}",
             color=SGColors.Gold,fontSize=10.sp)
-        CameraSafetyToggle("Verified Overspeed Warning",p.overspeed) {
+        Text("Overspeed Warning",color=SGColors.Gold,fontSize=14.sp,fontWeight=FontWeight.Bold)
+        CameraSafetyToggle("Overspeed Warning",p.overspeed) {
             session.updateCameraPreferences(p.copy(overspeed=it))
         }
+        CameraSafetyToggle("Red Speed Font",session.redSpeedFontEnabled878) {
+            session.setRedSpeedFont878(it)
+        }
+        CameraSafetyToggle("Panda Warrior Overspeed Voice",p.verifiedOverspeedVoice) {
+            session.updateCameraPreferences(p.copy(verifiedOverspeedVoice=it))
+        }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text("Voice Cooldown",Modifier.weight(1f),color=SGColors.Silver,fontSize=12.sp)
+            listOf(90,120,180).forEach { seconds ->
+                TextButton(onClick={session.setOverspeedCooldown878(seconds)}) {
+                    Text("${seconds}s",
+                        color=if(session.overspeedVoiceCooldownSeconds878==seconds)SGColors.Gold else SGColors.Silver,
+                        fontSize=11.sp)
+                }
+            }
+        }
+        TextButton(onClick={session.previewCameraVoice("overspeed_warning")},
+            enabled=session.cameraAudioAvailable && !session.muted) {
+            Text("Test Panda Warrior Overspeed Voice",color=SGColors.Gold,fontSize=12.sp)
+        }
+        Text("Only verified LTA/statute road limits; +3 km/h for 2 seconds. No warning on unknown roads.",
+            color=SGColors.Silver,fontSize=10.sp)
         Text("Speed & red-light sources: Singapore Police Force",
             color=SGColors.Silver,fontSize=11.sp)
         Text("Road limits: LTA/statute, validated OSM (ODbL), or applicable SG general rule. Unknown: CHECK SIGNS.",
