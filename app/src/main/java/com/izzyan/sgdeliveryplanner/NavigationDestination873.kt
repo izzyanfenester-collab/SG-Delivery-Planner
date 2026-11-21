@@ -64,6 +64,7 @@ internal fun NavigationDestinationPanel873(
     remainingSummary:String,
     trafficLabel:String?,
     onDelivery:()->Unit,
+    speedMeters:(@Composable ()->Unit)?=null,
     modifier:Modifier=Modifier,
     accent:Color=SGColors.SelectedGold
 ) {
@@ -120,14 +121,15 @@ internal fun NavigationDestinationPanel873(
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,
-            horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) {
+        @Composable fun Remaining(modifier:Modifier=Modifier) {
+            Column(modifier.testTag("gps-bottom-distance")) {
                 Text(remainingSummary,color=SGColors.Silver,fontSize=17.sp,
                     fontWeight=FontWeight.Bold,lineHeight=21.sp,softWrap=true,
                     modifier=Modifier.fillMaxWidth().testTag("gps-remaining-summary"))
                 trafficLabel?.let{Text(it,color=SGColors.Silver,fontSize=11.sp)}
             }
+        }
+        @Composable fun DeliveryAction() {
             FilledTonalButton(onClick=onDelivery,
                 modifier=Modifier.heightIn(min=48.dp).testTag("gps-delivery-button"),
                 colors=ButtonDefaults.filledTonalButtonColors(
@@ -136,6 +138,38 @@ internal fun NavigationDestinationPanel873(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,contentDescription=null,modifier=Modifier.size(18.dp))
                 Spacer(Modifier.width(5.dp))
                 Text("Delivery",fontSize=12.sp,fontWeight=FontWeight.Bold)
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().testTag("gps-bottom-speed-actions")) {
+            val inline=speedMeters!=null &&
+                NavigationBottomSpeedLayout881.inlineWithActions(maxWidth.value,density.fontScale)
+            if(inline) {
+                // Normal screens: arrival distance | 2 SIDE-BY-SIDE gauges | Delivery.
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
+                    horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Remaining(Modifier.weight(1f))
+                    speedMeters?.invoke()
+                    DeliveryAction()
+                }
+            } else {
+                // Small phones / large fonts: gauges may move to an EXTRA ROW
+                // INSIDE the bottom panel, but never stack one above the other.
+                // Arrival, destination, distance and Delivery are all preserved.
+                Column(Modifier.fillMaxWidth(),
+                    verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    if(speedMeters!=null) {
+                        Row(Modifier.fillMaxWidth().testTag("gps-bottom-meters-row"),
+                            horizontalArrangement=Arrangement.Center,
+                            verticalAlignment=Alignment.CenterVertically) {
+                            speedMeters()
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,
+                        horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Remaining(Modifier.weight(1f))
+                        DeliveryAction()
+                    }
+                }
             }
         }
     }
