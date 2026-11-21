@@ -87,7 +87,9 @@ class SilentDelivery877Test {
                 .put("pandaPlaybackRequested", false))
         }
         fun click(label: String) {
-            ui.onNodeWithText(label, useUnmergedTree = true).performScrollTo().performClick()
+            ui.onNode(hasText(label) and hasClickAction() and SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.Role,
+                androidx.compose.ui.semantics.Role.Button)).performScrollTo().performClick()
         }
         fun report(orderIndex: Int) {
             ui.waitUntil(15_000) { vm.deliveryReportOrderId == fixture.stops[orderIndex].orderId }
@@ -95,9 +97,9 @@ class SilentDelivery877Test {
                 ui.onAllNodesWithContentDescription("Delivery Report for stop ${orderIndex + 1}")
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            ui.onNodeWithText("Share Report").assertIsEnabled()
+            ui.onNode(hasText("Share Report") and hasAnyAncestor(isDialog())).assertIsEnabled()
         }
-        fun closeReport() { ui.onNodeWithText("Close").performClick() }
+        fun closeReport() { ui.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick() }
         fun persisted(): Plan = runBlocking { vm.repo.decode(vm.repo.dao.route(fixture.id)!!) }
 
         silentPhase("01-delivered-and-auto-next") {
