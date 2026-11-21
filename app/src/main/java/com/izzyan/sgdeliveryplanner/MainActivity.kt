@@ -1342,7 +1342,7 @@ fun History(vm: PlannerViewModel) {
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(SGDimensions.Normal),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
             PageTitle("Route history", "Tap an unfinished route to continue delivery. Completed routes remain view-only.")
@@ -1374,7 +1374,7 @@ fun History(vm: PlannerViewModel) {
                 borderColor = p?.let { historyStatusAccent(savedDeliveryStatus(it)).copy(alpha = .38f) }
                     ?: PremiumGold.copy(alpha = .25f)
             ) {
-                Column(Modifier.padding(SGDimensions.Normal), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(horizontal = SGDimensions.Normal, vertical = 8.dp)) {
                     if (selecting) Checkbox(record.id in selected, { toggle(record.id) }, enabled = !vm.busy)
                     if (p == null) {
                         Text("This saved route could not be read. Its stored data has been kept.")
@@ -1384,13 +1384,13 @@ fun History(vm: PlannerViewModel) {
                         // Chop stays within a fixed, compact right-side slot.
                         // No overlay on date, progress values, action buttons or proof controls.
                         Row(
-                            Modifier.fillMaxWidth().heightIn(min = 76.dp),
+                            Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                verticalArrangement = Arrangement.Top
                             ) {
                                 Text(p.deliveryDate.toString(),
                                     style = MaterialTheme.typography.titleLarge)

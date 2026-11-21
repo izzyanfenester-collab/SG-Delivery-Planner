@@ -1,0 +1,98 @@
+name: SG Delivery B884 Compact History TESTING
+on:
+  push:
+    branches: [feature/build-884-compact-history-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b884-compact-history-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-884-compact-history-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Audit exact Official baseline and bounded History-only layout changes
+        run: |
+          python3 -m py_compile scripts/verify_b884_testing.py
+          python3 scripts/verify_b884_testing.py source
+      - name: Restore all unchanged Official data and voice recordings
+        run: |
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.71-b883/SG-Delivery-B883-Official.apk -o "$RUNNER_TEMP/B883-Official.apk"
+          python3 scripts/verify_b884_testing.py restore "$RUNNER_TEMP/B883-Official.apk"
+      - name: Compile APKs, run all original unit regressions and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug
+      - name: Enable emulator KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Measure real History layout, capture before-after and verify record actions
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-save -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/run_b884_native.sh
+      - name: Verify isolated APK, original assets and native acceptance results
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b884test' versionCode='92' versionName='1.4.72-b884-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #884 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          python3 scripts/verify_b884_testing.py verify "$RUNNER_TEMP/B883-Official.apk" "$apk"
+          cp "$apk" dist/SG-Delivery-B884-Compact-History-TESTING.apk
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp -r app/build/outputs/androidTest-results/connected dist/native-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          (cd dist && zip -q -r B884-Verification-Evidence.zip *.json *.txt *.md *.html native unit-test-results native-test-results)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B884-Compact-History-TESTING-and-evidence
+          path: |
+            dist/SG-Delivery-B884-Compact-History-TESTING.apk
+            dist/SG-Delivery-B884-Testing-Report.md
+            dist/B884-Verification-Evidence.zip
+            dist/native/SGDeliveryB884/*.png
+          if-no-files-found: error
+      - name: Publish TESTING only, preserve Official
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.71-b883
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/git/ref/heads/main --jq .object.sha)" = 680cac0d016b4002aab2c148f16694a8a223035f
+          tag=v1.4.72-b884-testing
+          if gh release view "$tag" >/dev/null 2>&1; then exit 1; fi
+          gh release create "$tag" dist/SG-Delivery-B884-Compact-History-TESTING.apk dist/SG-Delivery-B884-Testing-Report.md dist/B884-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery #884 TESTING – Ultra-Compact History Cards' --notes-file dist/SG-Delivery-B884-Testing-Report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B884-History-diagnostic-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/
+            app/build/reports/lint-results-debug.html
+            dist/
