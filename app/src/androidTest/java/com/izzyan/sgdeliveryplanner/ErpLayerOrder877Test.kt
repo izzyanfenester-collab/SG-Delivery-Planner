@@ -31,6 +31,34 @@ class ErpLayerOrder877Test {
         main{it.nativeMap!!.snapshot{image->result=image;done.countDown()}}
         assertTrue(done.await(15,TimeUnit.SECONDS));return requireNotNull(result)
     }
+    private fun difference(before:Bitmap,after:Bitmap,point:LatLng):Pair<Int,Int> {
+        val screen=main{it.nativeMap!!.projection.toScreenLocation(point)}
+        val density=ui.activity.resources.displayMetrics.density
+        val halfW=(20*density).toInt();val halfH=(7*density).toInt()
+        var samples=0;var changed=0
+        for(y in (screen.y.toInt()-halfH)..(screen.y.toInt()+halfH))for(x in (screen.x.toInt()-halfW)..(screen.x.toInt()+halfW)) {
+            if(x in 0 until after.width && y in 0 until after.height) {
+                samples++;val a=before.getPixel(x,y);val b=after.getPixel(x,y)
+                if(abs(Color.red(a)-Color.red(b))+abs(Color.green(a)-Color.green(b))+abs(Color.blue(a)-Color.blue(b))>30)changed++
+            }
+        }
+        return changed to samples
+    }
+    private fun settledSnapshot(point:LatLng):Bitmap {
+        ui.waitUntil(15_000){main{it.nativeMap!!.queryRenderedFeatures(it.nativeMap!!.projection.toScreenLocation(point),ErpMapLayer876.LAYER).isNotEmpty()}}
+        // Native symbol/tile fades can continue after a moveCamera callback.
+        // Compare settled frames, rather than interpreting that fade as occlusion.
+        Thread.sleep(500)
+        var previous=snapshot()
+        repeat(16) {
+            Thread.sleep(300)
+            val next=snapshot();val delta=difference(previous,next,point)
+            previous.recycle()
+            if(delta.first.toDouble()/delta.second<.005)return next
+            previous=next
+        }
+        previous.recycle();error("Native ERP render did not settle")
+    }
     @Test fun realNativeErpRemainsAboveRouteCasingAndNewRerouteLines() {
         val offline=ErpOverspeedEvidence877.verifyNetworkBlocked()
         ready()
@@ -46,24 +74,17 @@ class ErpLayerOrder877Test {
                 main{a->val map=a.nativeMap!!;NavigationMapPalette.apply(map.style!!,night)
                     map.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(point).zoom(17.0).tilt(pitch).bearing(bearing).build()))}
                 Thread.sleep(600)
-                val before=snapshot()
+                val before=settledSnapshot(point)
                 val route=main{a->val map=a.nativeMap!!
                     listOf(map.addPolyline(PolylineOptions().add(LatLng(point.latitude-.002,point.longitude),LatLng(point.latitude+.002,point.longitude)).color(Color.rgb(4,51,123)).width(17f)),
                         map.addPolyline(PolylineOptions().add(LatLng(point.latitude-.002,point.longitude),LatLng(point.latitude+.002,point.longitude)).color(Color.rgb(0,132,255)).width(11f)))}
                 Thread.sleep(600)
-                val after=snapshot()
-                val screen=main{it.nativeMap!!.projection.toScreenLocation(point)}
-                val density=ui.activity.resources.displayMetrics.density
-                val halfW=(20*density).toInt();val halfH=(7*density).toInt()
-                var samples=0;var changed=0
-                for(y in (screen.y.toInt()-halfH)..(screen.y.toInt()+halfH))for(x in (screen.x.toInt()-halfW)..(screen.x.toInt()+halfW)) {
-                    if(x in 0 until after.width && y in 0 until after.height) {
-                        samples++;val a=before.getPixel(x,y);val b=after.getPixel(x,y)
-                        if(abs(Color.red(a)-Color.red(b))+abs(Color.green(a)-Color.green(b))+abs(Color.blue(a)-Color.blue(b))>30)changed++
-                    }
-                }
-                assertTrue("Route/casing obscured ERP in $name night=$night: $changed/$samples",changed.toDouble()/samples<.02)
+                val after=settledSnapshot(point)
+                val (changed,samples)=difference(before,after,point)
                 val order=main{a->a.nativeMap!!.style!!.layers.map{it.id}}
+                ErpOverspeedEvidence877.png("ERP-$name-${if(night)"night" else "day"}-before.png",before)
+                ErpOverspeedEvidence877.png("ERP-$name-${if(night)"night" else "day"}.png",after)
+                ErpOverspeedEvidence877.json("ERP-$name-${if(night)"night" else "day"}-order.json",JSONObject().put("layers",JSONArray(order)).put("changed",changed).put("pixels",samples))
                 val erp=order.indexOf(ErpMapLayer876.LAYER)
                 val annotations=order.indexOfFirst{it.endsWith(".annotations.points")}
                 assertTrue(annotations>=0 && erp>annotations)
@@ -71,8 +92,8 @@ class ErpLayerOrder877Test {
                 val vehicle=order.withIndex().filter{it.value.contains("location") && (it.value.contains("foreground")||it.value.contains("bearing"))}
                 assertTrue("Native vehicle stack absent",vehicle.isNotEmpty())
                 assertTrue("Native vehicle must stay above ERP",vehicle.all{it.index>erp})
+                assertTrue("Route/casing obscured ERP in $name night=$night: $changed/$samples",changed.toDouble()/samples<.02)
                 assertEquals(101,main{it.erp.catalog!!.sites.size})
-                ErpOverspeedEvidence877.png("ERP-$name-${if(night)"night" else "day"}.png",after)
                 cases.put(JSONObject().put("mode",name).put("night",night).put("changedPixels",changed).put("pixels",samples)
                     .put("erpAboveRouteAndCasing",true).put("vehicleAboveErp",true))
                 main{a->route.forEach{a.nativeMap!!.removePolyline(it)}}

@@ -3,6 +3,8 @@ set -euo pipefail
 mkdir -p dist/native
 adb root
 adb wait-for-device
+adb shell svc wifi disable
+adb shell svc data disable
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 B877_ERP_PACKAGE=com.izzyan.sgdeliveryplanner.b877erptest
 B877_ERP_UID=$(adb shell cmd package list packages -U "$B877_ERP_PACKAGE" | sed -n 's/.* uid:\([0-9]*\).*/\1/p' | head -1 | tr -d '\r')
