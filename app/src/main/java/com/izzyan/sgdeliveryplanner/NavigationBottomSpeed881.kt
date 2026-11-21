@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -75,52 +74,37 @@ internal fun NavigationBottomSpeedMeters881(
                     fontSize=11.sp,fontWeight=FontWeight.Bold,maxLines=1)
             }
         }
-        if(showSpeedLimit) {
+        // Only a genuine numeric limit may appear in the speed-limit sign.
+        // Source labels, evidence dates and diagnostic notes remain in the
+        // RoadSpeedState875 model for safety but must not be rendered.
+        if(showSpeedLimit && speedLimit.hasNumericLimit && speedLimit.numberKmh!=null) {
+            val limitKmh=checkNotNull(speedLimit.numberKmh)
             Column(
                 Modifier.width(NavigationBottomSpeedLayout881.SPEED_LIMIT_WIDTH_DP.dp)
                     .testTag("gps-bottom-speed-limit"),
-                horizontalAlignment=Alignment.CenterHorizontally,
-                verticalArrangement=Arrangement.spacedBy(2.dp)
+                horizontalAlignment=Alignment.CenterHorizontally
             ) {
                 Surface(
                     color=Color.White,
                     shape=CircleShape,
                     border=BorderStroke(
-                        if(speedLimit.highlightOverspeed)4.dp else
-                            if(speedLimit.hasNumericLimit)3.dp else 1.5.dp,
-                        if(speedLimit.highlightOverspeed)Color(0xFFFF3B30) else
-                            if(speedLimit.hasNumericLimit)Color(0xFFD52C2C) else Color.Gray
+                        if(speedLimit.highlightOverspeed)4.dp else 3.dp,
+                        if(speedLimit.highlightOverspeed)Color(0xFFFF3B30) else Color(0xFFD52C2C)
                     ),
                     modifier=Modifier.size(NavigationBottomSpeedLayout881.SPEED_LIMIT_SIGN_DP.dp)
                         .testTag("gps-bottom-speed-limit-sign")
-                ){
-                    Column(Modifier.fillMaxSize(),
-                        horizontalAlignment=Alignment.CenterHorizontally,
-                        verticalArrangement=Arrangement.Center) {
-                        Text(speedLimit.numberKmh?.toString()?:"CHECK\nSIGNS",
-                            color=if(speedLimit.hasNumericLimit)Color.Black else Color.Gray,
-                            fontSize=if(speedLimit.hasNumericLimit)23.sp else 9.sp,
+                ) {
+                    Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+                        Text(
+                            limitKmh.toString(),
+                            color=Color.Black,
+                            fontSize=if(limitKmh>=100)25.sp else 32.sp,
                             fontWeight=FontWeight.Black,
-                            lineHeight=if(speedLimit.hasNumericLimit)25.sp else 11.sp,
-                            maxLines=if(speedLimit.hasNumericLimit)1 else 2)
-                        if(speedLimit.hasNumericLimit)
-                            Text("km/h",color=Color.Black,fontSize=7.sp,maxLines=1)
+                            maxLines=1,
+                            softWrap=false,
+                            modifier=Modifier.testTag("gps-bottom-speed-limit-number")
+                        )
                     }
-                }
-                Text(speedLimit.badgeLabel,
-                    color=when(speedLimit.limit?.kind){
-                        RoadLimitSource875.OFFICIAL->Color(0xFF82C89A)
-                        RoadLimitSource875.MAP_DATA->SGColors.Gold
-                        RoadLimitSource875.GENERAL_RULE->Color(0xFFFFAF72)
-                        null->SGColors.Silver
-                    },
-                    fontSize=8.sp,fontWeight=FontWeight.Bold,
-                    maxLines=1,overflow=TextOverflow.Ellipsis)
-                // Preserve the source-note information without expanding the
-                // panel or replacing the 52dp regulatory-looking sign.
-                speedLimit.note?.let {
-                    Text(it,color=SGColors.Silver,fontSize=7.sp,
-                        maxLines=1,overflow=TextOverflow.Ellipsis)
                 }
             }
         }
