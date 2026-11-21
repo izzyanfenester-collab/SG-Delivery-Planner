@@ -84,8 +84,14 @@ internal fun CameraSafetySettingsPanel(session:NavigationSession) {
             enabled=session.cameraAudioAvailable && !session.muted) {
             Text("Test Panda Warrior Overspeed Voice",color=SGColors.Gold,fontSize=12.sp)
         }
-        Text("Only verified LTA/statute road limits; +3 km/h for 2 seconds. No warning on unknown roads.",
+        Text("Red font: confirmed current road with OFFICIAL or validated MAP DATA speed limit. Voice: OFFICIAL only, +3 km/h for 2s. Unknown: no false warning.",
             color=SGColors.Silver,fontSize=10.sp)
+        Text("Live Overspeed: ${session.overspeedDiagnostic879}",
+            color=if(session.overspeedVisualState879.red)androidx.compose.ui.graphics.Color(0xFFFF3030)
+                else SGColors.Silver,fontSize=10.sp)
+        if(!p.overspeed || !session.redSpeedFontEnabled878) Text(
+            "Visual overspeed warning disabled in saved Settings.",
+            color=SGColors.Warning,fontSize=10.sp)
         Text("Speed & red-light sources: Singapore Police Force",
             color=SGColors.Silver,fontSize=11.sp)
         Text("Road limits: LTA/statute, validated OSM (ODbL), or applicable SG general rule. Unknown: CHECK SIGNS.",
