@@ -80,8 +80,9 @@ internal fun NavigationMap(
     var lastPaintedProgress by remember { mutableDoubleStateOf(Double.NaN) }
     var mapHeightPixels by remember { mutableIntStateOf(0) }
     var mapWidthPixels by remember { mutableIntStateOf(0) }
+    var routePaintEpoch by remember { mutableIntStateOf(0) }
 
-    ErpMapIntegration876(map,styleReady,erp)
+    ErpMapIntegration876(map,styleReady,erp,routePaintEpoch)
 
     LaunchedEffect(session.route) {
         // Rerouting starts a fresh travelled/remaining division; map style changes do not.
@@ -252,6 +253,9 @@ internal fun NavigationMap(
         routeLine = refreshRouteSection(native, null, frame?.remaining ?: session.shape,
             android.graphics.Color.rgb(0, 132, 255), 11f)
         session.routeLineRendered(session.route)
+        // Route annotations may be installed after ERP's initial GeoJSON layer.
+        // Reassert ERP-above-blue-line ordering once the real line exists.
+        routePaintEpoch++
     }
 
     // Local, opt-in traffic overlays are updated separately. Keep the solid
