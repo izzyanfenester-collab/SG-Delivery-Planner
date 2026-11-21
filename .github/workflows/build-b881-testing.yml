@@ -42,7 +42,7 @@ jobs:
           apk=app/build/outputs/apk/debug/app-debug.apk
           bt="$ANDROID_HOME/build-tools/36.0.0"
           "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b881test' versionCode='89' versionName='1.4.69-b881-testing'"
-          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #880 TESTING'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #881 TESTING'"
           "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
           "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
           cp "$apk" dist/SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk
