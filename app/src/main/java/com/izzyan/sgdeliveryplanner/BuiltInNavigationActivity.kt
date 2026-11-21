@@ -753,7 +753,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             !overspeedState878.confirmed || !voiceAudio.available209 ||
             "overspeed_warning" !in voiceAudio.cameraPack.clips ||
             SystemClock.elapsedRealtime()-lastFix>6_000L) return
-        if(voiceAudio.activePriority?.rank ?: -1 >= VoicePriority.CAMERA.rank)return
+        if((voiceAudio.activePriority?.rank ?: -1) >= VoicePriority.CAMERA.rank)return
         val segment=overspeedState878.roadSegmentId?:return
         val at=SystemClock.elapsedRealtime()
         val phrase=VoicePhrase("overspeed-878-$segment-$at",VoicePriority.CAMERA,
