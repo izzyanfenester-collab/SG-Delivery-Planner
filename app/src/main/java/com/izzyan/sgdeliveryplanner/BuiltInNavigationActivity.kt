@@ -293,10 +293,11 @@ class BuiltInNavigationActivity : ComponentActivity() {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text((fix.speed.coerceAtLeast(0f) * 3.6f).roundToInt().toString(),
-                                    color=if(session.roadSpeedLimitState875.overspeedVisual)
+                                    color=if(session.overspeedState878.confirmed && session.redSpeedFontEnabled878)
                                         Color(0xFFE53935) else Color.White,
                                     fontSize=27.sp,fontWeight=FontWeight.Bold)
-                                Text("km/h",color=SGColors.Silver,fontSize=11.sp)
+                                Text("km/h",color=if(session.overspeedState878.confirmed && session.redSpeedFontEnabled878)
+                                    Color(0xFFE53935) else SGColors.Silver,fontSize=11.sp)
                                 if(session.cameraPreferences.speedLimitDisplay){
                                     // A red circle does not imply verification: the distinct
                                     // classification is always immediately beneath the sign.
@@ -635,6 +636,18 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var speedLimitState868 by mutableStateOf(SpeedLimitState868()); private set
     private val roadSpeedStore875=RoadSpeedStore875(context)
     private val roadSpeedTracker875=RoadSpeedLimitTracker875()
+    private val overspeedMonitor878=OverspeedSafetyMonitor878()
+    private val overspeedPrefs878=OverspeedPreferences878(context)
+    var redSpeedFontEnabled878 by mutableStateOf(overspeedPrefs878.redSpeedFont()); private set
+    var overspeedVoiceCooldownSeconds878 by mutableIntStateOf(overspeedPrefs878.cooldownSeconds()); private set
+    var overspeedState878 by mutableStateOf(OverspeedState878()); private set
+    fun setRedSpeedFont878(enabled:Boolean) {
+        redSpeedFontEnabled878=enabled;overspeedPrefs878.setRedSpeedFont(enabled)
+    }
+    fun setOverspeedCooldown878(seconds:Int) {
+        overspeedPrefs878.setCooldownSeconds(seconds)
+        overspeedVoiceCooldownSeconds878=seconds
+    }
     private var roadSpeedLookup875:Job?=null
     private var roadSpeedGeneration875=0L
     var roadSpeedLimitState875 by mutableStateOf(RoadSpeedState875()); private set
@@ -651,6 +664,13 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     val cameraAudioAvailable get()=voiceAudio.available209
     fun updateCameraPreferences(newPrefs:CameraAlertPreferences){
         cameraPreferences=newPrefs;cameraPrefsStore.save(newPrefs)
+        if(!newPrefs.overspeed) {
+            overspeedMonitor878.reset()
+            overspeedState878=OverspeedState878()
+        }
+        if((!newPrefs.verifiedOverspeedVoice || !newPrefs.overspeed) &&
+            voiceAudio.activePhraseKey?.startsWith("overspeed-878-")==true)
+            voiceAudio.stop("overspeed-settings-disabled")
         if(!newPrefs.master)upcomingEnforcementCamera=null
         activeCameraCue872?.let { if(!cameraCueRelevant872(it))voiceAudio.stop("camera-settings-disabled") }
     }
@@ -720,6 +740,42 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun clearRoadSpeed875(reason:String) {
         roadSpeedGeneration875++;roadSpeedLookup875?.cancel()
         roadSpeedLimitState875=roadSpeedTracker875.invalidate(reason)
+        overspeedMonitor878.reset()
+        overspeedState878=OverspeedState878()
+        if(voiceAudio.activePhraseKey?.startsWith("overspeed-878-")==true)
+            voiceAudio.stop("speed-limit-unavailable")
+    }
+    /** All safety audio goes through the real Panda V2 player. Real STARTED is the
+     * only event that consumes a cooldown; blocked/deferred alerts can retry. */
+    private fun warnOverspeed878() {
+        if(!active || arrived || offRoute || muted || !cameraPreferences.overspeed ||
+            !cameraPreferences.verifiedOverspeedVoice || !overspeedState878.voiceDue ||
+            !overspeedState878.confirmed || !voiceAudio.available209 ||
+            "overspeed_warning" !in voiceAudio.cameraPack.clips ||
+            SystemClock.elapsedRealtime()-lastFix>6_000L) return
+        if(voiceAudio.activePriority?.rank ?: -1 >= VoicePriority.CAMERA.rank)return
+        val segment=overspeedState878.roadSegmentId?:return
+        val at=SystemClock.elapsedRealtime()
+        val phrase=VoicePhrase("overspeed-878-$segment-$at",VoicePriority.CAMERA,
+            listOf(VoicePart("overspeed_warning","Verified road overspeed warning")))
+        val accepted=voiceAudio.play(phrase,stillRelevant={
+            active && !arrived && !offRoute && !muted && cameraPreferences.overspeed &&
+                cameraPreferences.verifiedOverspeedVoice && overspeedState878.confirmed &&
+                overspeedState878.roadSegmentId==segment &&
+                SystemClock.elapsedRealtime()-lastFix<6_000L
+        }) { event ->
+            if(event.state==PandaPlaybackState866.STARTED)
+                overspeedMonitor878.playbackStarted(event.elapsedMs)
+            else if(event.state in setOf(PandaPlaybackState866.INTERRUPTED,
+                    PandaPlaybackState866.CANCELLED,PandaPlaybackState866.FAILED))
+                overspeedMonitor878.playbackNotStarted()
+            android.util.Log.i("SGOverspeed878",
+                "audio=${event.state} clip=overspeed_warning.mp3 reason=${event.reason} road=$segment")
+        }
+        if(accepted) {
+            overspeedMonitor878.markRequested(at)
+            android.util.Log.i("SGOverspeed878","voice accepted, awaiting MediaPlayer STARTED road=$segment")
+        } else android.util.Log.d("SGOverspeed878","voice deferred; audio priority or focus unavailable")
     }
 
     /** Read-only lookup runs off the GPS/rerouting path; no camera setting gates it. */
@@ -744,11 +800,16 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 if(SystemClock.elapsedRealtime()-sample.timeMs>6000){clearRoadSpeed875("GPS sample stale; check signs");return@launch}
                 roadSpeedCatalogInfo875="${loaded.first.ways} road ways · ${loaded.first.knownDirections} mapped directional limits · ${loaded.first.checkedDate}"
                 roadSpeedLimitState875=roadSpeedTracker875.observe(sample.copy(routeBearing=loaded.third),loaded.second,cameraPreferences.overspeed)
+                overspeedMonitor878.requestTimedOut(SystemClock.elapsedRealtime())
+                overspeedState878=overspeedMonitor878.observe(roadSpeedLimitState875,sample,
+                    cameraPreferences.overspeed,sample.timeMs,
+                    overspeedVoiceCooldownSeconds878*1_000L)
+                warnOverspeed878()
                 android.util.Log.d("SGRoadSpeed875","gps=${sample.point.lat},${sample.point.lon} accuracy=${sample.accuracy} heading=${sample.heading} ${roadSpeedLimitState875.diagnostics}")
             }catch(e:CancellationException){throw e}
             catch(e:Exception){
                 if(generation==roadSpeedGeneration875){
-                    roadSpeedLimitState875=roadSpeedTracker875.invalidate("Offline road catalog unavailable; check signs")
+                    clearRoadSpeed875("Offline road catalog unavailable; check signs")
                     roadSpeedCatalogInfo875="Catalog unavailable; previous data retained"
                 }
                 android.util.Log.e("SGRoadSpeed875","Road-speed lookup failed",e)
