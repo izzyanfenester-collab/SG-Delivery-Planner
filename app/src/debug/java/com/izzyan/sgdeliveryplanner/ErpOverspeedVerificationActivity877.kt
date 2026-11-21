@@ -66,7 +66,9 @@ class ErpOverspeedVerificationActivity877:ComponentActivity() {
                 .foregroundDrawable(R.drawable.ic_gps_transparent).backgroundDrawable(R.drawable.ic_gps_transparent)
                 .bearingDrawable(R.drawable.ic_gps_transparent).accuracyAlpha(0f).pulseEnabled(false)
                 .enableStaleState(false).elevation(0f).minZoomIconScale(1f).maxZoomIconScale(1f).build())
-            component.isLocationComponentEnabled=true;component.renderMode=RenderMode.GPS
+            if(checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED)
+                component.isLocationComponentEnabled=true
+            component.renderMode=RenderMode.GPS
             styleVersion++;ready=true
         }
     }
