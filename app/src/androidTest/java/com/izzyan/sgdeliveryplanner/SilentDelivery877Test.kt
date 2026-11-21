@@ -56,12 +56,15 @@ class SilentDelivery877Test {
         ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
             .bufferedReader().use { it.readText() }
 
-    private fun configureAudio() = ui.runOnIdle {
+    private fun configureAudio() {
+        ui.waitUntil(15_000) { !hasValidatedNetwork(app) }
+        ui.runOnIdle {
         assertFalse("Offline acceptance must have no validated network", hasValidatedNetwork(app))
         GpsNavigationModePreferences(app).apply { setSoundEnabled(true); setVoiceVolume(1f) }
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audio.setStreamVolume(AudioManager.STREAM_MUSIC,
             maxOf(1, audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) / 2), 0)
+        }
     }
 
     private fun fixture(): Plan {
