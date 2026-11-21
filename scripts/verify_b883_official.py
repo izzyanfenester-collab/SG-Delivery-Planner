@@ -136,7 +136,7 @@ Published as latest stable Official for the existing in-app update checker.
 """
     (out/'SG-Delivery-B883-Official-Report.md').write_text(summary)
     print(json.dumps(report,indent=2))
-if name=='main':
+if __name__=='__main__':
     if sys.argv[1]=='source':print(json.dumps(source(),indent=2))
     elif sys.argv[1]=='restore':restore(*sys.argv[2:5])
     elif sys.argv[1]=='verify':verify(*sys.argv[2:7])
