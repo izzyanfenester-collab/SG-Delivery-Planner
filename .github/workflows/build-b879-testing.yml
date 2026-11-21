@@ -1,0 +1,82 @@
+name: B879 Overspeed Red Font and Panda Voice TESTING
+on:
+  push:
+    branches: [feature/build-879-overspeed-red-font-testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: b879-overspeed-red-font-testing
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/build-879-overspeed-red-font-testing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify exact B878 TESTING baseline and targeted source-only changes
+        run: python3 scripts/verify_b879_testing.py source
+      - name: Restore byte-identical B877 Official bundled assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.66-b878-testing/SG-Delivery-B878-ERP-Overspeed-TESTING.apk -o "$RUNNER_TEMP/B878-Testing.apk"
+          python3 scripts/verify_b879_testing.py restore "$RUNNER_TEMP/B878-Testing.apk"
+      - name: Full JVM/Robolectric regressions, verified limit and layer tests, lint, APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Validate isolated TESTING APK and unchanged B877 application assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/aapt" dump badging "$apk" | grep -F "package: name='com.izzyan.sgdeliveryplanner.b879test' versionCode='87' versionName='1.4.67-b879-testing'"
+          "$bt/aapt" dump badging "$apk" | grep -F "application-label:'SG Delivery #879 TESTING'"
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" > dist/zipalign.txt
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          cp "$apk" dist/SG-Delivery-B879-Overspeed-RedFont-TESTING.apk
+          python3 scripts/verify_b879_testing.py verify "$RUNNER_TEMP/B878-Testing.apk" "$apk" dist
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          (cd dist && zip -q -r B879-Verification-Evidence.zip B879-Verification.json zipalign.txt signature.txt unit-test-results lint-results-debug.html)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B879-RedFont-TESTING-APK-and-evidence
+          path: |
+            dist/SG-Delivery-B879-Overspeed-RedFont-TESTING.apk
+            dist/B879-Verification-Evidence.zip
+          if-no-files-found: error
+      - name: Publish isolated TESTING GitHub Release; Official unchanged
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.67-b879-testing
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::Testing release already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$tag" dist/SG-Delivery-B879-Overspeed-RedFont-TESTING.apk dist/B879-Verification-Evidence.zip \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'SG Delivery #879 TESTING – Critical Overspeed Red Font and Voice Fix' \
+            --notes 'B879 TESTING fixes current GPS speed 150 km/h with displayed direction-matched limit 90 km/h remaining WHITE. Official and validated MAP DATA speed limits now drive independent RED number and km/h label using the same GPS speed display and road segment. Android missing speed-accuracy metadata uses two consecutive consistent fixes; one-off spikes are rejected. The Panda Warrior overspeed MP3 remains official-source only, with two-second confirmation and cooldown, independent of red UI. Saved settings and all B878 features preserved. 436 original B878 assets including 209 Panda MP3/PCM, ERP gantry records and cameras preserved byte-identical. Fresh JVM/Robolectric regressions, Android build, lint, APK signature and alignment checked; phone/Bluetooth real-drive verification still required. DO NOT MERGE INTO OFFICIAL.'
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.65-b877
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B879-failure-and-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            dist/B879-Verification.json
