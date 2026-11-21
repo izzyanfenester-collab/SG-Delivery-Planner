@@ -80,7 +80,8 @@ class OverspeedVisual879Test {
         val m=OverspeedVisualMonitor879()
         assertTrue(m.observe(road(1000,limit=80),fix(1000,86.0),true).red)
         assertFalse(m.observe(road(2000,limit=90,segment="CTE-90:F"),fix(2000,86.0),true).red)
-        assertTrue(m.observe(road(3000,limit=90,segment="CTE-90:F"),fix(3000,150.0),true).red)
+        assertFalse(m.observe(road(3000,limit=90,segment="CTE-90:F"),fix(3000,150.0),true).red)
+        assertTrue(m.observe(road(4000,limit=90,segment="CTE-90:F"),fix(4000,148.0),true).red)
     }
 
     @Test fun fallbackSamplesMustBeNewGpsUpdatesNotRepeatedAsyncCallbacks() {
