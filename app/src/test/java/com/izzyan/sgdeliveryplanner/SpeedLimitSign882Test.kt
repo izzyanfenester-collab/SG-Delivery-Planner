@@ -3,7 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import org.junit.Assert.*
 import org.junit.Test
 
-/** B882: speed-limit sign must show digits ONLY while current-speed km/h stays. */
+/** B882 number-only limit sign retained; B883 also makes Current Speed number-only. */
 class SpeedLimitSign882Test {
     @Test fun speedLimit90IsDigitsOnly() {
         assertEquals("90",SpeedLimitSign882.visibleNumber(90))
@@ -23,14 +23,14 @@ class SpeedLimitSign882Test {
         assertNull(SpeedLimitSign882.visibleNumber(-1))
     }
 
-    @Test fun originalCircleAndHorizontalMeterDimensionsRemainUnchanged() {
+    @Test fun originalSpeedLimitCircleDiameterRemainsButMetersHaveEqualWidth() {
         assertEquals(52,NavigationBottomSpeedLayout881.SPEED_LIMIT_SIGN_DP)
         assertEquals(64,NavigationBottomSpeedLayout881.SPEED_LIMIT_WIDTH_DP)
-        assertEquals(142,NavigationBottomSpeedLayout881.pairWidthDp)
+        assertEquals(136,NavigationBottomSpeedLayout881.pairWidthDp)
         assertTrue(NavigationBottomSpeedLayout881.inlineWithActions(400f,1f))
     }
 
-    @Test fun speedLimitSignEnlargedWithoutChangingCurrentSpeedNumberSize() {
+    @Test fun speedLimitSignRetainsReadableNumberSizes() {
         assertTrue(SpeedLimitSign882.fontSizeSp(90)>23)
         assertTrue(SpeedLimitSign882.fontSizeSp(100)>23)
     }
