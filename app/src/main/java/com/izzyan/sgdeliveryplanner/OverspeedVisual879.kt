@@ -79,13 +79,14 @@ internal class OverspeedVisualMonitor879 {
         if(freshFix) {
             previousRoadId=id;previousSpeedKmh=current;previousFixTimeMs=fix.timeMs
         }
-        val red=reliable && current>requireNotNull(limit).kmh
+        val matchedLimit=requireNotNull(limit)
+        val red=reliable && current>matchedLimit.kmh
         val reason=when {
             implausibleJump->"One-sample GPS speed jump: awaiting confirmation"
             accuracy!=null && !explicitAccuracy->"GPS reported low speed accuracy"
             missingAccuracy && consecutiveWithoutAccuracy<2->"Speed accuracy absent: awaiting second consistent GPS fix"
             !reliable->"GPS speed confidence insufficient"
-            red->"VISUAL OVERSPEED: ${current} km/h > ${limit.kmh} km/h [${limit.kind.label}]"
+            red->"VISUAL OVERSPEED: ${current} km/h > ${matchedLimit.kmh} km/h [${matchedLimit.kind.label}]"
             else->"Current speed is at or below matched road limit"
         }
         state=OverspeedVisualState879(red,reliable,current,limit.kmh,limit.kind,id,reason)
