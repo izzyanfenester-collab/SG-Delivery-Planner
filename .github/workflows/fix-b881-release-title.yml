@@ -21,10 +21,10 @@ jobs:
           apk=SG-Delivery-B881-Bottom-Panel-Speed-TESTING.apk
           expected='sha256:e2287b24ca3a6bbbc5c877e5d45be32c1ff9bad212aae29b07a2d0e47fafc083'
           test "$(gh api repos/$GH_REPO/releases/latest --jq .tag_name)" = v1.4.67-b879
-          actual="$(gh release view "$tag" --json assets --jq ".assets[] | select(.name == \"$apk\") | .digest")"
+          actual="$(gh api "repos/$GH_REPO/releases/tags/$tag" --jq ".assets[] | select(.name == \"$apk\") | .digest")"
           test "$actual" = "$expected"
           test "$(gh release view "$tag" --json isPrerelease --jq .isPrerelease)" = true
           gh release edit "$tag" --title 'SG Delivery Build #881 TESTING – Bottom Navigation Panel Horizontal Speed Meters'
           test "$(gh release view "$tag" --json name --jq .name)" = 'SG Delivery Build #881 TESTING – Bottom Navigation Panel Horizontal Speed Meters'
-          test "$(gh release view "$tag" --json assets --jq ".assets[] | select(.name == \"$apk\") | .digest")" = "$expected"
+          test "$(gh api "repos/$GH_REPO/releases/tags/$tag" --jq ".assets[] | select(.name == \"$apk\") | .digest")" = "$expected"
           echo 'B881 TESTING title corrected. Original APK and Official release untouched.'
