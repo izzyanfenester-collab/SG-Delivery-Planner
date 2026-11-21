@@ -81,33 +81,48 @@ class HistorySpacing884Test {
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult){it(result)}
         return result.first()
     }
-    private fun firstCardTypography(plan:Plan):Map<String,Float> {
+    private fun firstCardTypography(plan:Plan,evidenceName:String):Map<String,Float> {
         val summary=deliverySummary(plan)
         val values=listOf(plan.deliveryDate.toString(),"COMPLETED","Route ID: ${plan.id.take(8)}",
             "Total Parcel","Delivered / Remaining","Success Rate","Total Distance","Finish Time",
             summary.totalParcel.toString(),"${summary.delivered} / 0","100.0%",km(summary.totalKm),
             time(summary.finish),"Tap to View History")
-        return values.associateWith { text->
+        val details=JSONArray()
+        val issues=mutableListOf<String>()
+        val fonts=values.associateWith { text->
             val layout=textLayout(text)
-            assertFalse("Clipped/truncated text: $text",layout.hasVisualOverflow)
+            val right=(0 until layout.lineCount).maxOf{layout.getLineRight(it)}
+            val bottom=layout.getLineBottom(layout.lineCount-1)
+            val fullText=layout.getLineEnd(layout.lineCount-1,true)>=text.trimEnd().length &&
+                (0 until layout.lineCount).none{layout.isLineEllipsized(it)}
+            val fits=right<=layout.size.width+1f && bottom<=layout.size.height+1f
+            details.put(JSONObject().put("text",text).put("fontSp",layout.layoutInput.style.fontSize.value)
+                .put("widthPx",layout.size.width).put("heightPx",layout.size.height)
+                .put("lineRightPx",right).put("lineBottomPx",bottom)
+                .put("rawOverflowFlag",layout.hasVisualOverflow).put("fullText",fullText).put("fitsWithinOnePixelRounding",fits))
+            if(!fullText)issues.add("Truncated text: $text")
+            if(!fits)issues.add("Clipped line bounds for $text: right=$right bottom=$bottom size=${layout.size}")
             layout.layoutInput.style.fontSize.value
         }
+        json(evidenceName,JSONObject().put("textLayouts",details).put("issues",JSONArray(issues)))
+        assertTrue(issues.joinToString("; "),issues.isEmpty())
+        return fonts
     }
     @Test fun compactHistoryReclaimsSpaceWithoutShrinkingOrTruncatingText() {
         val plans=seed();val results=JSONArray()
         for((width,scale) in listOf(400 to 1f,320 to 1f,320 to 1.5f)) {
             variant(true,width,scale)
             val beforeHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
-            val beforeFonts=firstCardTypography(plans[0])
             screenshot("B884-before-${width}dp-${scale}font.png")
+            val beforeFonts=firstCardTypography(plans[0],"B884-before-${width}dp-${scale}font-text.json")
             variant(false,width,scale)
             val afterHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
-            val afterFonts=firstCardTypography(plans[0])
+            screenshot("B884-after-${width}dp-${scale}font.png")
+            val afterFonts=firstCardTypography(plans[0],"B884-after-${width}dp-${scale}font-text.json")
             assertEquals("Existing typography changed",beforeFonts,afterFonts)
             assertTrue("Card did not become more compact",afterHeight<beforeHeight)
             val saving=(1-afterHeight/beforeHeight)*100
             if(width==400 && scale==1f)assertTrue("Normal-width reduction $saving outside target",saving in 25f..35f)
-            screenshot("B884-after-${width}dp-${scale}font.png")
             results.put(JSONObject().put("widthDp",width).put("fontScale",scale)
                 .put("baselineHeightDp",beforeHeight).put("compactHeightDp",afterHeight)
                 .put("heightReductionPercent",saving).put("fontSizesUnchanged",true).put("noTextOverflow",true))
@@ -130,9 +145,11 @@ class HistorySpacing884Test {
         ui.onNodeWithContentDescription("Back to History").assertExists().performClick()
         assertEquals(activeBefore,ui.runOnIdle{vm.route?.id})
         card("2026-11-21").performTouchInput{longClick()}
-        ui.onNodeWithText("Delete Selected (1)").performScrollTo().performClick()
+        ui.onNode(hasScrollAction()).performScrollToIndex(0)
+        ui.onNodeWithText("Cancel selection").assertExists()
+        ui.onNodeWithText("Delete Selected (1)").performClick()
         ui.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).performClick()
-        ui.onNodeWithText("Cancel selection").performScrollTo().performClick()
+        ui.onNodeWithText("Cancel selection").performClick()
         assertEquals(before,runBlocking{vm.repo.dao.history().first().associate{it.id to it.json}})
         ui.onNode(hasScrollAction()).performScrollToNode(hasText("2026-11-12"))
         card("2026-11-12").performClick()
@@ -141,7 +158,9 @@ class HistorySpacing884Test {
         assertEquals(before,runBlocking{vm.repo.dao.history().first().associate{it.id to it.json}})
         ui.onNode(hasScrollAction()).performScrollToNode(hasText("2026-11-10"))
         card("2026-11-10").performTouchInput{longClick()}
-        ui.onNodeWithText("Delete Selected (1)").performScrollTo().performClick()
+        ui.onNode(hasScrollAction()).performScrollToIndex(0)
+        ui.onNodeWithText("Cancel selection").assertExists()
+        ui.onNodeWithText("Delete Selected (1)").performClick()
         ui.onNode(hasText("Delete Selected") and hasAnyAncestor(isDialog())).performClick()
         ui.waitUntil(15_000){!vm.busy}
         val after=runBlocking{vm.repo.dao.history().first().associate{it.id to it.json}}

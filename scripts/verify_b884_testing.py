@@ -104,8 +104,9 @@ and an exact DEBUG-only copy of #883, with identical synthetic Room records,
 viewport, density, fonts and background. At width 400dp/font scale 1.0 the first
 card changes from {normal['baselineHeightDp']:.1f}dp to {normal['compactHeightDp']:.1f}dp,
 saving {normal['heightReductionPercent']:.1f}%. Further captures cover width 320dp
-at font scales 1.0 and 1.5. Typography is identical and TextLayoutResult reports
-no clipping/truncation. All three status stamps remain present. Six original
+at font scales 1.0 and 1.5. Typography is identical; native text checks retain all
+characters and line bounds with a one-pixel rendering-rounding tolerance. Raw
+layout diagnostics are retained. All three status stamps remain present. Six original
 before/after PNGs and exact measured results are included.
 
 Real History UI actions verified: completed-route read-only viewing, long-press
