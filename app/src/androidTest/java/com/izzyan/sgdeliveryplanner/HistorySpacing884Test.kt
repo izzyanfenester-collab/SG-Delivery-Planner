@@ -97,11 +97,11 @@ class HistorySpacing884Test {
         val plans=seed();val results=JSONArray()
         for((width,scale) in listOf(400 to 1f,320 to 1f,320 to 1.5f)) {
             variant(true,width,scale)
-            val beforeHeight=card("2026-11-21").getUnclippedBoundsInRoot().height.value
+            val beforeHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
             val beforeFonts=firstCardTypography(plans[0])
             screenshot("B884-before-${width}dp-${scale}font.png")
             variant(false,width,scale)
-            val afterHeight=card("2026-11-21").getUnclippedBoundsInRoot().height.value
+            val afterHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
             val afterFonts=firstCardTypography(plans[0])
             assertEquals("Existing typography changed",beforeFonts,afterFonts)
             assertTrue("Card did not become more compact",afterHeight<beforeHeight)
