@@ -42,7 +42,7 @@ class NavigationBottomSpeed881Test {
     @Test fun visualSpeedRemainsIndependentOfPandaVoiceCooldown() {
         val meter=OverspeedVisualMonitor879()
         val road=RoadSpeedState875(
-            RoadLimit875(90,RoadLimitSource875.MAP_DATA,"map","2026-11-21"),
+            RoadLimit875(90,RoadLimitSource875.MAP_DATA,"https://www.openstreetmap.org/","2026-11-21"),
             "PIE:F","PIE",observedAtMs=1000)
         val fix=RoadSpeedFix875(GpsPoint(1.32,103.9),1000,5f,90f,
             (150.0/3.6).toFloat(),0.5f)
