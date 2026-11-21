@@ -669,13 +669,14 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var cameraMarkerBucket by mutableStateOf(""); private set
     val cameraAudioAvailable get()=voiceAudio.available209
     fun updateCameraPreferences(newPrefs:CameraAlertPreferences){
+        val previousOverspeedEnabled=cameraPreferences.overspeed
         cameraPreferences=newPrefs;cameraPrefsStore.save(newPrefs)
         if(!newPrefs.overspeed) {
             overspeedMonitor878.reset()
             overspeedState878=OverspeedState878()
             overspeedVisualMonitor879.reset("Overspeed Warning disabled in Settings")
             overspeedVisualState879=overspeedVisualMonitor879.state
-        } else if(!cameraPreferences.overspeed) {
+        } else if(!previousOverspeedEnabled) {
             // Preferences have just become ON; reevaluate on the next real fix.
             overspeedVisualMonitor879.reset("Waiting for a new GPS fix after enabling warnings")
         }
