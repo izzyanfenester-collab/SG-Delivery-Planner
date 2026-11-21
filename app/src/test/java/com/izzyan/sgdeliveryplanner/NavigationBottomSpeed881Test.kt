@@ -5,10 +5,10 @@ import org.junit.Test
 
 class NavigationBottomSpeed881Test {
     @Test fun speedAndLimitAreHorizontalSiblingsWithExactWidth() {
-        assertEquals(70,NavigationBottomSpeedLayout881.SPEED_WIDTH_DP)
+        assertEquals(64,NavigationBottomSpeedLayout881.SPEED_WIDTH_DP)
         assertEquals(64,NavigationBottomSpeedLayout881.SPEED_LIMIT_WIDTH_DP)
         assertEquals(8,NavigationBottomSpeedLayout881.GAUGE_SPACING_DP)
-        assertEquals(142,NavigationBottomSpeedLayout881.pairWidthDp)
+        assertEquals(136,NavigationBottomSpeedLayout881.pairWidthDp)
     }
 
     @Test fun widerPanelUsesSingleRowWithDistanceAndDelivery() {
@@ -29,7 +29,7 @@ class NavigationBottomSpeed881Test {
     @Test fun layoutNeverRequiresStackingTheTwoGauges() {
         assertTrue(NavigationBottomSpeedLayout881.pairWidthDp<=175)
         assertTrue(NavigationBottomSpeedLayout881.SPEED_LIMIT_SIGN_DP>=48)
-        assertTrue(NavigationBottomSpeedLayout881.SPEED_WIDTH_DP>=65)
+        assertEquals(NavigationBottomSpeedLayout881.SPEED_LIMIT_WIDTH_DP,NavigationBottomSpeedLayout881.SPEED_WIDTH_DP)
     }
 
     @Test fun originalControlsStayTwentyPercentSmallerWithUsableTouchTargets() {
