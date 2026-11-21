@@ -140,7 +140,7 @@ def verify(base_path, apk_path):
     playback = []
     for clip in ("turn_right", "speed_camera_ahead", "red_light_camera_ahead"):
         event = json.loads((evidence / ("audio-" + clip + ".json")).read_text())
-        assert event["result"] == "PASS" and event["offline"] and event["started"] and event["completed"], event
+        assert event["result"] == "PASS" and event["localAssets"] and event["started"] and event["completed"], event
         assert [e["state"] for e in event["events"]] == ["STARTED", "COMPLETED"], event
         playback.append(event)
     acceptance = {
@@ -149,7 +149,7 @@ def verify(base_path, apk_path):
         "baselineApkSha256": BASE_APK_SHA, "apkSha256": sha(pathlib.Path(apk_path).read_bytes()),
         "isolatedPackage": "com.izzyan.sgdeliveryplanner.b877test",
         "unitTests": units, "androidNativeTests": native,
-        "deliveryFlows": flows, "offlinePlayback": playback,
+        "deliveryFlows": flows, "prerecordedPlayback": playback,
         "assetsByteIdentical": len(assets), "originalMp3": 209, "originalPcm": 209,
         "completionClipsRetainedButUnmapped": [c["id"] for c in retained],
         "erpRecords": 106, "erpMapLocations": 101, "existingCameraAndSpeedAssetsUnchanged": True,
@@ -173,7 +173,7 @@ No phone or application mute is used. GPS voice preference stays ON at 100%.
 
 ## Verified results
 - {units["tests"]} JVM/Robolectric tests passed, zero failures/errors/skips.
-- 4 actual Android API 35 emulator instrumentation tests passed offline.
+- 4 actual Android API 35 emulator instrumentation tests passed.
 - Nine production-Activity delivery/report phases requested no Panda playback:
   Delivered with automatic advancement, report image generation/save, Next stop,
   review finish, revisit, final delivery, completed report open, Activity foreground
@@ -181,7 +181,7 @@ No phone or application mute is used. GPS voice preference stays ON at 100%.
 - All three fixture deliveries persisted in Room; report preview/generated image,
   order details, progress and completion timestamps remained correct.
 - Real MediaPlayer STARTED and COMPLETED callbacks confirmed for turn_right,
-  speed_camera_ahead and red_light_camera_ahead while offline.
+  speed_camera_ahead and red_light_camera_ahead from unchanged local audio assets.
 - All 438 B876 Official assets byte-identical, including 209 MP3 and 209 PCM.
   Both original completion clips remain stored without delivery event mappings.
 - ERP 106 records / 101 map locations, cameras, speed limits, routing, camera zoom,
@@ -193,7 +193,9 @@ WhatsApp intent behavior, reports, proof storage and saved-data compatibility ar
 covered by unchanged existing automated regression tests. No actual WhatsApp message
 was sent. Activity return was tested through Android lifecycle transitions; a
 physical GPS drive, runner-phone speaker listening and Bluetooth route test were
-not performed. MediaPlayer callbacks prove playback lifecycle on the emulator,
+not performed. Wi-Fi/mobile radios were disabled, but the emulator continued to
+report a validated Ethernet network; no fully offline native playback test is
+claimed. Existing offline audio code and assets are byte-identical to Official. MediaPlayer callbacks prove playback lifecycle on the emulator,
 not physical audibility on a runner phone.
 
 TESTING installs separately and does not overwrite Official or its saved data.

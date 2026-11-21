@@ -57,9 +57,7 @@ class SilentDelivery877Test {
             .bufferedReader().use { it.readText() }
 
     private fun configureAudio() {
-        ui.waitUntil(15_000) { !hasValidatedNetwork(app) }
         ui.runOnIdle {
-        assertFalse("Offline acceptance must have no validated network", hasValidatedNetwork(app))
         GpsNavigationModePreferences(app).apply { setSoundEnabled(true); setVoiceVolume(1f) }
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audio.setStreamVolume(AudioManager.STREAM_MUSIC,
@@ -188,7 +186,8 @@ class SilentDelivery877Test {
         assertTrue(GpsNavigationModePreferences(app).isSoundEnabled())
         assertEquals(1f, GpsNavigationModePreferences(app).voiceVolume(), 0f)
         saveEvidence("delivery-flows.json", JSONObject()
-            .put("result", "PASS").put("environment", "Android API 35 emulator; offline")
+            .put("result", "PASS").put("environment", "Android API 35 emulator; Wi-Fi/mobile radios disabled")
+            .put("validatedNetworkPresent", hasValidatedNetwork(app))
             .put("flows", phases).put("persistedDelivered", 3)
             .put("gpsVoiceEnabled", true).put("voiceVolume", 1).toString(2))
     }
@@ -205,7 +204,7 @@ class SilentDelivery877Test {
             var accepted = false
             instrumentation.runOnMainSync {
                 accepted = controller.play(VoicePhrase("b877-$id", priority,
-                    listOf(VoicePart(id, "Preserved offline $id"))),
+                    listOf(VoicePart(id, "Preserved prerecorded $id"))),
                     observer = { event ->
                         states.add(event)
                         if (event.state == PandaPlaybackState866.STARTED) started.countDown()
@@ -217,17 +216,18 @@ class SilentDelivery877Test {
             assertTrue("No real MediaPlayer COMPLETED for $id: $states", completed.await(20, TimeUnit.SECONDS))
             assertFalse(states.any { it.state == PandaPlaybackState866.FAILED })
             saveEvidence("audio-$id.json", JSONObject()
-                .put("result", "PASS").put("clip", id).put("offline", true)
+                .put("result", "PASS").put("clip", id).put("localAssets", true)
+                .put("validatedNetworkPresent", hasValidatedNetwork(app))
                 .put("started", true).put("completed", true)
                 .put("events", JSONArray(states.map { JSONObject()
                     .put("state", it.state.name).put("reason", it.reason)
                     .put("elapsedMs", it.elapsedMs) })).toString(2))
         } finally { instrumentation.runOnMainSync { controller.close() } }
     }
-    @Test fun preservedOfflineTurnPlaybackActuallyStartsAndCompletes() =
+    @Test fun preservedRecordedTurnPlaybackActuallyStartsAndCompletes() =
         provePlayback("turn_right", VoicePriority.CRITICAL)
-    @Test fun preservedOfflineSpeedCameraPlaybackActuallyStartsAndCompletes() =
+    @Test fun preservedRecordedSpeedCameraPlaybackActuallyStartsAndCompletes() =
         provePlayback("speed_camera_ahead", VoicePriority.CAMERA)
-    @Test fun preservedOfflineRedLightCameraPlaybackActuallyStartsAndCompletes() =
+    @Test fun preservedRecordedRedLightCameraPlaybackActuallyStartsAndCompletes() =
         provePlayback("red_light_camera_ahead", VoicePriority.CAMERA)
 }

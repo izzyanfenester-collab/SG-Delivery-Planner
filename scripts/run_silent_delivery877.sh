@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p dist/native
-# Google APIs userdebug emulator only. ADB transport is independent of its internet NICs.
-adb root
-adb wait-for-device
 adb shell svc wifi disable
 adb shell svc data disable
-adb shell 'for iface in eth0 eth1 wlan0 wlan1; do if [ -d "/sys/class/net/$iface" ]; then ip link set dev "$iface" down; fi; done'
+# Record all connectivity; radios-off does not prove isolation on newer emulator Ethernet.
 adb shell ip addr > dist/native/network-interfaces-before-tests.txt
 adb shell dumpsys connectivity > dist/native/connectivity-before-tests.txt
 adb logcat -c
