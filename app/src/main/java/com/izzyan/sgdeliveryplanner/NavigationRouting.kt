@@ -43,6 +43,7 @@ internal fun valhallaRequest(origin: GpsPoint, destination: GpsPoint, heading: F
         addProperty("costing", "auto")
         addProperty("language", "en-US")
         addProperty("banner_instructions", true)
+        addProperty("turn_lanes", true)
         addProperty("voice_instructions", true)
         add("directions_options", JsonObject().apply { addProperty("units", "kilometers") })
         add("locations", JsonArray().apply {
@@ -74,7 +75,8 @@ internal fun parseNavigationRoute(json: String, origin: GpsPoint, destination: G
     ))
 }
 
-internal data class NavigationRouteResult(val route: DirectionsRoute, val signs: List<RouteSignMetadata>, val shape: List<GpsPoint>)
+internal data class NavigationRouteResult(val route: DirectionsRoute, val signs: List<RouteSignMetadata>, val shape: List<GpsPoint>,
+    val visualGuidance: VisualGuidanceRoute885)
 internal class NavigationRateLimited(val retryMs: Long) : IOException(ROUTE_UNAVAILABLE)
 
 internal class ValhallaClient(
@@ -107,7 +109,8 @@ internal class ValhallaClient(
                     if (!it.isSuccessful) throw IOException("Routing service unavailable")
                     val json = it.body?.string() ?: error("Empty response")
                     val parsed = parseNavigationRoute(json, origin, destination)
-                    return@withContext NavigationRouteResult(parsed, NavigationPanelSigns.metadata(json), decodeNavigationGeometry(parsed.geometry))
+                    return@withContext NavigationRouteResult(parsed, NavigationPanelSigns.metadata(json), decodeNavigationGeometry(parsed.geometry),
+                        VisualGuidanceRoute885.parse(json, parsed))
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: NavigationRateLimited) { throw e }

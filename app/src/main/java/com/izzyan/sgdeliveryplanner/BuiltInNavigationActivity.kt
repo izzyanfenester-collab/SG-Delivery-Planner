@@ -154,7 +154,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
         // Log when Compose commits the new direction state. This is not a GPU frame timestamp.
         SideEffect { if (!session.offRoute) session.directionRendered(displayedRoute) }
         val navigationScreenWidth = LocalConfiguration.current.screenWidthDp
-        val compactNavHeader = navigationScreenWidth < 385
         // Measure the real opaque panels, including wrapping road names and
         // accessibility font scales. Controls fit between them on small phones.
         var topPanelHeightPx by remember { mutableIntStateOf(0) }
@@ -173,67 +172,11 @@ class BuiltInNavigationActivity : ComponentActivity() {
                     .onSizeChanged { topPanelHeightPx = it.height }
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = PremiumNavy, shape = RoundedCornerShape(SGDimensions.RadiusCard),
-                        border = BorderStroke(1.dp, SGColors.Gold.copy(alpha = 0.80f))) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            val cue = if (session.arrived) NavigationPanelCue(NavigationSign.ARRIVE) else session.panelCue
-                            Image(
-                                painter = painterResource(cue.sign.drawable),
-                                contentDescription = if (cue.sign == NavigationSign.UTURN)
-                                    if (cue.mirrorHorizontally) "Left U-turn" else "Right U-turn"
-                                else cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
-                                modifier = Modifier.size(NavigationPanelSizing.directionIconDp(navigationScreenWidth).dp)
-                                    .graphicsLayer { scaleX = if (cue.mirrorHorizontally) -1f else 1f },
-                                contentScale = ContentScale.Fit
-                            )
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                                    val exitMaxWidth = maxWidth * NavigationPanelSizing.EXIT_MAX_WIDTH_FRACTION
-                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        BoxWithConstraints(Modifier.weight(1f)) {
-                                            val distance = if (session.arrived) "Arrived" else if(session.offRoute) "—" else session.turnMeters?.let { metricDistance(it) } ?: "GPS"
-                                            val preferred = if (compactNavHeader) 32f else 38f
-                                            val measure = rememberTextMeasurer()
-                                            val available = with(LocalDensity.current) { maxWidth.toPx() }
-                                            val measured = measure.measure(AnnotatedString(distance),
-                                                style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
-                                                maxLines = 1, softWrap = false).size.width
-                                            val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
-                                            Text(distance, color = SGColors.White, fontSize = font.sp,
-                                                lineHeight = (font * 1.18f).sp,
-                                                fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
-                                        }
-                                        cue.expresswayExit?.let {
-                                            ExitRoadSign(it, Modifier.widthIn(max = exitMaxWidth))
-                                        }
-                                    }
-                                }
-                                Text(if (session.arrived) "Destination reached" else
-                                    NavigationDisplayTuning.nextRoadLabel(session.instruction, session.street),
-                                    color = SGColors.White,
-                                    fontSize = if (compactNavHeader) 19.sp else 22.sp,
-                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    lineHeight = if (compactNavHeader) 22.sp else 26.sp,
-                                    fontWeight = FontWeight.SemiBold)
-                                session.street?.takeIf {
-                                    !session.arrived && it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
-                                        session.instruction, null).equals(it, ignoreCase = true)
-                                }?.let { currentStreet ->
-                                    Text("Current: $currentStreet", color = SGColors.Silver,
-                                        fontSize = if (compactNavHeader) 12.sp else 14.sp,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                cue.roundaboutExit?.let { exit ->
-                                    Text("Roundabout exit $exit", color = SGColors.Gold,
-                                        fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                                }
-                            }
-                        }
+                    NavigationGuidanceHeader885(session.visualGuidance885) {
+                        NavigationPrimaryInstruction885(
+                            if (session.arrived) NavigationPanelCue(NavigationSign.ARRIVE) else session.panelCue,
+                            session.arrived, session.offRoute, session.turnMeters, session.instruction,
+                            session.street, navigationScreenWidth)
                     }
                     if (session.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = PremiumGold)
                     session.message?.let { message ->
@@ -440,53 +383,6 @@ class BuiltInNavigationActivity : ComponentActivity() {
         }
     }
 
-    /** Chamfered yellow sign, shown only for a provider-supplied expressway exit. */
-    @Composable
-    private fun ExitRoadSign(number: String, modifier: Modifier = Modifier) {
-        val shape = remember {
-            GenericShape { size, _ ->
-                val c = minOf(size.height * 0.30f, size.width * 0.12f)
-                moveTo(c, 0f); lineTo(size.width - c, 0f); lineTo(size.width, c)
-                lineTo(size.width, size.height - c); lineTo(size.width - c, size.height)
-                lineTo(c, size.height); lineTo(0f, size.height - c); lineTo(0f, c); close()
-            }
-        }
-        Surface(modifier = modifier, color = Color(0xFFFFD21F), shape = shape) {
-            BoxWithConstraints(Modifier.padding(horizontal = 9.5.dp, vertical = 3.5.dp)) {
-                val label = "EXIT $number"
-                val preferred = NavigationPanelSizing.EXIT_FONT_SP
-                val measure = rememberTextMeasurer()
-                val available = with(LocalDensity.current) { maxWidth.toPx() }
-                val measured = measure.measure(AnnotatedString(label),
-                    style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
-                    maxLines = 1, softWrap = false).size.width
-                val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
-                Text(label, color = Color(0xFF111111), fontSize = font.sp,
-                    lineHeight = (font * 1.5f).sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, softWrap = false)
-            }
-        }
-    }
-
-    @Composable
-    private fun GpsControl(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
-        FilledTonalButton(onClick = onClick, modifier = Modifier
-                .width(GpsCompactLayout880.CONTROL_WIDTH_DP.dp)
-                .height(GpsCompactLayout880.CONTROL_HEIGHT_DP.dp),
-            contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                // Reuse the speedometer/speed-limit host alpha on the surface only.
-                containerColor = if (active) PremiumGold.copy(alpha = SGColors.Card.alpha) else SGColors.Card,
-                contentColor = if (active) PremiumNavy else Color.White)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Icon(icon, contentDescription = label,
-                    modifier = Modifier.size(GpsCompactLayout880.CONTROL_ICON_DP.dp))
-                Text(label, fontSize = GpsCompactLayout880.CONTROL_LABEL_SP.sp,
-                    fontWeight = FontWeight.SemiBold, maxLines=1, softWrap=false)
-            }
-        }
-    }
     @Composable
     private fun NavigationSettingsChoices(
         title: String, options: List<String>, selected: String, onSelect: (String) -> Unit
@@ -518,6 +414,119 @@ class BuiltInNavigationActivity : ComponentActivity() {
     private fun hasPreciseLocation() = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
+/** Chamfered yellow sign, shown only for a provider-supplied expressway exit. */
+@Composable
+internal fun ExitRoadSign(number: String, modifier: Modifier = Modifier) {
+    val shape = remember {
+        GenericShape { size, _ ->
+            val c = minOf(size.height * 0.30f, size.width * 0.12f)
+            moveTo(c, 0f); lineTo(size.width - c, 0f); lineTo(size.width, c)
+            lineTo(size.width, size.height - c); lineTo(size.width - c, size.height)
+            lineTo(c, size.height); lineTo(0f, size.height - c); lineTo(0f, c); close()
+        }
+    }
+    Surface(modifier = modifier, color = Color(0xFFFFD21F), shape = shape) {
+        BoxWithConstraints(Modifier.padding(horizontal = 9.5.dp, vertical = 3.5.dp)) {
+            val label = "EXIT $number"
+            val preferred = NavigationPanelSizing.EXIT_FONT_SP
+            val measure = rememberTextMeasurer()
+            val available = with(LocalDensity.current) { maxWidth.toPx() }
+            val measured = measure.measure(AnnotatedString(label),
+                style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
+                maxLines = 1, softWrap = false).size.width
+            val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
+            Text(label, color = Color(0xFF111111), fontSize = font.sp,
+                lineHeight = (font * 1.5f).sp, fontWeight = FontWeight.Bold,
+                maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+@Composable
+internal fun GpsControl(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
+    FilledTonalButton(onClick = onClick, modifier = Modifier
+            .width(GpsCompactLayout880.CONTROL_WIDTH_DP.dp)
+            .height(GpsCompactLayout880.CONTROL_HEIGHT_DP.dp),
+        contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(SGDimensions.RadiusSmall),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            // Reuse the speedometer/speed-limit host alpha on the surface only.
+            containerColor = if (active) PremiumGold.copy(alpha = SGColors.Card.alpha) else SGColors.Card,
+            contentColor = if (active) PremiumNavy else Color.White)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Icon(icon, contentDescription = label,
+                modifier = Modifier.size(GpsCompactLayout880.CONTROL_ICON_DP.dp))
+            Text(label, fontSize = GpsCompactLayout880.CONTROL_LABEL_SP.sp,
+                fontWeight = FontWeight.SemiBold, maxLines=1, softWrap=false)
+        }
+    }
+}
+
+/** Existing primary instruction layout shared with the DEBUG-only GPS replay host. */
+@Composable
+internal fun NavigationPrimaryInstruction885(cue:NavigationPanelCue, arrived:Boolean, offRoute:Boolean,
+    turnMeters:Double?, instruction:String, street:String?, navigationScreenWidth:Int) {
+    val compactNavHeader = navigationScreenWidth < 385
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Image(
+            painter = painterResource(cue.sign.drawable),
+            contentDescription = if (cue.sign == NavigationSign.UTURN)
+                if (cue.mirrorHorizontally) "Left U-turn" else "Right U-turn"
+            else cue.sign.name.lowercase(Locale.ROOT).replace('_', ' '),
+            modifier = Modifier.size(NavigationPanelSizing.directionIconDp(navigationScreenWidth).dp)
+                .graphicsLayer { scaleX = if (cue.mirrorHorizontally) -1f else 1f },
+            contentScale = ContentScale.Fit
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val exitMaxWidth = maxWidth * NavigationPanelSizing.EXIT_MAX_WIDTH_FRACTION
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    BoxWithConstraints(Modifier.weight(1f)) {
+                        val distance = if (arrived) "Arrived" else if(offRoute) "—" else turnMeters?.let { metricDistance(it) } ?: "GPS"
+                        val preferred = if (compactNavHeader) 32f else 38f
+                        val measure = rememberTextMeasurer()
+                        val available = with(LocalDensity.current) { maxWidth.toPx() }
+                        val measured = measure.measure(AnnotatedString(distance),
+                            style = TextStyle(fontSize = preferred.sp, fontWeight = FontWeight.Bold),
+                            maxLines = 1, softWrap = false).size.width
+                        val font = NavigationPanelSizing.fitTextSp(preferred, available, measured)
+                        Text(distance, color = SGColors.White, fontSize = font.sp,
+                            lineHeight = (font * 1.18f).sp,
+                            fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                    }
+                    cue.expresswayExit?.let {
+                        ExitRoadSign(it, Modifier.widthIn(max = exitMaxWidth))
+                    }
+                }
+            }
+            Text(if (arrived) "Destination reached" else
+                NavigationDisplayTuning.nextRoadLabel(instruction, street),
+                color = SGColors.White,
+                fontSize = if (compactNavHeader) 19.sp else 22.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                lineHeight = if (compactNavHeader) 22.sp else 26.sp,
+                fontWeight = FontWeight.SemiBold)
+            street?.takeIf {
+                !arrived && it.isNotBlank() && !NavigationDisplayTuning.nextRoadLabel(
+                    instruction, null).equals(it, ignoreCase = true)
+            }?.let { currentStreet ->
+                Text("Current: $currentStreet", color = SGColors.Silver,
+                    fontSize = if (compactNavHeader) 12.sp else 14.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            cue.roundaboutExit?.let { exit ->
+                Text("Roundabout exit $exit", color = SGColors.Gold,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+    }
+}
+
 internal fun metricDistance(meters: Double): String = if (meters < 1000) "${meters.coerceAtLeast(0.0).toInt()} m" else String.format(Locale.ENGLISH, "%.1f km", meters / 1000)
 
 private class SessionLocationEngine : LocationEngine {
@@ -534,6 +543,21 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     var instruction by mutableStateOf("Waiting for GPS…"); private set
     var panelCue by mutableStateOf(NavigationPanelCue()); private set
     private var routeSignMetadata: List<RouteSignMetadata> = emptyList()
+    private var visualRoute885: VisualGuidanceRoute885? = null
+    var visualGuidance885 by mutableStateOf(VisualGuidanceState885()); private set
+    private fun clearVisualGuidance885() { visualGuidance885 = VisualGuidanceState885() }
+    private fun updateVisualGuidance885(currentRoute:DirectionsRoute, primaryIndex:Int, distance:Double?) {
+        val next = visualRoute885?.state(currentRoute, primaryIndex, distance,
+            offRoute || SystemClock.elapsedRealtime() - lastFix > 15_000, arrived)
+            ?: VisualGuidanceState885()
+        if (next != visualGuidance885) {
+            visualGuidance885 = next
+            android.util.Log.d("SGGuidance885", "primary=$primaryIndex lanes=${next.lanes?.lanes?.size ?: 0} " +
+                "valid=${next.lanes?.lanes?.mapIndexedNotNull { i, lane -> i.takeIf { lane.valid } }} " +
+                "then=${next.then?.maneuverIndex} missing=${visualRoute885?.missingLaneReasons?.get(primaryIndex)}")
+        }
+    }
+
     var turnMeters by mutableStateOf<Double?>(null); private set
     var remainingMeters by mutableStateOf<Double?>(null); private set
     var remainingSeconds by mutableStateOf<Double?>(null); private set
@@ -1132,6 +1156,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 while (isActive) {
                     delay(5_000)
                     if (!arrived && (lastFix == 0L || SystemClock.elapsedRealtime() - lastFix > 15_000)) {
+                        clearVisualGuidance885()
                         message = "GPS signal unavailable. Enable location and move to an open area."
                         reroute.resetDrift(); instantDetector.reset(); arrival = ArrivalDetector(); adaptiveEta.reset(); remainingSeconds = baseRemainingSeconds
                         if(!gpsWasLost) {
@@ -1185,7 +1210,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                     if (updatedTraffic != trafficState) trafficState = updatedTraffic
                 }
                 if (!offRoute && arrival.update(navigationDistance(point, GpsPoint(destination.lat, destination.lon)), fix.accuracy, remainingMeters)) {
-                    arrived = true; instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
+                    arrived = true; clearVisualGuidance885(); instruction = "Arrived"; remainingMeters = 0.0; baseRemainingSeconds = 0.0; remainingSeconds = 0.0
                     requestJob?.cancel(); sdk.stopNavigation(); voiceAudio.stop()
                     pandaStatus("arrived","You have arrived at the destination.",VoicePriority.CRITICAL)
                     return@collect
@@ -1199,7 +1224,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                         if (!offRoute) {
                             offRoute = true; arrival = ArrivalDetector()
                             instruction = "Recalculating route…"; street = null; turnMeters = null
-                            panelCue = NavigationPanelCue(); voiceAudio.stop(); pandaGate.reset()
+                            panelCue = NavigationPanelCue(); clearVisualGuidance885(); voiceAudio.stop(); pandaGate.reset()
                             // Start playback asynchronously; the routing coroutine never waits for it.
                             val statusClip=if(decision.reason=="missed-junction") "wrong_turn" else "rerouting"
                             // Dispatch the routing request in this GPS callback before
@@ -1226,7 +1251,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { message = "GPS or destination unavailable. Please retry." }
-        finally { active = false; roadSpeedLookup875?.cancel();roadSpeedStore875.close();requestGate.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); voiceAudio.stop(); scope = null }
+        finally { clearVisualGuidance885(); active = false; roadSpeedLookup875?.cancel();roadSpeedStore875.close();requestGate.clear(); requestJob?.cancel(); requestJob = null; loading = false; sdk.stopNavigation(); voiceAudio.stop(); scope = null }
     }
 
     private fun requestRoute(fix: RerouteFix, decision: RerouteDecision? = null) {
@@ -1235,6 +1260,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
         if (!reroute.requestAllowed(now) || !active || arrived) return
         // Invalidate before cancelling; an old coroutine's finally must not
         // clear the newer request's loading state or apply its route/signs.
+        clearVisualGuidance885()
         val id=requestGate.begin(fix)
         requestJob?.cancel()
         upcomingEnforcementCamera=null
@@ -1265,6 +1291,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 localTraffic.reset(shape,newRoute.distance,newRoute.duration)
                 trafficState=LocalTrafficState.EMPTY
                 routeSignMetadata=result.signs
+                visualRoute885=result.visualGuidance
                 val steps=newRoute.legs.single().steps
                 val current=steps.first()
                 val next=steps.getOrNull(1) ?: current
@@ -1285,6 +1312,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                 pandaGate.reset(); voiceAudio.stop()
                 unavailableAnnounced=false; approachAnnounced=false
                 latencyRoute=newRoute; route=newRoute
+                updateVisualGuidance885(newRoute,cameraManeuverIndex,turnMeters)
                 sdk.startNavigation(newRoute)
                 // Publish the first actual new maneuver immediately, not after the next GPS tick.
                 if(trace!=null) {
@@ -1348,6 +1376,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             routeSignMetadata.getOrNull(nextIndex),
             if (current.nextStep != null) routeSignMetadata.getOrNull(p.stepIndex) else null
         )
+        updateVisualGuidance885(p.directionsRoute,nextIndex,turnMeters)
         if (SystemClock.elapsedRealtime() - lastFix < 15_000 && !muted) {
             run {
                 val steps=p.directionsRoute.legs.single().steps
@@ -1394,7 +1423,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             if(voiceAudio.play(phrase.copy(key="step-$index-${phrase.key}"))) pandaGate.mark(index,phrase,distance)
         }
     }
-    override fun close() { active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close();cameraStore.close() }
+    override fun close() { clearVisualGuidance885();active=false;requestJob?.cancel();sdk.onDestroy();voiceAudio.close();cameraStore.close() }
 }
 
 @SuppressLint("MissingPermission") // Called only after fine-location runtime permission is granted.
