@@ -64,6 +64,10 @@ and SDK RouteProgress, then render actual production header/lane/Then composable
 over a native MapLibre local route map. They verify white versus muted pixels,
 step advancement, absent data, stale clearing and six viewport/font/map variants.
 The original two History native tests also rerun, including Room record actions.
+Their first synthetic record uses the current Singapore date to retain the same
+time-only Finish Time formatting on every test day. All original assertions,
+including the 25–35% compact-height benchmark, remain unchanged. Production
+History code is byte-identical; no layout change is made to address this test.
 Nine new screenshots are labelled recorded GPS replay, not a physical road drive.
 No fresh physical-phone, Bluetooth or driving test is claimed.
 

@@ -77,19 +77,23 @@ internal fun NavigationLaneStrip885(strip: LaneStrip885) {
                             lane.directions.joinToString { it.name.lowercase().replace('_', ' ') } +
                             if (lane.valid) "; suitable for route" else "; not for this route"
                     }) {
-                    val sx = size.width / 100f
+                    // Fixed glyph proportions, even when a two-lane road has wide cells.
+                    val glyphWidth = minOf(size.width - 6.dp.toPx(), size.height * 0.82f)
+                    val sx = glyphWidth / 100f
+                    val xInset = (size.width - glyphWidth) / 2f
+                    fun glyphX(x:Float) = xInset + x * sx
                     val sy = size.height / 100f
                     fun drawBranch(direction: LaneDirection885, color: Color) {
                         var ex = 50f; var ey = 13f; var tx = 50f; var ty = 30f
                         val path = Path().apply {
-                            moveTo(50f * sx, 87f * sy)
+                            moveTo(glyphX(50f), 87f * sy)
                             when (direction) {
-                                LaneDirection885.STRAIGHT -> lineTo(ex * sx, ey * sy)
+                                LaneDirection885.STRAIGHT -> lineTo(glyphX(ex), ey * sy)
                                 LaneDirection885.UTURN -> {
-                                    ex = 20f; ey = 48f; tx = 20f; ty = 28f
-                                    lineTo(50f * sx, 32f * sy)
-                                    cubicTo(50f * sx, 5f * sy, 20f * sx, 5f * sy, 20f * sx, 32f * sy)
-                                    lineTo(ex * sx, ey * sy)
+                                    ex = 80f; ey = 48f; tx = 80f; ty = 28f
+                                    lineTo(glyphX(50f), 32f * sy)
+                                    cubicTo(glyphX(50f), 5f * sy, glyphX(80f), 5f * sy, glyphX(80f), 32f * sy)
+                                    lineTo(glyphX(ex), ey * sy)
                                 }
                                 else -> {
                                     val left = direction in setOf(LaneDirection885.LEFT, LaneDirection885.SLIGHT_LEFT,
@@ -101,14 +105,14 @@ internal fun NavigationLaneStrip885(strip: LaneStrip885) {
                                     ey = if (slight) 14f else if (sharp) 53f else 31f
                                     tx = if (left) ex + 15f else ex - 15f
                                     ty = if (slight) ey + 17f else if (sharp) ey - 13f else ey
-                                    lineTo(50f * sx, 60f * sy)
-                                    cubicTo(50f * sx, (if (sharp) 23f else 31f) * sy,
-                                        tx * sx, ty * sy, ex * sx, ey * sy)
+                                    lineTo(glyphX(50f), 60f * sy)
+                                    cubicTo(glyphX(50f), (if (sharp) 23f else 31f) * sy,
+                                        glyphX(tx), ty * sy, glyphX(ex), ey * sy)
                                 }
                             }
                         }
                         drawPath(path, color, style = Stroke(6.5f * sy, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                        val tip = Offset(ex * sx, ey * sy)
+                        val tip = Offset(glyphX(ex), ey * sy)
                         val angle = atan2((ey - ty) * sy, (ex - tx) * sx)
                         val length = 16f * sy
                         val wing = 8f * sy

@@ -23,6 +23,8 @@ import java.time.LocalDateTime
 /** Outcome checks on real Compose layout, touch targets and Room persistence. */
 class HistorySpacing884Test {
     @get:Rule val ui=createAndroidComposeRule<HistorySpacingVerificationActivity884>()
+    // Keep the first card in the same-day time-only case on every test date.
+    private val firstDate=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).toString()
     private val app get()=InstrumentationRegistry.getInstrumentation().targetContext
     private val vm get()=ui.activity.vm
     private fun save(name:String,data:ByteArray,mime:String) {
@@ -45,7 +47,7 @@ class HistorySpacing884Test {
         save(name,out.toByteArray(),"image/png")
     }
     private fun fixtures():List<Plan> = listOf(
-        Triple("2026-11-21",8,SavedDeliveryStatus.COMPLETED),
+        Triple(firstDate,8,SavedDeliveryStatus.COMPLETED),
         Triple("2026-11-18",12,SavedDeliveryStatus.COMPLETED),
         Triple("2026-11-12",8,SavedDeliveryStatus.IN_PROGRESS),
         Triple("2026-11-10",4,SavedDeliveryStatus.NOT_STARTED)
@@ -66,13 +68,13 @@ class HistorySpacing884Test {
         ui.waitUntil(15_000){!vm.busy}
         val plans=fixtures()
         runBlocking{plans.forEach{vm.repo.save(it)}}
-        ui.waitUntil(15_000){ui.onAllNodesWithText("2026-11-21").fetchSemanticsNodes().isNotEmpty()}
+        ui.waitUntil(15_000){ui.onAllNodesWithText(firstDate).fetchSemanticsNodes().isNotEmpty()}
         return plans
     }
     private fun card(date:String)=ui.onNode(hasClickAction() and hasAnyDescendant(hasText(date)),useUnmergedTree=true)
     private fun variant(before:Boolean,width:Int,scale:Float) {
         ui.runOnIdle{ui.activity.baseline=before;ui.activity.widthDp=width;ui.activity.fontScale=scale}
-        ui.waitUntil(15_000){ui.onAllNodesWithText("2026-11-21").fetchSemanticsNodes().isNotEmpty()}
+        ui.waitUntil(15_000){ui.onAllNodesWithText(firstDate).fetchSemanticsNodes().isNotEmpty()}
         ui.waitForIdle()
     }
     private fun textLayout(text:String):TextLayoutResult {
@@ -112,11 +114,11 @@ class HistorySpacing884Test {
         val plans=seed();val results=JSONArray()
         for((width,scale) in listOf(400 to 1f,320 to 1f,320 to 1.5f)) {
             variant(true,width,scale)
-            val beforeHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
+            val beforeHeight=card(firstDate).getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
             screenshot("B884-before-${width}dp-${scale}font.png")
             val beforeFonts=firstCardTypography(plans[0],"B884-before-${width}dp-${scale}font-text.json")
             variant(false,width,scale)
-            val afterHeight=card("2026-11-21").getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
+            val afterHeight=card(firstDate).getUnclippedBoundsInRoot().let{it.bottom.value-it.top.value}
             screenshot("B884-after-${width}dp-${scale}font.png")
             val afterFonts=firstCardTypography(plans[0],"B884-after-${width}dp-${scale}font-text.json")
             assertEquals("Existing typography changed",beforeFonts,afterFonts)
@@ -141,10 +143,10 @@ class HistorySpacing884Test {
         val plans=seed();variant(false,400,1f)
         val before=runBlocking{vm.repo.dao.history().first().associate{it.id to it.json}}
         val activeBefore=ui.runOnIdle{vm.route?.id}
-        card("2026-11-21").performClick()
+        card(firstDate).performClick()
         ui.onNodeWithContentDescription("Back to History").assertExists().performClick()
         assertEquals(activeBefore,ui.runOnIdle{vm.route?.id})
-        card("2026-11-21").performTouchInput{longClick()}
+        card(firstDate).performTouchInput{longClick()}
         ui.onNode(hasScrollAction()).performScrollToIndex(0)
         ui.onNodeWithText("Cancel selection").assertExists()
         ui.onNodeWithText("Delete Selected (1)").performClick()

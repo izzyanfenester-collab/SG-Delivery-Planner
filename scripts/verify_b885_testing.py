@@ -10,6 +10,7 @@ ALLOWED={'app/build.gradle.kts','app/src/debug/AndroidManifest.xml','app/src/deb
  P+'BuiltInNavigationActivity.kt',P+'NavigationRouting.kt',P+'NavigationVisualGuidance885.kt',P+'NavigationGuidanceUi885.kt',
  'app/src/debug/java/com/izzyan/sgdeliveryplanner/NavigationReplayActivity885.kt',
  'app/src/androidTest/java/com/izzyan/sgdeliveryplanner/NavigationGuidance885Test.kt',
+ 'app/src/androidTest/java/com/izzyan/sgdeliveryplanner/HistorySpacing884Test.kt',
  'app/src/androidTest/assets/navigation-885-pie-recorded.json','app/src/androidTest/assets/navigation-885-city-recorded.json',
  'app/src/test/java/com/izzyan/sgdeliveryplanner/NavigationVisualGuidance885Test.kt',
  'app/src/test/resources/navigation/valhalla-city-885.json','scripts/verify_b885_testing.py',
@@ -36,6 +37,12 @@ def source():
  for x,y in [('session.arrived','arrived'),('session.offRoute','offRoute'),('session.turnMeters','turnMeters'),('session.instruction','instruction'),('session.street','street')]:row=row.replace(x,y)
  row='\n'.join(line[20:] if line.startswith(' '*20) else line for line in row.splitlines())
  assert row in code,'Original primary instruction layout changed'
+ history_path='app/src/androidTest/java/com/izzyan/sgdeliveryplanner/HistorySpacing884Test.kt'
+ expected=old(history_path).replace('    private val app get()=InstrumentationRegistry.getInstrumentation().targetContext',
+  '    // Keep the first card in the same-day time-only case on every test date.\n    private val firstDate=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Singapore")).toString()\n    private val app get()=InstrumentationRegistry.getInstrumentation().targetContext')
+ expected=expected.replace('"2026-11-21"','firstDate')
+ assert (ROOT/history_path).read_text()==expected,'Only the date of the History test fixture may change'
+
  # Drawables, main manifest, preferences, Room, maps, camera, ERP and voice source are outside the allowlist.
  fixture=ROOT/'app/src/test/resources/navigation/valhalla-singapore.json'
  assert fixture.read_bytes()==(ROOT/'app/src/androidTest/assets/navigation-885-pie-recorded.json').read_bytes()
@@ -111,7 +118,9 @@ change, arrival, GPS expiry and navigation stop. No voice events are added.
 Verification: {unit['tests']} JVM/Robolectric tests passed, including all 711 original
 regressions and 15 new route-data/selection tests. Four native Android API 35 tests
 passed: two recorded GPS replay/layout tests and the two original History
-layout/Room record action regressions. Nine new original screenshots capture the
+layout/Room record action regressions. The first History fixture now uses the
+current Singapore date, keeping its time-only format stable across midnight;
+the original font, geometry and 25–35% benchmark assertions are unchanged. Nine new original screenshots capture the
 production instruction/lane/Then composables over a native MapLibre map of the
 recorded route geometry. These are clearly labelled recorded replays, not a
 physical driving session or a complete offline basemap. The replay inputs are
