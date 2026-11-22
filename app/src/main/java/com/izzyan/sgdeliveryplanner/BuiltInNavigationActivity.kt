@@ -548,7 +548,8 @@ internal class NavigationSession(private val context: Context, initialDestinatio
     private fun clearVisualGuidance885() { visualGuidance885 = VisualGuidanceState885() }
     private fun updateVisualGuidance885(currentRoute:DirectionsRoute, primaryIndex:Int, distance:Double?) {
         val next = visualRoute885?.state(currentRoute, primaryIndex, distance,
-            offRoute || SystemClock.elapsedRealtime() - lastFix > 15_000, arrived)
+            offRoute || SystemClock.elapsedRealtime() - lastFix > 15_000 ||
+                location?.accuracy?.let { !it.isFinite() || it > 30f } != false, arrived)
             ?: VisualGuidanceState885()
         if (next != visualGuidance885) {
             visualGuidance885 = next
@@ -1169,6 +1170,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
             fusedLocations(context).collect { fix ->
                 val now = SystemClock.elapsedRealtime()
                 if (!GpsPoint(fix.latitude, fix.longitude).valid() || now - fix.elapsedRealtimeNanos / 1_000_000 > 15_000 || !fix.hasAccuracy() || !fix.accuracy.isFinite() || fix.accuracy < 0 || fix.accuracy > 50) {
+                    clearVisualGuidance885()
                     clearRoadSpeed875("GPS accuracy or timestamp invalid; check signs")
                     message = "GPS accuracy is low. Waiting for a precise location…"
                     reroute.resetDrift(); instantDetector.reset(); arrival = ArrivalDetector(); return@collect
@@ -1179,6 +1181,7 @@ internal class NavigationSession(private val context: Context, initialDestinatio
                         GpsPoint(fix.latitude, fix.longitude),
                         fix.elapsedRealtimeNanos / 1_000_000L,
                         fix.accuracy, fix.speed.takeIf { fix.hasSpeed() }))) {
+                    clearVisualGuidance885()
                     message = "GPS position jump ignored. Checking the next fix…"
                     clearRoadSpeed875("GPS jump rejected; check signs")
                     return@collect

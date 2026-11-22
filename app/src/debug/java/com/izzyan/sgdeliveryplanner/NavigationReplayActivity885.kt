@@ -130,7 +130,9 @@ class NavigationReplayActivity885 : ComponentActivity() {
     }
 
     internal fun load(json: String) {
-        val parsed=parseNavigationRoute(json,GpsPoint(1.35,103.8),GpsPoint(1.36,103.81))
+        val rawShape=com.google.gson.JsonParser.parseString(json).asJsonObject["routes"].asJsonArray[0]
+            .asJsonObject["geometry"].asString.let(::decodeNavigationGeometry)
+        val parsed=parseNavigationRoute(json,rawShape.first(),rawShape.last())
         route=parsed;shape=decodeNavigationGeometry(parsed.geometry)
         signs=NavigationPanelSigns.metadata(json);visuals=VisualGuidanceRoute885.parse(json,parsed)
         tracker.reset(shape);guidance=VisualGuidanceState885();progress=null;frame=null

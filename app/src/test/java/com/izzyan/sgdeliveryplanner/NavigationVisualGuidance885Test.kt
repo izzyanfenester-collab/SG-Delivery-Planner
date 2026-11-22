@@ -116,6 +116,7 @@ class NavigationVisualGuidance885Test {
             steps(it)[1].asJsonObject.addProperty("distance",80)
             steps(it)[2].asJsonObject["maneuver"].asJsonObject.apply {
                 addProperty("type","turn");addProperty("modifier","left")
+                addProperty("instruction","Turn left onto the following road.")
             }
         }
         val (route,model) = model(json)
