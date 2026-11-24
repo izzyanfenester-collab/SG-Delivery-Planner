@@ -145,7 +145,7 @@ class BuildingNative886Test {
             }
             assertTrue("Building appearance really changed",differences>2000)
             assertTrue("3D buildings remain visibly present",roofAndWallPixels>2000)
-            main { it.applyBuildingStyle() }
+            main { it.applyBuildingStyle() };snapshot()
             val features=main { a->a.map!!.queryRenderedFeatures(RectF(0f,0f,a.mapView.width.toFloat(),a.mapView.height.toFloat()),"building-3d") }
             assertTrue("Actual Woodlands building geometry rendered",features.isNotEmpty())
             cases.put(JSONObject().put("name",name).put("camera",JSONObject(position))
