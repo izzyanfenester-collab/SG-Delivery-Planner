@@ -166,6 +166,8 @@ class BuildingNative886Test {
         val baseGeometry=geometryState()
         val native=main { it.map!! }
         val style=main { native.style!! }
+        // getLayer() may return a fresh Java wrapper for the same native layer.
+        // Compare native style identity, layer IDs/order, sources and original geometry.
         val layer=main { style.getLayer("building-3d")!! }
         val ids=main { style.layers.map { it.id } }
         val sources=main { style.sources.map { it.id } }
@@ -173,7 +175,7 @@ class BuildingNative886Test {
         val modes=JSONArray()
         for((zoom,tilt,bearing) in listOf(Triple(16.0,60.0,290.0),Triple(17.5,0.0,90.0),Triple(17.15,58.0,22.0))) {
             main { it.move(zoom,tilt,bearing);it.applyBuildingStyle() };snapshot()
-            main { a->assertSame(style,a.map!!.style);assertSame(layer,style.getLayer("building-3d"))
+            main { a->assertSame(style,a.map!!.style);assertEquals(layer.id,style.getLayer("building-3d")!!.id)
                 assertEquals(palette,(layer as FillExtrusionLayer).fillExtrusionColor.expression.toString())
                 assertEquals(ids,style.layers.map { it.id });assertEquals(sources,style.sources.map { it.id })
             }
@@ -183,7 +185,7 @@ class BuildingNative886Test {
         // Real GPS samples update persistent polylines, not building layers or colour seeds.
         val line=main { it.activeLine!! }
         gpsBeforeNext(5,30.0);gpsBeforeNext(5,25.0)
-        main { assertSame(line,it.activeLine);assertSame(layer,it.map!!.style!!.getLayer("building-3d")) }
+        main { assertSame(line,it.activeLine);assertEquals(layer.id,it.map!!.style!!.getLayer("building-3d")!!.id) }
         // Change only paint while an actual native cinematic camera animation is running.
         val animation=CountDownLatch(1)
         val animationStarted=android.os.SystemClock.uptimeMillis()
@@ -210,7 +212,7 @@ class BuildingNative886Test {
         }
         main { it.move() };snapshot();screenshot("B886-AFTER-offline-style-reload.png")
         save("B886-native-stability-results.json",JSONObject().put("result","PASS").put("modes",modes)
-            .put("sameBuildingLayerAcrossGpsAndModeUpdates",true).put("sameRouteAnnotationAcrossGpsUpdates",true)
+            .put("buildingLayerIdsAndSourceIdsStableAcrossGpsAndModes",true).put("sameRouteAnnotationAcrossGpsUpdates",true)
             .put("noNewNetworkSources",true).put("offlineStyleReload",true).put("animationFinished",true)
             .put("animationCancelled",false).put("animationElapsedMillis",animationMillis)
             .put("animationActiveWhenPaintChanged",true).put("erpRecords",106).put("erpSites",101)
