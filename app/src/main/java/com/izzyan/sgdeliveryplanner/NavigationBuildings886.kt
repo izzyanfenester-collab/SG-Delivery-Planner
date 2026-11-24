@@ -24,7 +24,9 @@ internal object NavigationBuildings886 {
      * no random/zoom/GPS/time inputs, feature-state, inferred occupancy or new data. */
     fun expressionJson(dark:Boolean):String = JsonArray().apply {
         add("match")
-        add(JsonParser.parseString("""["%",["floor",["abs",["to-number",["id"],["get","osm_id"],["get","id"],["get","render_height"],0]]],6]"""))
+        // MapLibre converts null to zero. Non-numeric missing sentinels let later
+        // genuine attributes participate instead of an absent ID pre-empting them.
+        add(JsonParser.parseString("""["%",["floor",["abs",["to-number",["coalesce",["id"],"missing"],["coalesce",["get","osm_id"],"missing"],["coalesce",["get","id"],"missing"],["coalesce",["get","render_height"],"missing"],0]]],6]"""))
         (if(dark)night else day).forEachIndexed { index,color -> add(index);add(color) }
         add((if(dark)night else day).last())
     }.toString()

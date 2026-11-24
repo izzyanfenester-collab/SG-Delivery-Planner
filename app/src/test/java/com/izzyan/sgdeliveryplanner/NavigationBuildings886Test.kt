@@ -17,7 +17,14 @@ class NavigationBuildings886Test {
             return when(a[0].asString) {
                 "id"->id
                 "get"->properties[a[1].asString]
-                "to-number"->(1 until a.size()).firstNotNullOf { i->evaluate(a[i])?.toString()?.toDoubleOrNull() }
+                "coalesce"->(1 until a.size()).firstNotNullOfOrNull { i->evaluate(a[i]) }
+                "to-number"->(1 until a.size()).firstNotNullOf { i->
+                    when(val input=evaluate(a[i])) {
+                        null,false->0.0
+                        true->1.0
+                        else->input.toString().trim().let { if(it.isEmpty())0.0 else it.toDoubleOrNull() }
+                    }
+                }
                 "abs"->abs(evaluate(a[1]) as Double)
                 "floor"->floor(evaluate(a[1]) as Double)
                 "%"->(evaluate(a[1]) as Double)%(evaluate(a[2]) as Double)
