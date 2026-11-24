@@ -5,6 +5,7 @@ import android.graphics.Color
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.BackgroundLayer
 import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.FillExtrusionLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
@@ -170,6 +171,7 @@ internal object NavigationMapPalette {
             val id = layer.id
             if (isNavigationAnnotation(id)) continue
             when (layer) {
+                is FillExtrusionLayer -> NavigationBuildings886.apply(layer, night)
                 is BackgroundLayer -> layer.setProperties(
                     PropertyFactory.backgroundColor(Color.parseColor(layerColor(id, "background", night))))
                 is FillLayer -> layer.setProperties(

@@ -1,0 +1,45 @@
+{
+  "source": "OpenFreeMap / OpenStreetMap",
+  "tilejson": "https://tiles.openfreemap.org/planet/20261122_124456_pt/{z}/{x}/{y}.pbf",
+  "z": 14,
+  "x": 12915,
+  "y": 8126,
+  "retrieved": "2026-11-24",
+  "tileSha256": "c498c4db46740cf0a66b95864bc67d682264f96f39bb75ab8e7d353cf1eb5760",
+  "regionBbox": [
+    103.78,
+    1.428,
+    103.793,
+    1.441
+  ],
+  "featureCounts": {
+    "building": 50,
+    "transportation": 743,
+    "transportation_name": 59,
+    "landuse": 74,
+    "water": 23,
+    "landcover": 17,
+    "waterway": 1
+  },
+  "geometrySha256": "bcd96601aca0f6a52a500079e57eb50487fa093e83294808efaf57421ebd6332",
+  "coordinatePrecision": "Converted directly from original 4096-unit MVT grid without decimal rounding; same geometry used before and after",
+  "heights": "Original render_height / render_min_height properties, not inferred or changed",
+  "licence": "OpenStreetMap ODbL; OpenFreeMap/OpenMapTiles attribution",
+  "route": {
+    "source": "https://valhalla1.openstreetmap.de/route",
+    "retrieved": "2026-11-24",
+    "start": [
+      1.4315,
+      103.7864
+    ],
+    "end": [
+      1.436,
+      103.791
+    ],
+    "sha256": "fba6c9b817bc168454e35518b2cabe3488e64a60e15c2e90aadfb44a20f18491",
+    "costing": "auto",
+    "format": "osrm",
+    "shape_format": "polyline6"
+  },
+  "localFixture": "Same captured source geometry and baseline Liberty style layers in both modes; source-layer references adapted to local GeoJSON; Latin road labels and bundled glyphs for deterministic offline testing only."
+}
