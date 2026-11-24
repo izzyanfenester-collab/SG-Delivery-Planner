@@ -3,6 +3,7 @@ package com.izzyan.sgdeliveryplanner
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -118,6 +119,9 @@ class BuildingReplayActivity886 : ComponentActivity() {
                                 GpsControl(Icons.Filled.Traffic,"Traffic"){}
                                 GpsControl(Icons.Filled.Settings,"Settings"){}
                             }
+                            Text("© OpenStreetMap contributors · OpenFreeMap",Modifier.align(Alignment.BottomStart)
+                                .padding(start=10.dp,bottom=with(density){bottomHeight.toDp()}+2.dp)
+                                .background(androidx.compose.ui.graphics.Color(0xC0081B33)),color=SGColors.Silver,fontSize=9.sp)
                             Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                                 .onSizeChanged { bottomHeight=it.height }.padding(8.dp),color=PremiumNavy) {
                                 NavigationDestinationPanel873(

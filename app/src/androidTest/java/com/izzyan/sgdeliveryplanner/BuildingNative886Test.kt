@@ -37,7 +37,7 @@ class BuildingNative886Test {
         @Suppress("UNCHECKED_CAST") return value as T
     }
     private fun asset(name:String):String=instrumentation.context.assets.open("buildings886/$name").use { stream ->
-        (if(name.endsWith(".gz"))GZIPInputStream(stream) else stream).bufferedReader().use { it.readText() }
+        (if(name.endsWith(".bin"))GZIPInputStream(stream) else stream).bufferedReader().use { it.readText() }
     }
     private fun save(name:String,bytes:ByteArray,mime:String) {
         val resolver=ui.activity.contentResolver
@@ -73,8 +73,8 @@ class BuildingNative886Test {
         instrumentation.context.assets.open("buildings886/NotoSansRegular-0-255.pbf").use { input ->
             glyph.outputStream().use { input.copyTo(it) }
         }
-        val geometry=asset("woodlands-geometry.json.gz");val template=asset("woodlands-style.json")
-        val route=asset("woodlands-route.json.gz")
+        val geometry=asset("woodlands-geometry.bin");val template=asset("woodlands-style.json")
+        val route=asset("woodlands-route.bin")
         main { a->a.load(route);a.installScene(geometry,template,"file://${ui.activity.filesDir}/b886-fonts/{fontstack}/{range}.pbf") }
         ui.waitUntil(30_000) { main { it.sceneReady } }
         gpsBeforeNext(5,35.0)
@@ -186,6 +186,7 @@ class BuildingNative886Test {
         main { assertSame(line,it.activeLine);assertSame(layer,it.map!!.style!!.getLayer("building-3d")) }
         // Change only paint while an actual native cinematic camera animation is running.
         val animation=CountDownLatch(1)
+        val animationStarted=android.os.SystemClock.uptimeMillis()
         main { a->a.animationCancelled=false;a.animationFinished=false
             val target=CameraPosition.Builder(native.cameraPosition).zoom(16.2).tilt(55.0).bearing(65.0).build()
             native.animateCamera(CameraUpdateFactory.newCameraPosition(target),1800,object:MapLibreMap.CancelableCallback {
@@ -194,8 +195,11 @@ class BuildingNative886Test {
             })
         }
         Thread.sleep(300)
-        main { it.night=false;it.applyBuildingStyle() }
+        main { assertFalse("Animation must still be running when paint is applied",it.animationFinished)
+            it.night=false;it.applyBuildingStyle() }
         assertTrue("Camera animation callback timed out",animation.await(15,TimeUnit.SECONDS))
+        val animationMillis=android.os.SystemClock.uptimeMillis()-animationStarted
+        assertTrue("Native animation must span the requested duration",animationMillis>=1400L)
         main { assertTrue(it.animationFinished);assertFalse(it.animationCancelled) }
         // Reload the locally stored map, then reapply through the same production entry point.
         main { it.night=true;it.reloadScene() }
@@ -208,7 +212,8 @@ class BuildingNative886Test {
         save("B886-native-stability-results.json",JSONObject().put("result","PASS").put("modes",modes)
             .put("sameBuildingLayerAcrossGpsAndModeUpdates",true).put("sameRouteAnnotationAcrossGpsUpdates",true)
             .put("noNewNetworkSources",true).put("offlineStyleReload",true).put("animationFinished",true)
-            .put("animationCancelled",false).put("erpRecords",106).put("erpSites",101)
+            .put("animationCancelled",false).put("animationElapsedMillis",animationMillis)
+            .put("animationActiveWhenPaintChanged",true).put("erpRecords",106).put("erpSites",101)
             .put("dayNightChangesPaintOnly",true).toString(2).toByteArray(),"application/json")
     }
 }

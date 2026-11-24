@@ -14,7 +14,7 @@ ALLOWED={'app/build.gradle.kts','app/src/debug/AndroidManifest.xml','app/src/deb
  'app/src/test/java/com/izzyan/sgdeliveryplanner/NavigationBuildings886Test.kt',
  'scripts/verify_b886_testing.py','scripts/run_b886_native.sh','.github/workflows/build-b886-testing.yml','docs/BUILD_886_TESTING.md'}
 ALLOWED|={FIXTURE+name for name in ['NotoSansRegular-0-255.pbf','original-building-layer.json','source-manifest.json',
- 'woodlands-geometry.json.gz','woodlands-route.json.gz','woodlands-style.json']}
+ 'woodlands-geometry.bin','woodlands-route.bin','woodlands-style.json']}
 def sha(data):return hashlib.sha256(data).hexdigest()
 def old(path):return subprocess.check_output(['git','show',BASE+':'+path],cwd=ROOT).decode()
 def source():
@@ -35,9 +35,9 @@ def source():
                    'fillExtrusionBase(','setFilter(','setMinZoom(','setMaxZoom(','java.util.Random','System.currentTimeMillis']:
   assert forbidden not in policy,forbidden
  f=ROOT/FIXTURE;m=json.loads((f/'source-manifest.json').read_text())
- assert sha(gzip.open(f/'woodlands-geometry.json.gz','rb').read())==m['geometrySha256']
- assert sha(gzip.open(f/'woodlands-route.json.gz','rb').read())==m['route']['sha256']
- buildings=json.loads(gzip.open(f/'woodlands-geometry.json.gz','rt').read())['building']['features']
+ assert sha(gzip.open(f/'woodlands-geometry.bin','rb').read())==m['geometrySha256']
+ assert sha(gzip.open(f/'woodlands-route.bin','rb').read())==m['route']['sha256']
+ buildings=json.loads(gzip.open(f/'woodlands-geometry.bin','rt').read())['building']['features']
  assert len(buildings)==50 and max(x['properties']['render_height'] for x in buildings)==121
  original=json.loads((f/'original-building-layer.json').read_text())
  native=json.loads((f/'woodlands-style.json').read_text())
@@ -58,6 +58,17 @@ def restore(path):
    assert '..' not in pathlib.PurePosixPath(name).parts
    p=ROOT/'app/src/main'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(z.read(name))
  print('Restored all 436 exact B885 Official assets')
+def fixture():
+ apks=list((ROOT/'app/build/outputs/apk/androidTest/debug').glob('*.apk'));assert len(apks)==1,apks
+ with zipfile.ZipFile(apks[0]) as z:
+  entries={}
+  for p in (ROOT/FIXTURE).iterdir():
+   name='assets/buildings886/'+p.name
+   assert z.read(name)==p.read_bytes(),name
+   entries[name]=sha(z.read(name))
+  assert z.read('assets/buildings886/woodlands-geometry.bin')[:2]==b'\x1f\x8b'
+ (OUT/'B886-test-replay-packaging.json').write_text(json.dumps({'result':'PASS','assets':entries},indent=2))
+ print('All six native replay assets are present byte-identically in the instrumentation APK')
 def counts(folder):
  result=dict(tests=0,failures=0,errors=0,skipped=0)
  files=list((ROOT/folder).rglob('TEST-*.xml'));assert files,folder
@@ -167,5 +178,6 @@ NO OFFICIAL MERGE. Official and stable update feed remain B885.
 if __name__=='__main__':
  if sys.argv[1]=='source':print(json.dumps(source(),indent=2))
  elif sys.argv[1]=='restore':restore(sys.argv[2])
+ elif sys.argv[1]=='fixture':fixture()
  elif sys.argv[1]=='verify':verify(sys.argv[2],sys.argv[3])
  else:raise SystemExit('source | restore BASE | verify BASE APK')
