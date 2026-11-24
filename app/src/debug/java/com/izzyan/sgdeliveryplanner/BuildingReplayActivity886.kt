@@ -61,6 +61,7 @@ class BuildingReplayActivity886 : ComponentActivity() {
     internal var casingLine:Polyline?=null
     internal var travelledLine:Polyline?=null
     internal var baseStyleJson=""
+    internal var gpsBearing=0f
     internal var cameraMoves=0
     internal var animationCancelled=false
     internal var animationFinished=false
@@ -169,7 +170,7 @@ class BuildingReplayActivity886 : ComponentActivity() {
         if(match==null) {guidance=VisualGuidanceState885();return}
         val currentFrame=requireNotNull(tracker.advance(match,13.4f,elapsed))
         if(!currentFrame.trustedMatch) {guidance=VisualGuidanceState885();return}
-        frame=currentFrame;lastGps=gps
+        frame=currentFrame;lastGps=gps;gpsBearing=bearing ?: gpsBearing
         val index=starts.indexOfLast { it<=currentFrame.progressedMeters+0.5 }.coerceIn(0,starts.lastIndex)
         val steps=active.legs.single().steps
         val remaining=(starts.getOrNull(index+1)?.minus(currentFrame.progressedMeters) ?: 0.0).coerceAtLeast(0.0)
@@ -225,7 +226,7 @@ class BuildingReplayActivity886 : ComponentActivity() {
         activeLine=line(activeLine,frame?.remaining?.takeIf { it.size>=2 } ?: shape,android.graphics.Color.rgb(0,132,255),11f)
         val point=frame?.boundary ?: shape.first()
         val arrowSource=style.getSourceAs<GeoJsonSource>("sg-navigation-replay-arrow")
-        val feature=Feature.fromGeometry(Point.fromLngLat(point.lon,point.lat))
+        val feature=Feature.fromGeometry(Point.fromLngLat(point.lon,point.lat)).apply { addNumberProperty("heading",gpsBearing) }
         if(arrowSource==null) {
             val drawable=requireNotNull(androidx.core.content.ContextCompat.getDrawable(this,R.drawable.ic_gps_blue_arrow_3d))
             val d=resources.displayMetrics.density
@@ -235,7 +236,9 @@ class BuildingReplayActivity886 : ComponentActivity() {
             style.addImage("sg-navigation-replay-arrow-art",image)
             style.addSource(GeoJsonSource("sg-navigation-replay-arrow",feature))
             style.addLayer(SymbolLayer("mapbox-location-foreground-layer","sg-navigation-replay-arrow").withProperties(
-                iconImage("sg-navigation-replay-arrow-art"),iconSize(1f),iconAllowOverlap(true),iconIgnorePlacement(true)))
+                iconImage("sg-navigation-replay-arrow-art"),iconSize(1f),iconAllowOverlap(true),iconIgnorePlacement(true),
+                iconRotationAlignment("map"),iconPitchAlignment("viewport"),
+                iconRotate(org.maplibre.android.style.expressions.Expression.get("heading"))))
         } else arrowSource.setGeoJson(feature)
         ErpMapLayer876(this,native).sync(style,ErpStore876(this).load(),true)
     }
