@@ -1,0 +1,65 @@
+{
+  "scenes": {
+    "woodlands": {
+      "source": "OpenFreeMap / OpenStreetMap",
+      "url": "https://tiles.openfreemap.org/planet/20261122_124456_pt/14/12915/8126.pbf",
+      "retrieved": "2026-11-24",
+      "z": 14,
+      "x": 12915,
+      "y": 8126,
+      "bounds": [
+        103.77685546875,
+        1.428074771366936,
+        103.798828125,
+        1.450040497360792
+      ],
+      "sha256": "c498c4db46740cf0a66b95864bc67d682264f96f39bb75ab8e7d353cf1eb5760",
+      "buildingFeatureGroups": 66,
+      "storedHeightMin": 0,
+      "storedHeightMax": 129,
+      "geometry": "Original binary vector tile; no conversion, clipping or geometry edits",
+      "attribution": "\u00a9 OpenStreetMap contributors / OpenFreeMap; ODbL-1.0"
+    },
+    "marina": {
+      "source": "OpenFreeMap / OpenStreetMap",
+      "url": "https://tiles.openfreemap.org/planet/20261122_124456_pt/14/12918/8133.pbf",
+      "retrieved": "2026-11-24",
+      "z": 14,
+      "x": 12918,
+      "y": 8133,
+      "bounds": [
+        103.8427734375,
+        1.2743089918452137,
+        103.86474609375,
+        1.2962761196418153
+      ],
+      "sha256": "dbf345d2a03720653e84198e8135a9d2b2cf3d2d02b4d52a9ee84ceca3f75280",
+      "buildingFeatureGroups": 715,
+      "storedHeightMin": 0,
+      "storedHeightMax": 305,
+      "geometry": "Original binary vector tile; no conversion, clipping or geometry edits",
+      "attribution": "\u00a9 OpenStreetMap contributors / OpenFreeMap; ODbL-1.0",
+      "route": {
+        "url": "https://valhalla1.openstreetmap.de/route",
+        "start": [
+          1.2795,
+          103.855
+        ],
+        "end": [
+          1.2875,
+          103.859
+        ],
+        "costing": "auto",
+        "format": "osrm",
+        "shape_format": "polyline6",
+        "retrieved": "2026-11-24",
+        "sha256": "8a2fa174d25bcd426d1f1696d536ae3fc61dfa11a4c09365074622cdfa9959fd"
+      }
+    }
+  },
+  "renderer": "Unchanged MapLibre Android 13.5.0 fill/extrusion paints; original native shading",
+  "nativeGeometry": "File-backed original MVT bytes, original source-layer IDs/heights/footprints",
+  "testOnlyLabelChange": "Latin road labels with bundled Noto Sans glyphs, no production label changes",
+  "individualTreeFeaturesInCapturedTiles": 0,
+  "vegetation": "Captured native landcover polygons include wood and grass. No tree coordinates or models are invented."
+}

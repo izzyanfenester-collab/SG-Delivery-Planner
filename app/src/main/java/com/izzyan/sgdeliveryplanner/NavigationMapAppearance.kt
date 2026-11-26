@@ -165,10 +165,11 @@ internal object NavigationMapPalette {
             name.startsWith("sg-navigation-")
     }
 
-    fun apply(style: Style, night: Boolean) {
+    fun apply(style: Style, night: Boolean, enhancedScenery: Boolean = true) {
         for (layer in style.layers) {
             val id = layer.id
             if (isNavigationAnnotation(id)) continue
+            if (enhancedScenery && NavigationScenery888.apply(layer, night)) continue
             when (layer) {
                 is BackgroundLayer -> layer.setProperties(
                     PropertyFactory.backgroundColor(Color.parseColor(layerColor(id, "background", night))))
