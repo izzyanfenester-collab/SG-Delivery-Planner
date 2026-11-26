@@ -22,7 +22,7 @@ internal object NavigationScenery888 {
     fun buildingExpressionJson(dark: Boolean): String = JsonArray().apply {
         add("match")
         // Explicit sentinels avoid native to-number(null) swallowing later valid attributes.
-        add(JsonParser.parseString("""["%",["floor",["abs",["to-number",["coalesce",["id"],"missing"],["coalesce",["get","osm_id"],"missing"],["coalesce",["get","id"],"missing"],["coalesce",["get","render_height"],"missing"],0]]],6]"""))
+        add(JsonParser.parseString("""["%",["floor",["/",["abs",["to-number",["coalesce",["id"],"missing"],["coalesce",["get","osm_id"],"missing"],["coalesce",["get","id"],"missing"],["coalesce",["get","render_height"],"missing"],0]],7]],6]"""))
         (if (dark) night else day).forEachIndexed { index, colour -> add(index); add(colour) }
         add((if (dark) night else day).last())
     }.toString()

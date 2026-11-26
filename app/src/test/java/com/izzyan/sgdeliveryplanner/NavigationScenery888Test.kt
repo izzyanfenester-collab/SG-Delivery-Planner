@@ -38,6 +38,7 @@ class NavigationScenery888Test {
                 }
                 "abs"->abs(evaluate(a[1]) as Double)
                 "floor"->floor(evaluate(a[1]) as Double)
+                "/"->(evaluate(a[1]) as Double)/(evaluate(a[2]) as Double)
                 "%"->(evaluate(a[1]) as Double)%(evaluate(a[2]) as Double)
                 "match"->{
                     val key=evaluate(a[1]);var result=evaluate(a[a.size()-1])
@@ -48,6 +49,10 @@ class NavigationScenery888Test {
             }
         }
         return evaluate(JsonParser.parseString(NavigationScenery888.buildingExpressionJson(dark))) as String
+    }
+
+    @Test fun encodedEvenSourceIdsStillUseEverySoftColour() {
+        assertEquals(6, (1..24).map { colour(1542496230L + it * 10L) }.toSet().size)
     }
 
     @Test fun sourceIdentityWinsOverChangingTileAttributes() {
@@ -65,10 +70,10 @@ class NavigationScenery888Test {
         assertEquals(colour(0),colour(null))
     }
     @Test fun everyPaletteEntryRemainsReachableAndDayNightKeepTheSameGrouping() {
-        assertEquals(6,(0..5).map { colour(it) }.toSet().size)
+        assertEquals(6,(0..5).map { colour(it * 7) }.toSet().size)
         for(i in 0..5) {
-            assertEquals(NavigationScenery888.day[i],colour(i))
-            assertEquals(NavigationScenery888.night[i],colour(i,dark=true))
+            assertEquals(NavigationScenery888.day[i],colour(i * 7))
+            assertEquals(NavigationScenery888.night[i],colour(i * 7,dark=true))
         }
     }
     @Test fun unrelatedExtrusionsAndNavigationOverlaysAreExcluded() {
