@@ -1,0 +1,114 @@
+{
+  "baseline": "B888 Official; user-approved B889 TESTING UI",
+  "approvedTestingApkSha256": "2e6279d8e3e824f22c65e41eb6326b04be8981128ac6b17effd31d902eb91a7b",
+  "comparisons": [
+    {
+      "name": "Reference-Route-DELIVERED",
+      "width": 736,
+      "height": 1290,
+      "approvedArgbPixelSha256": "86ff0b3c5963e7c90ba018d3a176870a59c96563d38986f30d53475564ea9701"
+    },
+    {
+      "name": "Reference-History-DELIVERED",
+      "width": 736,
+      "height": 930,
+      "approvedArgbPixelSha256": "995b3285b3226f0b42466f717208a5915880c47cde9dfa957c9c6cc1f1e68d0c"
+    },
+    {
+      "name": "Reference-DeliveryReport-DELIVERED",
+      "width": 1080,
+      "height": 918,
+      "approvedArgbPixelSha256": "3715c80a28641cc4d1ad10af2bee244d90d2b5aaecf05ba9159717ee453d939a"
+    },
+    {
+      "name": "Reference-Route-ON_HOLD",
+      "width": 736,
+      "height": 1334,
+      "approvedArgbPixelSha256": "830a4c5dbb8f0389d9ff3ca8097206a51ddabdf4fda76d9b8a4f2eba1ff2e703"
+    },
+    {
+      "name": "Reference-History-ON_HOLD",
+      "width": 736,
+      "height": 1042,
+      "approvedArgbPixelSha256": "bd9fda60e18c980f28d24102ddaa8478b0ac3fdc1316241fe070edf6e61b004b"
+    },
+    {
+      "name": "Reference-DeliveryReport-ON_HOLD",
+      "width": 1080,
+      "height": 1032,
+      "approvedArgbPixelSha256": "b03c9c5aea7838134c689b03b148d378a957467c72c335ee91db1b5f5573424e"
+    },
+    {
+      "name": "Reference-Route-PENDING",
+      "width": 736,
+      "height": 1240,
+      "approvedArgbPixelSha256": "2ceb27cf7c78e1c7bdbc6d47e8b25ef1ef9f5d951ba1c392e85c5e5296d48367"
+    },
+    {
+      "name": "Reference-History-PENDING",
+      "width": 736,
+      "height": 930,
+      "approvedArgbPixelSha256": "1170faba6de25f23218933f20695066df422b399b5db4adee31a2d9d92aba3f5"
+    },
+    {
+      "name": "Reference-DeliveryReport-PENDING",
+      "width": 1080,
+      "height": 918,
+      "approvedArgbPixelSha256": "3b11d5cd41601140d9354cb70e0fe76d98157342a0a7855bb41714e643800122"
+    },
+    {
+      "name": "NarrowLongCOD-Route-DELIVERED",
+      "width": 576,
+      "height": 1518,
+      "approvedArgbPixelSha256": "036e0feb776e181f0f7106889ecc5aebf54c0e6fbb8f672a06d899425bd8e238"
+    },
+    {
+      "name": "NarrowLongCOD-History-DELIVERED",
+      "width": 576,
+      "height": 1344,
+      "approvedArgbPixelSha256": "d3209b8803943786f78e64d45c99aea5bdc1a02dd5fb7ab66fbe19f753ec9f53"
+    },
+    {
+      "name": "NarrowLongCOD-DeliveryReport-DELIVERED",
+      "width": 1080,
+      "height": 1032,
+      "approvedArgbPixelSha256": "7be740a866ec3502cd62799a5b19f93ba58cba0fca3d9c3064b3a033afc24736"
+    },
+    {
+      "name": "NarrowLongPayNow-Route-ON_HOLD",
+      "width": 576,
+      "height": 1562,
+      "approvedArgbPixelSha256": "f6e221251d0e06a29aafe44952cd3fb2591aae9f1971cf5965127017f48e79b7"
+    },
+    {
+      "name": "NarrowLongPayNow-History-ON_HOLD",
+      "width": 576,
+      "height": 1410,
+      "approvedArgbPixelSha256": "d8bb82528acad0d05dc51f5b4875e14329e5d254cc4e4f332c80e9efa440f04d"
+    },
+    {
+      "name": "NarrowLongPayNow-DeliveryReport-ON_HOLD",
+      "width": 1080,
+      "height": 1146,
+      "approvedArgbPixelSha256": "fc142d5b8642f6c979d0f6e0dd88690ed7eec9cc1a0441c774e7f7620cfb7bb1"
+    },
+    {
+      "name": "NarrowLongNoPayment-Route-PENDING",
+      "width": 576,
+      "height": 1468,
+      "approvedArgbPixelSha256": "1931a39150cffe453397acd057199906187d9b090a9767c23412e8e04ef0f4b8"
+    },
+    {
+      "name": "NarrowLongNoPayment-History-PENDING",
+      "width": 576,
+      "height": 1068,
+      "approvedArgbPixelSha256": "2491473bed72c3a63071cbfef9b93ed468cd2d4849cd58b0f458f4abb33d4788"
+    },
+    {
+      "name": "NarrowLongNoPayment-DeliveryReport-PENDING",
+      "width": 1080,
+      "height": 975,
+      "approvedArgbPixelSha256": "68c90878faf7c8f5a77129f40f4a8cf860547d981fb7040fdfbf9ed34f401f50"
+    }
+  ]
+}

@@ -212,13 +212,15 @@ private fun V6StatBox(count: String, label: String, tint: Color, modifier: Modif
 
 /** Original saved-route History card layout with the existing V9 full-size proof viewer. */
 @Composable
-private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
+internal fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
     val badge = reportStatusBadge(stop.status)
     val paymentProofId = stop.order?.paymentProofFileId
     val deliveryProofId = stop.order?.proofFileId
     var expandedProofIndex by remember(stop.orderId) { mutableStateOf<Int?>(null) }
     val shape = RoundedCornerShape(SGDimensions.RadiusCard)
 
+    DeliveryStatusStampFrame("History", stop.status,
+        hasPaymentStamp = stop.order?.paymentStatus?.uppercase(Locale.ENGLISH) in listOf("COD", "PAYNOW")) { stamp ->
     Column(
         Modifier.fillMaxWidth().clip(shape)
             .background(SGColors.Card)
@@ -228,17 +230,21 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
     ) {
         // Keep Stop, Customer and Phone equally close without the stamp row creating a gap.
         // The original 35-degree COD/PayNow stamp remains beside the delivery badge.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top,
+        Row(Modifier.fillMaxWidth().then(stamp.anchor("header")), verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Stop ${index + 1} · ${stop.place.postal}",
                     color = V6Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = stamp.anchor("title"), onTextLayout = { stamp.text("title", it) })
                 Text("Customer : " + (stop.order?.customerName ?: "—"),
-                    color = V6White, fontSize = 15.sp)
+                    color = V6White, fontSize = 15.sp,
+                    modifier = stamp.anchor("customer"), onTextLayout = { stamp.text("customer", it) })
                 Text("Phone : " + (stop.order?.phoneNumber ?: "—"),
-                    color = V6White, fontSize = 15.sp)
+                    color = V6White, fontSize = 15.sp,
+                    modifier = stamp.anchor("phone"), onTextLayout = { stamp.text("phone", it) })
             }
+            DeliveryStatusOriginalFootprint(stamp, stop.status) {
             Box(
                 Modifier.background(Color(badge.backgroundArgb), RoundedCornerShape(30.dp))
                     .padding(horizontal = 11.dp, vertical = 7.dp)
@@ -246,8 +252,9 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
                 Text(badge.label, color = Color(badge.foregroundArgb),
                     fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
+            }
             if (stop.order?.paymentStatus?.uppercase(Locale.ENGLISH) in listOf("COD", "PAYNOW")) {
-                PaymentModeStamp(stop.order, size = 70.dp)
+                Box(stamp.anchor("payment")) { PaymentModeStamp(stop.order, size = 70.dp) }
             }
         }
         Text("Address : " + (stop.order?.fullAddress ?: stop.place.address),
@@ -280,6 +287,7 @@ private fun V6DeliveryCard(stop: Stop, index: Int, onReport: () -> Unit) {
         }
     }
 
+    }
     expandedProofIndex?.let { current ->
         V9ProofViewer(
             paymentProofId = paymentProofId,

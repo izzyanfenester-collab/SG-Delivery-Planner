@@ -1,0 +1,132 @@
+name: Publish approved SG Delivery B889 Official Status Stamps
+on:
+  push:
+    branches: [main, release/build-889-official]
+    paths: ['.github/workflows/publish-b889-official.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sg-delivery-b889-official-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/build-889-official'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools, log-accepted-android-sdk-licenses: false}
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - name: Verify source scope and the user-approved B889 artwork
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify_b889_official.py
+          python3 scripts/verify_b889_official.py source
+      - name: Restore all 436 byte-identical B888 Official application assets
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/izzyanfenester-collab/SG-Delivery-Planner/releases/download/v1.4.77-b888/SG-Delivery-B888-Official.apk -o "$RUNNER_TEMP/B888-Official.apk"
+          python3 scripts/verify_b889_official.py restore "$RUNNER_TEMP/B888-Official.apk"
+      - name: Run all tests, match 18 approved renders, lint and build Official release
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease
+          mkdir -p dist
+          python3 scripts/verify_b889_official.py verify "$RUNNER_TEMP/B888-Official.apk" app/build/outputs/apk/release/app-release-unsigned.apk dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B889-validated-candidate
+          path: |
+            dist/B889-candidate-acceptance.json
+            app/build/reports/b889-status-stamps/
+          if-no-files-found: error
+      - name: Recover protected original Official signing key
+        if: github.ref == 'refs/heads/main'
+        env:
+          SG_DELIVERY_KEYSTORE_BASE64: ${{ secrets.SG_DELIVERY_KEYSTORE_BASE64 }}
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SG_DELIVERY_KEYSTORE_BASE64"
+          test -n "$SG_DELIVERY_KEYSTORE_PASSWORD"
+          test -n "$SG_DELIVERY_KEY_ALIAS"
+          test -n "$SG_DELIVERY_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$SG_DELIVERY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sg-delivery-b889.jks"
+          test -s "$RUNNER_TEMP/sg-delivery-b889.jks"
+      - name: Sign and verify the unchanged Official identity and retained data upgrade
+        if: github.ref == 'refs/heads/main'
+        env:
+          SG_DELIVERY_KEYSTORE_PASSWORD: ${{ secrets.SG_DELIVERY_KEYSTORE_PASSWORD }}
+          SG_DELIVERY_KEY_ALIAS: ${{ secrets.SG_DELIVERY_KEY_ALIAS }}
+          SG_DELIVERY_KEY_PASSWORD: ${{ secrets.SG_DELIVERY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/zipalign" -P 16 -f -v 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/b889-aligned.apk" >/dev/null
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/sg-delivery-b889.jks" \
+            --ks-key-alias "$SG_DELIVERY_KEY_ALIAS" --ks-pass env:SG_DELIVERY_KEYSTORE_PASSWORD \
+            --key-pass env:SG_DELIVERY_KEY_PASSWORD \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out dist/SG-Delivery-B889-Official.apk "$RUNNER_TEMP/b889-aligned.apk"
+          "$bt/apksigner" verify --verbose --print-certs dist/SG-Delivery-B889-Official.apk | tee dist/signing-verification.txt
+          "$bt/apksigner" verify --print-certs "$RUNNER_TEMP/B888-Official.apk" > "$RUNNER_TEMP/b888-signer.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' "$RUNNER_TEMP/b888-signer.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: b70d1c964fb4e59c6bc44aee694e25dd893fa77eb877a4b29646cf33786e3e99' dist/signing-verification.txt
+          "$bt/aapt" dump badging dist/SG-Delivery-B889-Official.apk | grep -F "package: name='com.izzyan.sgdeliveryplanner' versionCode='98' versionName='1.4.78-b889'"
+          "$bt/aapt" dump badging dist/SG-Delivery-B889-Official.apk | grep -F "application-label:'SG Delivery'"
+          "$bt/zipalign" -c -P 16 -v 4 dist/SG-Delivery-B889-Official.apk >/dev/null
+          python3 scripts/verify_b889_official.py verify "$RUNNER_TEMP/B888-Official.apk" dist/SG-Delivery-B889-Official.apk dist signed
+          cp -r app/build/test-results/testDebugUnitTest dist/unit-test-results
+          cp app/build/reports/lint-results-debug.html dist/
+          cp -r app/build/reports/b889-status-stamps dist/runtime-ui
+          (cd dist && zip -q -r B889-Official-Verification.zip B889-Official-acceptance.json SG-Delivery-B889-Official-Report.md signing-verification.txt lint-results-debug.html unit-test-results runtime-ui)
+          sha256sum dist/SG-Delivery-B889-Official.apk
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: B889-Official-Signed-APK-and-verification
+          path: |
+            dist/SG-Delivery-B889-Official.apk
+            dist/B889-Official-Verification.zip
+            dist/SG-Delivery-B889-Official-Report.md
+          if-no-files-found: error
+      - name: Publish B889 as the latest stable Official update
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=v1.4.78-b889
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo '::error::B889 Official already exists; refuse overwrite'
+            exit 1
+          fi
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = v1.4.77-b888
+          gh release create "$tag" dist/SG-Delivery-B889-Official.apk dist/B889-Official-Verification.zip dist/SG-Delivery-B889-Official-Report.md \
+            --target "$GITHUB_SHA" --latest --title 'SG Delivery Build 889 Official - Updated Status Stamps' \
+            --notes-file dist/SG-Delivery-B889-Official-Report.md
+          test "$(gh api repos/izzyanfenester-collab/SG-Delivery-Planner/releases/latest --jq .tag_name)" = "$tag"
+      - name: Erase temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sg-delivery-b889.jks" "$RUNNER_TEMP/b889-aligned.apk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: B889-Official-diagnostic-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/b889-status-stamps/
+            dist/*acceptance.json
+            dist/signing-verification.txt

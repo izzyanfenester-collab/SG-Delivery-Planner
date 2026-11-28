@@ -58,8 +58,12 @@ class RoadSpeedStore875Test {
         val a=fixture(1);val b=fixture(2,90)
         RoadSpeedStore875(context).use{reader->
             reader.install(ByteArrayInputStream(a.second),a.first)
+            // Equal fixture timestamps exercise generation invalidation deterministically.
+            val snapshot=File(context.noBackupFilesDir,"road-speed-875/current.db")
+            assertTrue(snapshot.setLastModified(1000L))
             assertEquals(80,reader.candidates(GpsPoint(1.3005,103.8)).single().forward?.kmh)
             RoadSpeedStore875(context).use{writer->assertTrue(writer.install(ByteArrayInputStream(b.second),b.first))}
+            assertTrue(snapshot.setLastModified(1000L))
             assertEquals(90,reader.candidates(GpsPoint(1.3005,103.8)).single().forward?.kmh)
             assertFalse(reader.install(ByteArrayInputStream(a.second),a.first))
             assertTrue(reader.candidates(GpsPoint(1.6,103.8)).isEmpty())

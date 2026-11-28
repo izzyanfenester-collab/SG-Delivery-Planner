@@ -146,7 +146,7 @@ class OrderProofAndReportTest {
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
         assertTrue(file.name.endsWith(".png"))
     }
-    @Test fun reportPngHasApprovedPaymentLogosAndStatusCapsuleColorsForDeliveredAndHold() {
+    @Test fun reportPngKeepsPaymentLogosAndTheThreeApprovedStatusImages() {
         val base = plan().stops[0]
         fun report(mode: String, status: String): Bitmap {
             val stop = base.copy(
@@ -156,11 +156,19 @@ class OrderProofAndReportTest {
             )
             return BitmapFactory.decodeFile(generateSingleDeliveryReport(app, stop, 0).absolutePath)
         }
-        fun countPixels(bitmap: Bitmap, color: Int, left: Int, top: Int, right: Int, bottom: Int): Int {
+        fun countStatusArtwork(bitmap: Bitmap, status: String): Int {
             var count = 0
-            for (y in top until minOf(bottom, bitmap.height) step 2)
-                for (x in left until minOf(right, bitmap.width) step 2)
-                    if (bitmap.getPixel(x,y) == color) count++
+            for (y in 40 until minOf(250, bitmap.height) step 2)
+                for (x in 780 until minOf(1040, bitmap.width) step 2) {
+                    val pixel = bitmap.getPixel(x,y)
+                    val r=Color.red(pixel); val g=Color.green(pixel); val b=Color.blue(pixel)
+                    val matches = when(status) {
+                        "DELIVERED" -> g>150 && g>r*2 && g>b*2
+                        "ON_HOLD" -> r>150 && g<100 && b<100
+                        else -> r>170 && g>75 && g<r*.8 && b<80
+                    }
+                    if(matches) count++
+                }
             return count
         }
         // Confirm that report rendering uses the actual graphic colors, not the
@@ -184,19 +192,18 @@ class OrderProofAndReportTest {
             return count
         }
         val delivered = report("PAYNOW","DELIVERED")
-        assertTrue("Delivered green capsule missing top-right",countPixels(delivered,Color.rgb(78,167,46),760,50,1032,116)>100)
-        assertTrue("1.5x Delivered badge must fill its lower half",
-            countPixels(delivered,Color.rgb(78,167,46),760,125,1032,168)>100)
+        assertTrue("Attached green DELIVERED artwork missing top-right",countStatusArtwork(delivered,"DELIVERED")>500)
         assertTrue("Premium PayNow wordmark missing from Delivery Report PNG",
             countBrandPixels(delivered, payNow = true) > 40)
         delivered.recycle()
         val held = report("COD","ON_HOLD")
-        assertTrue("On Hold orange capsule missing top-right",countPixels(held,Color.rgb(233,113,50),760,50,1032,116)>100)
-        assertTrue("1.5x On Hold badge must fill its lower half",
-            countPixels(held,Color.rgb(233,113,50),760,125,1032,168)>100)
+        assertTrue("Attached red ON HOLD artwork missing top-right",countStatusArtwork(held,"ON_HOLD")>500)
         assertTrue("Premium red COD logo missing from Delivery Report PNG",
             countBrandPixels(held, payNow = false) > 40)
         held.recycle()
+        val pending = report("COD","PENDING")
+        assertTrue("Attached orange PENDING artwork missing top-right",countStatusArtwork(pending,"PENDING")>500)
+        pending.recycle()
         assertEquals("PayNow",paymentModeBadge(base.order!!.copy(paymentStatus="PAYNOW"))!!.label)
         assertEquals("Cash On Delivery",paymentModeBadge(base.order!!.copy(paymentStatus="COD"))!!.label)
         assertEquals("Delivered",reportStatusBadge("DELIVERED").label)

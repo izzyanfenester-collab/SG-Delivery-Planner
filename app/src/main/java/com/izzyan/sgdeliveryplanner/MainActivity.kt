@@ -1029,21 +1029,23 @@ private fun HoldDialog(onDismiss: () -> Unit, onConfirm: (String?, String?) -> U
     )
 }
 @Composable
-private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
+internal fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, current: Boolean, showShareReport: Boolean = true, onClick: () -> Unit) {
+    DeliveryStatusStampFrame("Route", stop.status,
+        hasMessageButton = stop.order?.phoneNumber != null, showCurrentDelivery = current) { stamp ->
     SGDeliveryCard(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         borderColor = if (current) SGColors.Gold else null
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                StatusBadge(stop.status)
+            Row(stamp.anchor("header"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("${index + 1}. ${stop.place.postal}", Modifier.weight(1f).then(stamp.anchor("title")), style = MaterialTheme.typography.titleLarge, onTextLayout = { stamp.text("title", it) })
+                DeliveryStatusOriginalFootprint(stamp, stop.status) { StatusBadge(stop.status) }
             }
             if (current || stop.order?.phoneNumber != null) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (current) Text("Current delivery", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth().then(stamp.anchor("header")), verticalAlignment = Alignment.CenterVertically) {
+                    if (current) Text("Current delivery", Modifier.weight(1f).then(stamp.anchor("current")), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge, onTextLayout = { stamp.text("current", it) })
                     else Spacer(Modifier.weight(1f))
-                    stop.order?.takeIf { it.phoneNumber != null }?.let { SendOrderMessageButton(vm, stop) }
+                    stop.order?.takeIf { it.phoneNumber != null }?.let { Box(stamp.anchor("message")) { SendOrderMessageButton(vm, stop) } }
                 }
             }
             if (stop.order == null) {
@@ -1083,6 +1085,7 @@ private fun StopCard(vm: PlannerViewModel, p: Plan, stop: Stop, index: Int, curr
             Text(if (normalizedStatus(stop.status) == "DELIVERED") "Tap to view this delivery" else "Tap to revisit this delivery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
     }
+}
 }
 
 @Composable

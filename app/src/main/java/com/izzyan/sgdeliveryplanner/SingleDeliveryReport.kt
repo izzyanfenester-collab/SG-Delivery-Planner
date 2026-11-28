@@ -146,10 +146,31 @@ private class SingleDeliveryReportView(
         val top = 55f
         val bottom = 142f
         val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = status.backgroundArgb }
-        canvas.drawRoundRect(RectF(right - capsuleWidth, top, right, bottom), 43.5f, 43.5f, bg)
+        val statusStamp = DeliveryStatusStampArtwork.bitmap(context, status.label)
+        if (statusStamp == null)
+            canvas.drawRoundRect(RectF(right - capsuleWidth, top, right, bottom), 43.5f, 43.5f, bg)
         val fm = statusInk.fontMetrics
         val baseline = (top + bottom) / 2f - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(status.label, right - capsuleWidth + 39f, baseline, statusInk)
+        if (statusStamp == null) {
+            canvas.drawText(status.label, right - capsuleWidth + 39f, baseline, statusInk)
+        } else {
+            val stampTop = 43f
+            var targetWidth = 240f
+            var targetHeight = 200f
+            // A long unreserved body line must keep every original glyph visible.
+            if (paymentLogo == null) {
+                val collides = (0 until layout.lineCount).any { line ->
+                    bodyStartY + layout.getLineTop(line) < stampTop + targetHeight &&
+                        60f + layout.getLineRight(line) > right - 4f - targetWidth - 10f
+                }
+                if (collides) {
+                    targetHeight = bodyStartY - 10f - stampTop
+                    targetWidth = targetHeight * (240f / 200f)
+                }
+            }
+            val frame = RectF(right - 4f - targetWidth, stampTop, right - 4f, stampTop + targetHeight)
+            DeliveryStatusStampArtwork.drawFit(canvas, statusStamp, frame)
+        }
 
         // Title shares the top row with the right-aligned Delivered / On Hold capsule.
         canvas.drawText("Delivery Report", 60f, baseline, titleInk)
